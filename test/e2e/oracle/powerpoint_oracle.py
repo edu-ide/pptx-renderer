@@ -261,6 +261,28 @@ def run_macro_only_mac(
 
 _PP_SAVE_AS_PDF = 32
 _MSO_AUTOMATION_SECURITY_LOW = 1
+_RPC_E_CALL_REJECTED = -2147418111  # 0x80010001
+_RPC_E_SERVERCALL_RETRYLATER = -2147417846  # 0x8001010A
+
+
+def _com_call_with_retry(fn, *args, retries: int = 5, delay: float = 1.0, **kwargs):
+    """Retry a COM call when PowerPoint is busy (RPC_E_CALL_REJECTED / RETRYLATER).
+
+    This is the Python-side equivalent of implementing IMessageFilter.  In batch
+    mode the previous Close() may still be running when the next Open() arrives,
+    causing -2147418111.
+    """
+    import pywintypes
+
+    for attempt in range(retries):
+        try:
+            return fn(*args, **kwargs)
+        except pywintypes.com_error as exc:
+            hr = exc.hresult if hasattr(exc, "hresult") else (exc.args[0] if exc.args else None)
+            if hr in (_RPC_E_CALL_REJECTED, _RPC_E_SERVERCALL_RETRYLATER) and attempt < retries - 1:
+                time.sleep(delay * (attempt + 1))
+                continue
+            raise
 
 
 @contextmanager
@@ -314,18 +336,19 @@ def _run_macro_win(
     pptm_abs = str(host.resolve())
     # WithWindow=True is required: some PowerPoint builds fail to load VBA
     # projects when opening without a window (-2147188720 "object not exist").
-    pres = app.Presentations.Open(
+    pres = _com_call_with_retry(
+        app.Presentations.Open,
         FileName=pptm_abs, ReadOnly=False, Untitled=False, WithWindow=True,
     )
     try:
         macro_ref = f"{pres.Name}!{macro_name}"
         params = macro_params or []
-        app.Run(macro_ref, *params)
+        _com_call_with_retry(app.Run, macro_ref, *params)
 
         if output_pdf is not None and export_after_macro:
             out = Path(output_pdf)
             out.parent.mkdir(parents=True, exist_ok=True)
-            pres.SaveAs(str(out.resolve()), _PP_SAVE_AS_PDF)
+            _com_call_with_retry(pres.SaveAs, str(out.resolve()), _PP_SAVE_AS_PDF)
     finally:
         try:
             # Mark as saved to suppress "Do you want to save?" dialog.
@@ -333,6 +356,9 @@ def _run_macro_win(
             pres.Close()
         except Exception:
             pass
+        # Brief pause to let PowerPoint finish releasing resources before the
+        # next Open() call in batch mode.
+        time.sleep(0.3)
 
 
 def run_macro_export_win(
