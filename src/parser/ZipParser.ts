@@ -38,14 +38,110 @@ export interface ZipParseLimits {
   maxConcurrency?: number;
 }
 
+export const RECOMMENDED_ZIP_LIMITS = Object.freeze({
+  maxEntries: 4_000,
+  maxEntryUncompressedBytes: 32 * 1024 * 1024,
+  maxTotalUncompressedBytes: 256 * 1024 * 1024,
+  maxMediaBytes: 192 * 1024 * 1024,
+  maxConcurrency: 8,
+}) satisfies Required<ZipParseLimits>;
+
 function throwZipLimitExceeded(reason: string): never {
   throw new Error(`PPTX zip limit exceeded: ${reason}`);
+}
+
+function isMediaPath(path: string): boolean {
+  return path.startsWith('ppt/media/');
 }
 
 function readUncompressedSize(file: JSZipObject): number | undefined {
   const data = (file as unknown as { _data?: { uncompressedSize?: number } })._data;
   const size = data?.uncompressedSize;
   return typeof size === 'number' && Number.isFinite(size) ? size : undefined;
+}
+
+function textByteLength(text: string): number {
+  return new TextEncoder().encode(text).byteLength;
+}
+
+interface ZipLimitState {
+  limits: ZipParseLimits;
+  knownSizeByPath: Map<string, number>;
+  knownTotalBytes: number;
+  knownMediaBytes: number;
+  unknownTotalBytes: number;
+  unknownMediaBytes: number;
+}
+
+function validateDecodedEntrySize(path: string, size: number, state: ZipLimitState): void {
+  if (
+    state.limits.maxEntryUncompressedBytes !== undefined &&
+    size > state.limits.maxEntryUncompressedBytes
+  ) {
+    throwZipLimitExceeded(
+      `${path} is ${size} bytes > maxEntryUncompressedBytes ${state.limits.maxEntryUncompressedBytes}`,
+    );
+  }
+
+  if (state.knownSizeByPath.has(path)) return;
+
+  state.unknownTotalBytes += size;
+  const totalBytes = state.knownTotalBytes + state.unknownTotalBytes;
+  if (
+    state.limits.maxTotalUncompressedBytes !== undefined &&
+    totalBytes > state.limits.maxTotalUncompressedBytes
+  ) {
+    throwZipLimitExceeded(
+      `total uncompressed bytes ${totalBytes} > maxTotalUncompressedBytes ${state.limits.maxTotalUncompressedBytes}`,
+    );
+  }
+
+  if (isMediaPath(path)) {
+    state.unknownMediaBytes += size;
+    const mediaBytes = state.knownMediaBytes + state.unknownMediaBytes;
+    if (state.limits.maxMediaBytes !== undefined && mediaBytes > state.limits.maxMediaBytes) {
+      throwZipLimitExceeded(
+        `media bytes ${mediaBytes} > maxMediaBytes ${state.limits.maxMediaBytes}`,
+      );
+    }
+  }
+}
+
+async function readZipTextEntry(
+  path: string,
+  file: JSZipObject,
+  state: ZipLimitState,
+): Promise<string> {
+  const text = await file.async('string');
+  validateDecodedEntrySize(path, textByteLength(text), state);
+  return text;
+}
+
+async function readZipBinaryEntry(
+  path: string,
+  file: JSZipObject,
+  state: ZipLimitState,
+): Promise<Uint8Array> {
+  const bytes = await file.async('uint8array');
+  validateDecodedEntrySize(path, bytes.byteLength, state);
+  return bytes;
+}
+
+async function countUncategorizedEntryIfNeeded(
+  path: string,
+  file: JSZipObject,
+  state: ZipLimitState,
+): Promise<void> {
+  if (state.knownSizeByPath.has(path)) return;
+  if (
+    state.limits.maxEntryUncompressedBytes === undefined &&
+    state.limits.maxTotalUncompressedBytes === undefined
+  ) {
+    return;
+  }
+
+  const bytes = await file.async('uint8array');
+  validateDecodedEntrySize(path, bytes.byteLength, state);
 }
 
 async function mapWithConcurrency<T>(
@@ -114,7 +210,7 @@ export async function parseZip(
       );
     }
 
-    if (normalizedPath.startsWith('ppt/media/')) {
+    if (isMediaPath(normalizedPath)) {
       knownMediaBytes += size;
       if (limits.maxMediaBytes !== undefined && knownMediaBytes > limits.maxMediaBytes) {
         throwZipLimitExceeded(
@@ -142,127 +238,140 @@ export async function parseZip(
     diagramDrawings: new Map(),
   };
 
-  let unknownMediaBytes = 0;
+  const limitState: ZipLimitState = {
+    limits,
+    knownSizeByPath,
+    knownTotalBytes,
+    knownMediaBytes,
+    unknownTotalBytes: 0,
+    unknownMediaBytes: 0,
+  };
 
   await mapWithConcurrency(entries, maxConcurrency, async ([path, file]) => {
     const normalizedPath = path.replace(/\\/g, '/');
 
     // --- Content Types ---
     if (normalizedPath === '[Content_Types].xml') {
-      result.contentTypes = await file.async('string');
+      result.contentTypes = await readZipTextEntry(normalizedPath, file, limitState);
       return;
     }
 
     // --- Presentation ---
     if (normalizedPath === 'ppt/presentation.xml') {
-      result.presentation = await file.async('string');
+      result.presentation = await readZipTextEntry(normalizedPath, file, limitState);
       return;
     }
 
     // --- Presentation Rels ---
     if (normalizedPath === 'ppt/_rels/presentation.xml.rels') {
-      result.presentationRels = await file.async('string');
+      result.presentationRels = await readZipTextEntry(normalizedPath, file, limitState);
       return;
     }
 
     // --- Table Styles ---
     if (normalizedPath === 'ppt/tableStyles.xml') {
-      result.tableStyles = await file.async('string');
+      result.tableStyles = await readZipTextEntry(normalizedPath, file, limitState);
       return;
     }
 
     // --- Media (binary) ---
-    if (normalizedPath.startsWith('ppt/media/')) {
-      const bytes = await file.async('uint8array');
-      if (!knownSizeByPath.has(normalizedPath)) {
-        const size = bytes.byteLength;
-        if (
-          limits.maxEntryUncompressedBytes !== undefined &&
-          size > limits.maxEntryUncompressedBytes
-        ) {
-          throwZipLimitExceeded(
-            `${normalizedPath} is ${size} bytes > maxEntryUncompressedBytes ${limits.maxEntryUncompressedBytes}`,
-          );
-        }
-        unknownMediaBytes += size;
-        if (
-          limits.maxMediaBytes !== undefined &&
-          knownMediaBytes + unknownMediaBytes > limits.maxMediaBytes
-        ) {
-          throwZipLimitExceeded(
-            `media bytes ${knownMediaBytes + unknownMediaBytes} > maxMediaBytes ${limits.maxMediaBytes}`,
-          );
-        }
-      }
+    if (isMediaPath(normalizedPath)) {
+      const bytes = await readZipBinaryEntry(normalizedPath, file, limitState);
       result.media.set(normalizedPath, bytes);
       return;
     }
 
     // --- Slide Rels (must check before slides to avoid false match) ---
     if (/^ppt\/slides\/_rels\/slide\d+\.xml\.rels$/.test(normalizedPath)) {
-      result.slideRels.set(normalizedPath, await file.async('string'));
+      result.slideRels.set(
+        normalizedPath,
+        await readZipTextEntry(normalizedPath, file, limitState),
+      );
       return;
     }
 
     // --- Slides ---
     if (/^ppt\/slides\/slide\d+\.xml$/.test(normalizedPath)) {
-      result.slides.set(normalizedPath, await file.async('string'));
+      result.slides.set(normalizedPath, await readZipTextEntry(normalizedPath, file, limitState));
       return;
     }
 
     // --- Slide Layout Rels ---
     if (/^ppt\/slideLayouts\/_rels\/slideLayout\d+\.xml\.rels$/.test(normalizedPath)) {
-      result.slideLayoutRels.set(normalizedPath, await file.async('string'));
+      result.slideLayoutRels.set(
+        normalizedPath,
+        await readZipTextEntry(normalizedPath, file, limitState),
+      );
       return;
     }
 
     // --- Slide Layouts ---
     if (/^ppt\/slideLayouts\/slideLayout\d+\.xml$/.test(normalizedPath)) {
-      result.slideLayouts.set(normalizedPath, await file.async('string'));
+      result.slideLayouts.set(
+        normalizedPath,
+        await readZipTextEntry(normalizedPath, file, limitState),
+      );
       return;
     }
 
     // --- Slide Master Rels ---
     if (/^ppt\/slideMasters\/_rels\/slideMaster\d+\.xml\.rels$/.test(normalizedPath)) {
-      result.slideMasterRels.set(normalizedPath, await file.async('string'));
+      result.slideMasterRels.set(
+        normalizedPath,
+        await readZipTextEntry(normalizedPath, file, limitState),
+      );
       return;
     }
 
     // --- Slide Masters ---
     if (/^ppt\/slideMasters\/slideMaster\d+\.xml$/.test(normalizedPath)) {
-      result.slideMasters.set(normalizedPath, await file.async('string'));
+      result.slideMasters.set(
+        normalizedPath,
+        await readZipTextEntry(normalizedPath, file, limitState),
+      );
       return;
     }
 
     // --- Themes ---
     if (/^ppt\/theme\/theme\d+\.xml$/.test(normalizedPath)) {
-      result.themes.set(normalizedPath, await file.async('string'));
+      result.themes.set(normalizedPath, await readZipTextEntry(normalizedPath, file, limitState));
       return;
     }
 
     // --- Charts ---
     if (/^ppt\/charts\/chart\d+\.xml$/.test(normalizedPath)) {
-      result.charts.set(normalizedPath, await file.async('string'));
+      result.charts.set(normalizedPath, await readZipTextEntry(normalizedPath, file, limitState));
       return;
     }
 
     // --- Chart Styles ---
     if (/^ppt\/charts\/style\d+\.xml$/.test(normalizedPath)) {
-      result.chartStyles.set(normalizedPath, await file.async('string'));
+      result.chartStyles.set(
+        normalizedPath,
+        await readZipTextEntry(normalizedPath, file, limitState),
+      );
       return;
     }
 
     // --- Chart Colors ---
     if (/^ppt\/charts\/colors\d+\.xml$/.test(normalizedPath)) {
-      result.chartColors.set(normalizedPath, await file.async('string'));
+      result.chartColors.set(
+        normalizedPath,
+        await readZipTextEntry(normalizedPath, file, limitState),
+      );
       return;
     }
 
     // --- Diagram Drawings (SmartArt fallback) ---
     if (/^ppt\/diagrams\/drawing\d+\.xml$/.test(normalizedPath)) {
-      result.diagramDrawings.set(normalizedPath, await file.async('string'));
+      result.diagramDrawings.set(
+        normalizedPath,
+        await readZipTextEntry(normalizedPath, file, limitState),
+      );
       return;
     }
+
+    await countUncategorizedEntryIfNeeded(normalizedPath, file, limitState);
   });
 
   return result;

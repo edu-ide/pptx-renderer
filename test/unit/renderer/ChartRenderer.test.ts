@@ -229,6 +229,43 @@ function parseChartOption(xml: string, ctx?: RenderContext): ParseChartResult {
 // ---------------------------------------------------------------------------
 
 describe('ChartRenderer', () => {
+  describe('chart data safety', () => {
+    it('does not trust oversized ptCount when only sparse points are present', () => {
+      const xml = `
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <c:chart>
+            <c:plotArea>
+              <c:barChart>
+                <c:barDir val="col"/>
+                <c:grouping val="clustered"/>
+                <c:ser>
+                  <c:idx val="0"/>
+                  <c:order val="0"/>
+                  <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>S</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                  <c:cat>
+                    <c:strRef><c:strCache><c:ptCount val="50001"/><c:pt idx="0"><c:v>A</c:v></c:pt></c:strCache></c:strRef>
+                  </c:cat>
+                  <c:val>
+                    <c:numRef><c:numCache><c:formatCode>0</c:formatCode><c:ptCount val="50001"/><c:pt idx="0"><c:v>7</c:v></c:pt></c:numCache></c:numRef>
+                  </c:val>
+                </c:ser>
+              </c:barChart>
+              <c:catAx><c:axId val="1"/><c:delete val="0"/><c:crossAx val="2"/></c:catAx>
+              <c:valAx><c:axId val="2"/><c:delete val="0"/><c:crossAx val="1"/></c:valAx>
+            </c:plotArea>
+          </c:chart>
+        </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const xAxis = Array.isArray(option.xAxis) ? option.xAxis[0] : option.xAxis;
+      const series = Array.isArray(option.series) ? option.series[0] : option.series;
+
+      expect((xAxis as { data?: unknown[] }).data).toEqual(['A']);
+      expect((series as { data?: unknown[] }).data).toEqual([7]);
+    });
+  });
+
   // ==========================================================================
   // Issue 3: Legend should be hidden when <c:legend> is absent
   // ==========================================================================

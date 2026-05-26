@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isAllowedExternalUrl } from '../../../src/utils/urlSafety';
+import { isAllowedExternalMediaUrl, isAllowedExternalUrl } from '../../../src/utils/urlSafety';
 
 describe('isAllowedExternalUrl', () => {
   it('allows https URLs', () => {
@@ -36,5 +36,23 @@ describe('isAllowedExternalUrl', () => {
 
   it('rejects file: URLs', () => {
     expect(isAllowedExternalUrl('file:///etc/passwd')).toBe(false);
+  });
+});
+
+describe('isAllowedExternalMediaUrl', () => {
+  it('allows http and https media URLs case-insensitively', () => {
+    expect(isAllowedExternalMediaUrl('http://example.com/video.mp4')).toBe(true);
+    expect(isAllowedExternalMediaUrl('HTTPS://example.com/video.mp4')).toBe(true);
+  });
+
+  it('rejects non-media external protocols', () => {
+    expect(isAllowedExternalMediaUrl('mailto:user@example.com')).toBe(false);
+    expect(isAllowedExternalMediaUrl('javascript:alert(1)')).toBe(false);
+    expect(isAllowedExternalMediaUrl('data:video/mp4;base64,AAAA')).toBe(false);
+  });
+
+  it('rejects relative and invalid URLs', () => {
+    expect(isAllowedExternalMediaUrl('../media/video.mp4')).toBe(false);
+    expect(isAllowedExternalMediaUrl('not a url')).toBe(false);
   });
 });

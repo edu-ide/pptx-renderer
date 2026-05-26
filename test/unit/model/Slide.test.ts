@@ -651,7 +651,7 @@ describe('diagram/SmartArt parsing', () => {
     const group = slide.nodes[0] as import('../../../src/model/nodes/GroupNode').GroupNodeData;
     expect(group.nodeType).toBe('group');
     expect(group.children).toHaveLength(2);
-    // Non-circular: childOffset is always (0, 0)
+    // Diagram fallback children are positioned in graphicFrame coordinates.
     expect(group.childOffset.x).toBe(0);
     expect(group.childOffset.y).toBe(0);
     // childExtent matches the graphicFrame size: 9144000/914400*96 = 960, 4572000/914400*96 = 480
@@ -660,11 +660,10 @@ describe('diagram/SmartArt parsing', () => {
   });
 
   // -------------------------------------------------------------------------
-  // Test 7: buildDiagramGroup handles circular presets (aspect ratio preservation)
-  //         Circular shapes get tight bounding box with isotropic scale adjustment.
+  // Test 7: buildDiagramGroup keeps diagram fallback shapes in frame coordinates.
   // -------------------------------------------------------------------------
-  it('buildDiagramGroup uses frame dimensions for circular presets', () => {
-    // A single donut shape — triggers the CIRCULAR_PRESETS path.
+  it('buildDiagramGroup uses frame dimensions for diagram fallback shapes', () => {
+    // A single donut fallback shape still uses the graphicFrame coordinate space.
     // Shape placed at (0,0), 4572000 x 4572000 EMU (square bounding box).
     const drawingXml = makeDiagramDrawingXml([
       { x: 0, y: 0, cx: 4572000, cy: 4572000, prst: 'donut' },
@@ -714,11 +713,11 @@ describe('diagram/SmartArt parsing', () => {
   });
 
   // -------------------------------------------------------------------------
-  // Test 8: buildDiagramGroup falls back to frame coordinates when shapes
+  // Test 8: buildDiagramGroup keeps frame coordinates even when fallback shapes
   //         have significant negative coordinates.
   // -------------------------------------------------------------------------
-  it('buildDiagramGroup falls back to frame coordinates when shapes have negative coordinates', () => {
-    // Shape with a large negative x coordinate — triggers useFrameCoords path.
+  it('buildDiagramGroup keeps frame coordinates when shapes have negative coordinates', () => {
+    // Shape with a large negative x coordinate should not expand the group bounds.
     // x = -9144000 EMU → -960 px (far negative), cx = 1828800 EMU → 192 px.
     const drawingXml = makeDiagramDrawingXml([
       { x: -9144000, y: 0, cx: 1828800, cy: 1828800, prst: 'donut' },
@@ -757,7 +756,7 @@ describe('diagram/SmartArt parsing', () => {
     expect(slide.nodes).toHaveLength(1);
     const group = slide.nodes[0] as import('../../../src/model/nodes/GroupNode').GroupNodeData;
     expect(group.nodeType).toBe('group');
-    // useFrameCoords=true: childOffset = (0,0), childExtent = frame size
+    // Diagram groups keep childOffset = (0,0) and childExtent = frame size.
     expect(group.childOffset.x).toBe(0);
     expect(group.childOffset.y).toBe(0);
     expect(group.childExtent.w).toBeCloseTo(960, 1);

@@ -12,7 +12,7 @@ export type {
 export { PptxRenderer } from './core/Renderer';
 export type { RendererOptions } from './core/Renderer';
 
-export { parseZip } from './parser/ZipParser';
+export { parseZip, RECOMMENDED_ZIP_LIMITS } from './parser/ZipParser';
 export type { ZipParseLimits } from './parser/ZipParser';
 
 export { buildPresentation } from './model/Presentation';

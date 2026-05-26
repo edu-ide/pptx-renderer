@@ -9,6 +9,7 @@ import { resolveColor } from './StyleResolver';
 import { hexToRgb } from '../utils/color';
 import { parseEmfContent } from '../utils/emfParser';
 import { renderPdfToImage } from '../utils/pdfRenderer';
+import { isAllowedExternalMediaUrl } from '../utils/urlSafety';
 
 /**
  * Check if a file extension is an unsupported legacy format (WMF only now; EMF is handled).
@@ -231,6 +232,7 @@ function renderVideo(node: PicNodeData, ctx: RenderContext, wrapper: HTMLElement
   if (videoUrl) {
     const video = document.createElement('video');
     video.src = videoUrl;
+    video.preload = 'none';
     video.controls = true;
     video.style.width = '100%';
     video.style.height = '100%';
@@ -292,6 +294,7 @@ function renderAudio(node: PicNodeData, ctx: RenderContext, wrapper: HTMLElement
 
     const audio = document.createElement('audio');
     audio.src = audioUrl;
+    audio.preload = 'none';
     audio.controls = true;
     audio.style.width = '100%';
     audio.style.position = 'absolute';
@@ -313,7 +316,7 @@ function resolveMediaUrl(rId: string | undefined, ctx: RenderContext): string | 
   if (!rel) return undefined;
 
   // Check if target is an external URL
-  if (rel.target.startsWith('http://') || rel.target.startsWith('https://')) {
+  if (rel.targetMode === 'External' && isAllowedExternalMediaUrl(rel.target)) {
     return rel.target;
   }
 

@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../src/renderer/SlideRenderer', () => ({
-  renderSlide: vi.fn(() => {
+  renderSlide: vi.fn((_presentation, slide) => {
     const el = document.createElement('div');
     el.className = 'mock-slide';
+    el.dataset.slideIndex = String(slide.index);
     return { element: el, dispose: vi.fn(), [Symbol.dispose]() { this.dispose(); } };
   }),
 }));
@@ -31,6 +32,10 @@ function makeMockPresentation(slideCount = 3): PresentationData {
     charts: new Map(),
     isWps: false,
   } as PresentationData;
+}
+
+function listItemsIn(container: HTMLElement): Element[] {
+  return Array.from(container.children).filter((child) => child.hasAttribute('data-slide-index'));
 }
 
 describe('PptxViewer.destroy()', () => {
@@ -95,6 +100,67 @@ describe('PptxViewer.destroy()', () => {
     expect(viewer.getMountedSlides().length).toBe(3);
     viewer.destroy();
     expect(viewer.getMountedSlides()).toEqual([]);
+  });
+
+  it('does not poison the render queue when destroyed during a batched render', async () => {
+    const rafCallbacks: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      rafCallbacks.push(cb);
+      return rafCallbacks.length;
+    });
+
+    const container = document.createElement('div');
+    const viewer = new PptxViewer(container);
+    viewer.load(makeMockPresentation(3));
+
+    const inFlight = viewer.renderList({ batchSize: 1 });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(rafCallbacks).toHaveLength(1);
+
+    viewer.destroy();
+    rafCallbacks.shift()!(0);
+
+    await expect(inFlight).resolves.toBeUndefined();
+    expect(container.innerHTML).toBe('');
+
+    viewer.load(makeMockPresentation(1));
+    await viewer.renderSlide(0);
+
+    expect(container.querySelectorAll('.mock-slide')).toHaveLength(1);
+  });
+
+  it('stops a batched list render when a newer render request supersedes it', async () => {
+    const rafCallbacks: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      rafCallbacks.push(cb);
+      return rafCallbacks.length;
+    });
+
+    const container = document.createElement('div');
+    const viewer = new PptxViewer(container);
+    viewer.load(makeMockPresentation(3));
+
+    const firstRender = viewer.renderList({ batchSize: 1 });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(listItemsIn(container)).toHaveLength(1);
+    expect(rafCallbacks).toHaveLength(1);
+
+    const supersedingRender = viewer.renderSlide(2);
+    rafCallbacks.shift()!(0);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(listItemsIn(container)).toHaveLength(1);
+
+    await expect(firstRender).resolves.toBeUndefined();
+    await expect(supersedingRender).resolves.toBeUndefined();
+
+    expect(listItemsIn(container)).toHaveLength(0);
+    expect(container.querySelectorAll('.mock-slide')).toHaveLength(1);
+    expect(container.querySelector('.mock-slide')?.getAttribute('data-slide-index')).toBe('2');
   });
 });
 

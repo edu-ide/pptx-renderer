@@ -8,6 +8,7 @@ import {
   PptxViewer,
   PptxRenderer,
   parseZip,
+  RECOMMENDED_ZIP_LIMITS,
   buildPresentation,
   serializePresentation,
   renderSlide,
@@ -66,6 +67,12 @@ describe('package exports', () => {
 
   it('exports parseZip function', () => {
     expect(typeof parseZip).toBe('function');
+  });
+
+  it('exports recommended ZIP limits for untrusted PPTX input', () => {
+    expect(RECOMMENDED_ZIP_LIMITS.maxEntries).toBeGreaterThan(0);
+    expect(RECOMMENDED_ZIP_LIMITS.maxTotalUncompressedBytes).toBeGreaterThan(0);
+    expect(RECOMMENDED_ZIP_LIMITS.maxMediaBytes).toBeGreaterThan(0);
   });
 
   it('exports buildPresentation function', () => {

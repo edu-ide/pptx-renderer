@@ -44,13 +44,14 @@ Requires Node.js 20+ for development. Runtime is browser-only.
 ## Quick Start
 
 ```ts
-import { PptxViewer } from '@aiden0z/pptx-renderer';
+import { PptxViewer, RECOMMENDED_ZIP_LIMITS } from '@aiden0z/pptx-renderer';
 
 const container = document.getElementById('pptx-container')!;
 const resp = await fetch('/slides/demo.pptx');
 
 // One-liner: parse, build model, and render
 const viewer = await PptxViewer.open(await resp.arrayBuffer(), container, {
+  zipLimits: RECOMMENDED_ZIP_LIMITS,
   listOptions: { windowed: true },
 });
 ```
@@ -58,12 +59,17 @@ const viewer = await PptxViewer.open(await resp.arrayBuffer(), container, {
 Or with more control over each step:
 
 ```ts
-import { PptxViewer, parseZip, buildPresentation } from '@aiden0z/pptx-renderer';
+import {
+  PptxViewer,
+  parseZip,
+  buildPresentation,
+  RECOMMENDED_ZIP_LIMITS,
+} from '@aiden0z/pptx-renderer';
 
 const container = document.getElementById('pptx-container')!;
 const viewer = new PptxViewer(container, { fitMode: 'contain' });
 
-const files = await parseZip(arrayBuffer);
+const files = await parseZip(arrayBuffer, RECOMMENDED_ZIP_LIMITS);
 const presentation = buildPresentation(files);
 viewer.load(presentation);
 await viewer.renderList({ windowed: true, batchSize: 8 });
@@ -80,6 +86,7 @@ Parse, build, and render in one call. Returns a `Promise<PptxViewer>`.
 ```ts
 const viewer = await PptxViewer.open(buffer, container, {
   renderMode: 'list', // 'list' (default) | 'slide'
+  zipLimits: RECOMMENDED_ZIP_LIMITS,
   listOptions: { windowed: true, batchSize: 8 },
   signal: abortController.signal, // optional AbortSignal
   // ...ViewerOptions
@@ -88,20 +95,20 @@ const viewer = await PptxViewer.open(buffer, container, {
 
 #### `new PptxViewer(container, options?)`
 
-| Option             | Type                       | Default     | Description                                         |
-| ------------------ | -------------------------- | ----------- | --------------------------------------------------- |
-| `width`            | `number`                   | --          | Container width hint (omit for auto-detect)         |
-| `fitMode`          | `'contain' \| 'none'`      | `'contain'` | Responsive fit or fixed size                        |
-| `zoomPercent`      | `number`                   | `100`       | Zoom level (10–400)                                 |
-| `scrollContainer`  | `HTMLElement`              | --          | Scroll container for IntersectionObserver root      |
-| `zipLimits`        | `ZipParseLimits`           | --          | Security limits for ZIP parsing (used by `.open()`) |
-| `onSlideChange`    | `(index) => void`          | --          | Shorthand for `slidechange` event                   |
-| `onSlideRendered`  | `(index, element) => void` | --          | Shorthand for `sliderendered` event                 |
-| `onSlideError`     | `(index, error) => void`   | --          | Shorthand for `slideerror` event                    |
-| `onSlideUnmounted` | `(index) => void`          | --          | Shorthand for `slideunmounted` event                |
-| `onNodeError`      | `(nodeId, error) => void`  | --          | Shorthand for `nodeerror` event                     |
-| `onRenderStart`    | `() => void`               | --          | Shorthand for `renderstart` event                   |
-| `onRenderComplete` | `() => void`               | --          | Shorthand for `rendercomplete` event                |
+| Option             | Type                       | Default     | Description                                                                                            |
+| ------------------ | -------------------------- | ----------- | ------------------------------------------------------------------------------------------------------ |
+| `width`            | `number`                   | --          | Container width hint (omit for auto-detect)                                                            |
+| `fitMode`          | `'contain' \| 'none'`      | `'contain'` | Responsive fit or fixed size                                                                           |
+| `zoomPercent`      | `number`                   | `100`       | Zoom level (10–400)                                                                                    |
+| `scrollContainer`  | `HTMLElement`              | --          | Scroll container for IntersectionObserver root                                                         |
+| `zipLimits`        | `ZipParseLimits`           | --          | Security limits for ZIP parsing (used by `.open()`). Use `RECOMMENDED_ZIP_LIMITS` for untrusted input. |
+| `onSlideChange`    | `(index) => void`          | --          | Shorthand for `slidechange` event                                                                      |
+| `onSlideRendered`  | `(index, element) => void` | --          | Shorthand for `sliderendered` event                                                                    |
+| `onSlideError`     | `(index, error) => void`   | --          | Shorthand for `slideerror` event                                                                       |
+| `onSlideUnmounted` | `(index) => void`          | --          | Shorthand for `slideunmounted` event                                                                   |
+| `onNodeError`      | `(nodeId, error) => void`  | --          | Shorthand for `nodeerror` event                                                                        |
+| `onRenderStart`    | `() => void`               | --          | Shorthand for `renderstart` event                                                                      |
+| `onRenderComplete` | `() => void`               | --          | Shorthand for `rendercomplete` event                                                                   |
 
 All shorthand callbacks are also available as `EventTarget` events (e.g. `viewer.addEventListener('slidechange', ...)`).
 
@@ -146,6 +153,26 @@ viewer[Symbol.dispose]();       // TC39 Explicit Resource Management (calls dest
 | `initialSlides`    | `number`  | `4`     | Initial slides to mount (windowed) |
 | `overscanViewport` | `number`  | `1.5`   | Viewport overscan multiplier       |
 
+#### `ZipParseLimits` and Resource Safety
+
+`parseZip(buffer)` defaults to no ZIP limits for backward compatibility. For files from users or other untrusted sources, pass `RECOMMENDED_ZIP_LIMITS` or stricter values:
+
+| Limit                       | Recommended value | What it protects                            |
+| --------------------------- | ----------------- | ------------------------------------------- |
+| `maxEntries`                | `4000`            | Archives with excessive file counts         |
+| `maxEntryUncompressedBytes` | `32 MiB`          | A single oversized XML/media entry          |
+| `maxTotalUncompressedBytes` | `256 MiB`         | Total decompressed archive size             |
+| `maxMediaBytes`             | `192 MiB`         | Total media payload size under `ppt/media/` |
+| `maxConcurrency`            | `8`               | Parallel ZIP entry reads                    |
+
+When ZIP metadata does not expose a reliable uncompressed size, the parser falls back to the actual decoded entry size before accepting the entry. This keeps `maxEntryUncompressedBytes`, `maxTotalUncompressedBytes`, and `maxMediaBytes` effective for XML/text entries and media entries alike.
+
+Renderer-level guards also apply after ZIP parsing:
+
+- Chart caches do not allocate from oversized `c:ptCount`; chart point indexes are capped at `10,000` per cache.
+- EMF bitmap previews are rejected when decoded size exceeds `16,777,216` pixels, dimensions exceed `8192x8192`, or pixel payload is shorter than the declared bitmap.
+- External audio/video relationships only render for safe `http`/`https` URLs with `TargetMode="External"` and are created with `preload="none"`.
+
 #### Events (`PptxViewerEventMap`)
 
 ```ts
@@ -162,7 +189,7 @@ viewer.addEventListener('slideunmounted', (e) => console.log(e.detail.index));
 viewer.addEventListener('nodeerror', (e) => console.warn(e.detail.nodeId, e.detail.error));
 ```
 
-`slidechange` fires both on `goToSlide()` navigation and after each render cycle (initial render included). `renderstart`/`rendercomplete` bracket every render cycle (renderList, renderSlide, setZoom, setFitMode).
+`slidechange` fires both on `goToSlide()` navigation and after each render cycle (initial render included). `renderstart`/`rendercomplete` bracket every render cycle (renderList, renderSlide, setZoom, setFitMode). When calls overlap, the newer render request supersedes older queued or batched work, so stale list batches stop before appending more DOM.
 
 #### Instance Properties (read-only)
 
@@ -191,9 +218,14 @@ await renderer.preview(buffer); // deprecated — use PptxViewer.open() instead
 ### Utility Exports
 
 ```ts
-import { parseZip, buildPresentation, serializePresentation } from '@aiden0z/pptx-renderer';
+import {
+  parseZip,
+  buildPresentation,
+  serializePresentation,
+  RECOMMENDED_ZIP_LIMITS,
+} from '@aiden0z/pptx-renderer';
 
-const files = await parseZip(arrayBuffer); // PptxFiles
+const files = await parseZip(arrayBuffer, RECOMMENDED_ZIP_LIMITS); // PptxFiles
 const presentation = buildPresentation(files); // PresentationData
 const json = serializePresentation(presentation); // SerializedPresentation (JSON-safe)
 ```
@@ -320,6 +352,7 @@ For large decks (50+ slides), use windowed mounting:
 
 ```ts
 const viewer = await PptxViewer.open(buffer, container, {
+  zipLimits: RECOMMENDED_ZIP_LIMITS,
   listOptions: {
     windowed: true,
     batchSize: 8,
@@ -333,7 +366,7 @@ Details: [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md)
 
 ## Security
 
-- Treat PPTX input as untrusted. Always configure `zipLimits` in production.
+- Treat PPTX input as untrusted. Start with `RECOMMENDED_ZIP_LIMITS`, then tighten for your deployment.
 - External hyperlinks are protocol-filtered (no `javascript:`, `data:`, etc.).
 - Reporting: [`docs/SECURITY.md`](docs/SECURITY.md)
 

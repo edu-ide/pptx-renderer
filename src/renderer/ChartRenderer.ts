@@ -8,6 +8,8 @@ import { RenderContext } from './RenderContext';
 import { SafeXmlNode } from '../parser/XmlParser';
 import { resolveColor } from './StyleResolver';
 
+const MAX_CHART_CACHE_POINTS = 10_000;
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -53,6 +55,17 @@ interface DataLabelConfig {
   bold?: boolean; // font bold from dLbls > txPr > defRPr@b
 }
 
+interface MutableAxisOption {
+  type?: string;
+  min?: number;
+  max?: number;
+  interval?: number;
+  axisLabel?: {
+    fontSize?: number;
+    fontFamily?: string;
+  };
+}
+
 type OoxmlChartType =
   | 'barChart'
   | 'bar3DChart'
@@ -94,6 +107,40 @@ const CHART_TYPE_ELEMENTS: OoxmlChartType[] = [
 // Data Extraction Helpers
 // ---------------------------------------------------------------------------
 
+function getCachePointLimit(cache: SafeXmlNode): number {
+  const declared = cache.child('ptCount').numAttr('val');
+  let maxPresentIndex = -1;
+
+  for (const pt of cache.children('pt')) {
+    const idx = pt.numAttr('idx');
+    if (idx !== undefined && Number.isInteger(idx) && idx >= 0 && idx < MAX_CHART_CACHE_POINTS) {
+      maxPresentIndex = Math.max(maxPresentIndex, idx);
+    }
+  }
+
+  const presentCount = maxPresentIndex + 1;
+  if (declared === undefined || !Number.isFinite(declared) || declared < 0) {
+    return presentCount;
+  }
+
+  const declaredCount = Math.floor(declared);
+  if (declaredCount > MAX_CHART_CACHE_POINTS) {
+    return presentCount;
+  }
+
+  return Math.min(Math.max(declaredCount, presentCount), MAX_CHART_CACHE_POINTS);
+}
+
+function isCachePointInRange(idx: number | undefined, pointLimit: number): idx is number {
+  return (
+    idx !== undefined &&
+    Number.isInteger(idx) &&
+    idx >= 0 &&
+    idx < pointLimit &&
+    idx < MAX_CHART_CACHE_POINTS
+  );
+}
+
 /**
  * Extract text values from a strRef or strCache structure.
  * Path: strRef > strCache > pt (with idx attr) > v
@@ -114,12 +161,12 @@ function extractStringValues(refNode: SafeXmlNode): string[] {
     return [];
   }
 
-  const ptCount = cache.child('ptCount').numAttr('val') ?? 0;
-  const values: string[] = new Array(ptCount).fill('');
+  const pointLimit = getCachePointLimit(cache);
+  const values: string[] = new Array(pointLimit).fill('');
 
   for (const pt of cache.children('pt')) {
     const idx = pt.numAttr('idx');
-    if (idx !== undefined) {
+    if (isCachePointInRange(idx, pointLimit)) {
       const v = pt.child('v').text();
       values[idx] = v;
     }
@@ -194,12 +241,12 @@ function extractNumericValues(refNode: SafeXmlNode): number[] {
 
   if (!cache.exists()) return [];
 
-  const ptCount = cache.child('ptCount').numAttr('val') ?? 0;
-  const values: number[] = new Array(ptCount).fill(0);
+  const pointLimit = getCachePointLimit(cache);
+  const values: number[] = new Array(pointLimit).fill(0);
 
   for (const pt of cache.children('pt')) {
     const idx = pt.numAttr('idx');
-    if (idx !== undefined) {
+    if (isCachePointInRange(idx, pointLimit)) {
       const v = parseFloat(pt.child('v').text());
       values[idx] = isNaN(v) ? 0 : v;
     }
@@ -212,8 +259,8 @@ function extractNumericValues(refNode: SafeXmlNode): number[] {
  * Extract numeric cache values as strings (for category axis that uses numbers).
  */
 function extractNumericValuesAsStrings(cache: SafeXmlNode): string[] {
-  const ptCount = cache.child('ptCount').numAttr('val') ?? 0;
-  const values: string[] = new Array(ptCount).fill('');
+  const pointLimit = getCachePointLimit(cache);
+  const values: string[] = new Array(pointLimit).fill('');
 
   // Check if this is a date format — format date serial numbers to human-readable strings
   const fc = cache.child('formatCode').text();
@@ -221,7 +268,7 @@ function extractNumericValuesAsStrings(cache: SafeXmlNode): string[] {
 
   for (const pt of cache.children('pt')) {
     const idx = pt.numAttr('idx');
-    if (idx !== undefined) {
+    if (isCachePointInRange(idx, pointLimit)) {
       const raw = pt.child('v').text();
       if (isDateFmt && raw) {
         values[idx] = excelSerialToDateString(parseFloat(raw));
@@ -2513,24 +2560,6 @@ function parseChartStyleId(chartXml: SafeXmlNode): number | undefined {
   return undefined;
 }
 
-function clamp01(v: number): number {
-  if (v < 0) return 0;
-  if (v > 1) return 1;
-  return v;
-}
-
-function tintHex(hex: string, amount: number): string {
-  const normalized = hex.startsWith('#') ? hex.slice(1) : hex;
-  if (normalized.length !== 6) return hex.startsWith('#') ? hex : `#${hex}`;
-  const r = parseInt(normalized.slice(0, 2), 16);
-  const g = parseInt(normalized.slice(2, 4), 16);
-  const b = parseInt(normalized.slice(4, 6), 16);
-  if ([r, g, b].some((n) => Number.isNaN(n))) return hex.startsWith('#') ? hex : `#${hex}`;
-  const a = clamp01(amount);
-  const mix = (c: number) => Math.round(c + (255 - c) * a);
-  return `#${[mix(r), mix(g), mix(b)].map((n) => n.toString(16).padStart(2, '0')).join('')}`;
-}
-
 /**
  * Build a chart color palette from theme accents and chart style id.
  * This improves parity with Office chart styles when series colors are implicit.
@@ -2591,7 +2620,7 @@ function applyDefaultFontSizes(option: echarts.EChartsOption, defaultFs: number)
     }
   }
 
-  const applyAxisDefaultFontSize = (axis: any) => {
+  const applyAxisDefaultFontSize = (axis: MutableAxisOption | undefined) => {
     if (!axis?.axisLabel) return;
     const current = axis.axisLabel.fontSize;
     if (current === undefined || current <= 10) {
@@ -2622,7 +2651,7 @@ function applyDefaultFontFamily(option: echarts.EChartsOption, fontFamily: strin
     opt.title.textStyle.fontWeight = 'bold';
   }
 
-  const applyAxisFontFamily = (axis: any) => {
+  const applyAxisFontFamily = (axis: MutableAxisOption | undefined) => {
     if (!axis) return;
     const axisLabel = axis.axisLabel ?? (axis.axisLabel = {});
     if (!axisLabel.fontFamily) {
@@ -2770,7 +2799,11 @@ function applyNiceAxisRange(option: echarts.EChartsOption): void {
     (Array.isArray(opt.xAxis) ? opt.xAxis[0] : opt.xAxis)?.type === 'value' &&
     (Array.isArray(opt.yAxis) ? opt.yAxis[0] : opt.yAxis)?.type === 'value';
 
-  const applyAxisExtent = (axis: any, values: number[], desiredTicks: number) => {
+  const applyAxisExtent = (
+    axis: MutableAxisOption | undefined,
+    values: number[],
+    desiredTicks: number,
+  ) => {
     if (!axis || axis.type !== 'value' || values.length === 0) return;
     if (axis.min !== undefined && axis.max !== undefined) return;
     const dataMin = Math.min(...values);
@@ -2868,30 +2901,6 @@ function extractChartDefaultFontSize(chartSpaceNode: SafeXmlNode): number | unde
     }
   }
   return undefined;
-}
-
-/**
- * Estimate legend width as a percentage of chart width based on legend text length and font size.
- * Used to reserve grid space when legend is at right or left (non-overlay).
- */
-function estimateLegendWidthPct(
-  legendInfo: LegendInfo | undefined,
-  legendNames: string[],
-  baseFontSize: number,
-): string {
-  if (!legendInfo || legendInfo.overlay) return '2%';
-  const opt = legendInfo.option as Record<string, unknown> | undefined;
-  if (!opt) return '2%';
-  const isRight = opt.right !== undefined && opt.top !== undefined && opt.bottom === undefined;
-  const isLeft = opt.left !== undefined && opt.top !== undefined && opt.bottom === undefined;
-  if (!isRight && !isLeft) return '2%';
-  // Estimate based on longest label + icon + padding
-  const maxLen = Math.max(1, ...legendNames.map((n) => n.length));
-  // Approximate: each char ≈ 0.6 * fontSize, plus icon (≈ fontSize) and padding (≈ fontSize)
-  const estimatedPx = maxLen * baseFontSize * 0.6 + baseFontSize * 3;
-  // Convert to percentage of typical chart width (assume ~600px as base)
-  const pct = Math.min(40, Math.max(15, Math.round((estimatedPx / 600) * 100)));
-  return `${pct}%`;
 }
 
 function createLegendIcon(

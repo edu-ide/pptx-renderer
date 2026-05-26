@@ -19,12 +19,37 @@ ZIP parser safety/performance knobs (pass via `ViewerOptions.zipLimits` or `Pptx
 - `zipLimits.maxMediaBytes`
 - `zipLimits.maxConcurrency`
 
+Use `RECOMMENDED_ZIP_LIMITS` as a safe starting point for untrusted PPTX input.
+
+```ts
+import { PptxViewer, RECOMMENDED_ZIP_LIMITS } from '@aiden0z/pptx-renderer';
+```
+
+| Limit                       | Recommended value | Effect                                                |
+| --------------------------- | ----------------- | ----------------------------------------------------- |
+| `maxEntries`                | `4000`            | Rejects archives with excessive file counts           |
+| `maxEntryUncompressedBytes` | `32 MiB`          | Rejects a single oversized uncompressed entry         |
+| `maxTotalUncompressedBytes` | `256 MiB`         | Rejects large total decompressed archives             |
+| `maxMediaBytes`             | `192 MiB`         | Rejects large total media payloads under `ppt/media/` |
+| `maxConcurrency`            | `8`               | Bounds concurrent ZIP entry reads                     |
+
+If JSZip metadata does not provide a trustworthy uncompressed size, parsing still checks the actual decoded entry size before accepting the entry. This fallback applies to XML/text entries and media entries, so the same limits remain effective for archives whose size metadata is unavailable.
+
+## Built-In Resource Guards
+
+These guards are applied by the renderer even when ZIP byte limits are configured, because some PPTX structures can be small on disk but expensive after parsing:
+
+- Chart cache point indexes are capped at `10,000` per cache. Oversized `c:ptCount` values do not drive array allocation.
+- EMF bitmap previews are rejected above `16,777,216` decoded pixels, above `8192x8192` dimensions, or when the declared bitmap payload is truncated.
+- External audio/video media is not preloaded automatically; rendered media elements use `preload="none"`.
+
 ## Recommended Presets
 
 ### Small deck (<= 30 slides)
 
 ```ts
 await PptxViewer.open(buffer, container, {
+  zipLimits: RECOMMENDED_ZIP_LIMITS,
   listOptions: { batchSize: 12 },
 });
 ```
@@ -33,6 +58,7 @@ await PptxViewer.open(buffer, container, {
 
 ```ts
 await PptxViewer.open(buffer, container, {
+  zipLimits: RECOMMENDED_ZIP_LIMITS,
   listOptions: {
     windowed: true,
     batchSize: 8,
@@ -46,6 +72,7 @@ await PptxViewer.open(buffer, container, {
 
 ```ts
 await PptxViewer.open(buffer, container, {
+  zipLimits: RECOMMENDED_ZIP_LIMITS,
   listOptions: {
     windowed: true,
     batchSize: 4,
@@ -60,6 +87,7 @@ await PptxViewer.open(buffer, container, {
 - Omit `windowed` (or set to `false`) when you need all slides in DOM at once (some compare/export pipelines).
 - Use `windowed: true` when memory pressure and long first-render latency are the bottleneck.
 - If `IntersectionObserver` is unavailable, windowed mode automatically falls back to full mounting.
+- A newer render request supersedes older queued or batched work. This keeps rapid calls such as `setZoom()`, `setFitMode()`, `renderList()`, and `renderSlide()` from continuing stale list batches after the next request has been queued.
 
 ## E2E/Test Page Overrides
 

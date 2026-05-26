@@ -35,6 +35,7 @@ const PDF_EOF = [0x25, 0x25, 0x45, 0x4f, 0x46]; // "%%EOF"
 
 // DIB compression
 const BI_RGB = 0;
+const MAX_EMF_BITMAP_PIXELS = 16_777_216;
 
 /**
  * Parse an EMF file and extract its embedded content.
@@ -233,19 +234,23 @@ function parseStretchDibits(
   const width = Math.abs(biWidth);
   const height = Math.abs(biHeight);
   if (width === 0 || height === 0 || width > 8192 || height > 8192) return null;
+  if (width * height > MAX_EMF_BITMAP_PIXELS) return null;
 
   const bitsStart = offset + offBitsSrc;
   if (bitsStart + cbBitsSrc > data.length) return null;
 
-  const bitsData = data.subarray(bitsStart, bitsStart + cbBitsSrc);
+  const bytesPerPixel = biBitCount / 8;
+  // DIB rows are padded to 4-byte boundaries.
+  const rowStride = Math.ceil((width * bytesPerPixel) / 4) * 4;
+  const requiredBits = rowStride * height;
+  if (cbBitsSrc < requiredBits) return null;
+
+  const bitsData = data.subarray(bitsStart, bitsStart + requiredBits);
 
   // Negative height means top-down row order; positive means bottom-up
   const topDown = biHeight < 0;
 
   const imageData = new ImageData(width, height);
-  const bytesPerPixel = biBitCount / 8;
-  // DIB rows are padded to 4-byte boundaries
-  const rowStride = Math.ceil((width * bytesPerPixel) / 4) * 4;
 
   for (let y = 0; y < height; y++) {
     const srcRow = topDown ? y : height - 1 - y;

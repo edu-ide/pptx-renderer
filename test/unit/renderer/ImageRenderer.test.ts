@@ -270,12 +270,17 @@ describe('renderImage', () => {
 
     it('resolves external video URL (http/https)', () => {
       const ctx = createMockRenderContext();
-      ctx.slide.rels.set('rId2', { type: 'video', target: 'https://example.com/video.mp4' });
+      ctx.slide.rels.set('rId2', {
+        type: 'video',
+        target: 'https://example.com/video.mp4',
+        targetMode: 'External',
+      });
       const node = createPicNode({ isVideo: true, mediaRId: 'rId2', blipEmbed: undefined });
       const el = renderImage(node, ctx);
       const video = el.querySelector('video');
       expect(video).not.toBeNull();
       expect(video!.src).toContain('https://example.com/video.mp4');
+      expect(video!.preload).toBe('none');
     });
   });
 
@@ -682,22 +687,58 @@ describe('renderImage', () => {
   describe('external media URLs', () => {
     it('resolves http external video URL', () => {
       const ctx = createMockRenderContext();
-      ctx.slide.rels.set('rId2', { type: 'video', target: 'http://example.com/video.mp4' });
+      ctx.slide.rels.set('rId2', {
+        type: 'video',
+        target: 'http://example.com/video.mp4',
+        targetMode: 'External',
+      });
       const node = createPicNode({ isVideo: true, mediaRId: 'rId2', blipEmbed: undefined });
       const el = renderImage(node, ctx);
       const video = el.querySelector('video');
       expect(video).not.toBeNull();
       expect(video!.src).toBe('http://example.com/video.mp4');
+      expect(video!.preload).toBe('none');
+    });
+
+    it('resolves external media URL with case-insensitive protocol', () => {
+      const ctx = createMockRenderContext();
+      ctx.slide.rels.set('rId2', {
+        type: 'video',
+        target: 'HTTPS://example.com/video.mp4',
+        targetMode: 'External',
+      });
+      const node = createPicNode({ isVideo: true, mediaRId: 'rId2', blipEmbed: undefined });
+      const el = renderImage(node, ctx);
+      const video = el.querySelector('video');
+
+      expect(video).not.toBeNull();
+      expect(video!.src).toBe('https://example.com/video.mp4');
+      expect(video!.preload).toBe('none');
     });
 
     it('resolves https external audio URL', () => {
       const ctx = createMockRenderContext();
-      ctx.slide.rels.set('rId2', { type: 'audio', target: 'https://example.com/audio.mp3' });
+      ctx.slide.rels.set('rId2', {
+        type: 'audio',
+        target: 'https://example.com/audio.mp3',
+        targetMode: 'External',
+      });
       const node = createPicNode({ isAudio: true, mediaRId: 'rId2', blipEmbed: undefined });
       const el = renderImage(node, ctx);
       const audio = el.querySelector('audio');
       expect(audio).not.toBeNull();
       expect(audio!.src).toBe('https://example.com/audio.mp3');
+      expect(audio!.preload).toBe('none');
+    });
+
+    it('does not attach external media URLs without TargetMode="External"', () => {
+      const ctx = createMockRenderContext();
+      ctx.slide.rels.set('rId2', { type: 'video', target: 'https://example.com/video.mp4' });
+      const node = createPicNode({ isVideo: true, mediaRId: 'rId2', blipEmbed: undefined });
+      const el = renderImage(node, ctx);
+
+      expect(el.querySelector('video')).toBeNull();
+      expect(el.textContent).toContain('Video');
     });
 
     it('resolves embedded media URL when rel target is not http', () => {

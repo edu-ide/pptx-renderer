@@ -49,6 +49,7 @@ Responsibilities:
 - Handle list/single-slide render modes via `renderList()` / `renderSlide()`.
 - Instance-level `open()` for one-call parse→build→render (static `PptxViewer.open()` delegates to this).
 - Render lifecycle events: `renderstart` / `rendercomplete` bracket every render cycle; `slidechange` fires after render.
+- A newer render request supersedes older queued or batched work; stale list batches stop at frame boundaries before appending more DOM.
 - Typed `on()` / `off()` helpers and state getters (`isRendering`, `zoomPercent`, `fitMode`).
 - Manage media object URL lifecycle (blob URLs tracked per-handle and per-viewer).
 - Handle internal/external navigation (with URL safety checks).

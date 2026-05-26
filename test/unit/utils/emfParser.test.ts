@@ -184,6 +184,35 @@ function buildStretchDibitsRecord(width: number, height: number, bpp: 24 | 32): 
   return buf;
 }
 
+/**
+ * Build an EMR_STRETCHDIBITS record whose header declares a large bitmap but
+ * whose pixel payload is intentionally too short for those dimensions.
+ */
+function buildTruncatedStretchDibitsRecord(width: number, height: number, bpp: 24 | 32): Uint8Array {
+  const bmiSize = 40;
+  const offBmiSrc = 80;
+  const offBitsSrc = offBmiSrc + bmiSize;
+  const cbBitsSrc = 4;
+  const recordSize = offBitsSrc + cbBitsSrc;
+  const buf = new Uint8Array(recordSize);
+
+  writeU32(buf, 0, EMR_STRETCHDIBITS);
+  writeU32(buf, 4, recordSize);
+  writeU32(buf, 48, offBmiSrc);
+  writeU32(buf, 52, bmiSize);
+  writeU32(buf, 56, offBitsSrc);
+  writeU32(buf, 60, cbBitsSrc);
+
+  writeU32(buf, offBmiSrc, 40);
+  writeI32(buf, offBmiSrc + 4, width);
+  writeI32(buf, offBmiSrc + 8, height);
+  writeU16(buf, offBmiSrc + 12, 1);
+  writeU16(buf, offBmiSrc + 14, bpp);
+  writeU32(buf, offBmiSrc + 16, 0);
+
+  return buf;
+}
+
 /** Concatenate multiple Uint8Arrays. */
 function concat(...arrays: Uint8Array[]): Uint8Array {
   const total = arrays.reduce((sum, a) => sum + a.length, 0);
@@ -303,6 +332,15 @@ describe('parseEmfContent', () => {
   });
 
   describe('bitmap extraction via STRETCHDIBITS', () => {
+    it('rejects bitmap records whose payload is shorter than the declared dimensions', () => {
+      const dib = buildTruncatedStretchDibitsRecord(512, 512, 24);
+      const emf = concat(buildEmfHeader(), dib, buildEofRecord());
+
+      const result = parseEmfContent(emf);
+
+      expect(result.type).not.toBe('bitmap');
+    });
+
     it('extracts 24-bit uncompressed bitmap', () => {
       const dib = buildStretchDibitsRecord(4, 3, 24);
       const emf = concat(buildEmfHeader(), dib, buildEofRecord());

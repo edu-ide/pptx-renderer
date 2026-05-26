@@ -76,7 +76,12 @@
     </div>
 
     <script type="module">
-      import { parseZip, buildPresentation, serializePresentation } from '../../src/index.ts';
+      import {
+        parseZip,
+        buildPresentation,
+        serializePresentation,
+        RECOMMENDED_ZIP_LIMITS,
+      } from '../../src/index.ts';
 
       const fileSelect = document.getElementById('file-select');
       const statusEl = document.getElementById('status');
@@ -133,7 +138,7 @@
       async function parseFile(buffer, label) {
         statusEl.textContent = 'Parsing…';
         try {
-          const files = await parseZip(buffer);
+          const files = await parseZip(buffer, RECOMMENDED_ZIP_LIMITS);
           const presentation = buildPresentation(files);
           const result = serializePresentation(presentation);
           currentResult = result;
@@ -285,12 +290,25 @@
                 cellNode.className = 'tree-node';
                 const cellHeader = document.createElement('div');
                 cellHeader.className = 'tree-node-header';
-                cellHeader.innerHTML = `
-                <span class="toggle"> </span>
-                <span class="type-badge type-table">cell</span>
-                <span class="node-name">R${ri}C${ci}</span>
-                <span class="node-text">${cell.text.replace(/\n/g, ' ').slice(0, 60) || '(empty)'}</span>
-              `;
+                const cellToggle = document.createElement('span');
+                cellToggle.className = 'toggle';
+                cellToggle.textContent = ' ';
+                cellHeader.appendChild(cellToggle);
+
+                const cellBadge = document.createElement('span');
+                cellBadge.className = 'type-badge type-table';
+                cellBadge.textContent = 'cell';
+                cellHeader.appendChild(cellBadge);
+
+                const cellName = document.createElement('span');
+                cellName.className = 'node-name';
+                cellName.textContent = `R${ri}C${ci}`;
+                cellHeader.appendChild(cellName);
+
+                const cellText = document.createElement('span');
+                cellText.className = 'node-text';
+                cellText.textContent = cell.text.replace(/\n/g, ' ').slice(0, 60) || '(empty)';
+                cellHeader.appendChild(cellText);
                 cellHeader.onclick = (e) => {
                   e.stopPropagation();
                   showJson(cell, `Cell R${ri}C${ci}`);

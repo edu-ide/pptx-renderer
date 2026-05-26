@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import JSZip from 'jszip';
 import { parseZip } from '../../../src/parser/ZipParser';
 
@@ -22,6 +22,20 @@ const SKELETON: Array<{ path: string; data: string }> = [
   { path: 'ppt/presentation.xml', data: '<p:presentation />' },
   { path: 'ppt/_rels/presentation.xml.rels', data: '<Relationships />' },
 ];
+
+function mockLoadedZipWithoutPrivateSizes(files: Record<string, string | Uint8Array>): void {
+  const zipFiles = Object.fromEntries(
+    Object.entries(files).map(([path, data]) => [
+      path,
+      {
+        dir: false,
+        async: vi.fn(async () => data),
+      },
+    ]),
+  );
+
+  vi.spyOn(JSZip, 'loadAsync').mockResolvedValue({ files: zipFiles } as unknown as JSZip);
+}
 
 // ---------------------------------------------------------------------------
 // Categorization tests
@@ -423,6 +437,10 @@ describe('parseZip – directory entry handling', () => {
 // ---------------------------------------------------------------------------
 
 describe('parseZip limits', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('keeps default behavior when limits are not provided', async () => {
     const buffer = await buildZip([
       { path: '[Content_Types].xml', data: '<Types />' },
@@ -463,6 +481,30 @@ describe('parseZip limits', () => {
 
     await expect(
       parseZip(buffer, { maxTotalUncompressedBytes: 1024 }),
+    ).rejects.toThrow(/maxTotalUncompressedBytes/);
+  });
+
+  it('enforces maxEntryUncompressedBytes on text entries when pre-scan size is unavailable', async () => {
+    mockLoadedZipWithoutPrivateSizes({
+      '[Content_Types].xml': '<Types />',
+      'ppt/presentation.xml': 'x'.repeat(2048),
+      'ppt/_rels/presentation.xml.rels': '<Relationships />',
+    });
+
+    await expect(
+      parseZip(new ArrayBuffer(0), { maxEntryUncompressedBytes: 1024 }),
+    ).rejects.toThrow(/maxEntryUncompressedBytes/);
+  });
+
+  it('enforces maxTotalUncompressedBytes across text entries when pre-scan sizes are unavailable', async () => {
+    mockLoadedZipWithoutPrivateSizes({
+      '[Content_Types].xml': 'x'.repeat(600),
+      'ppt/presentation.xml': 'x'.repeat(600),
+      'ppt/_rels/presentation.xml.rels': 'x'.repeat(600),
+    });
+
+    await expect(
+      parseZip(new ArrayBuffer(0), { maxTotalUncompressedBytes: 1024 }),
     ).rejects.toThrow(/maxTotalUncompressedBytes/);
   });
 

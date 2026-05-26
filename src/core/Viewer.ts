@@ -65,6 +65,7 @@ export class PptxViewer extends EventTarget {
   private _isRendering = false;
   private zoomFactor = 1;
   private renderChain: Promise<void> = Promise.resolve();
+  private renderGeneration = 0;
   private cleanupListMount?: () => void;
   private cleanupScrollObserver?: () => void;
   private suppressScrollChange = false;
@@ -171,6 +172,7 @@ export class PptxViewer extends EventTarget {
    * `renderSlide()` afterwards.
    */
   load(presentation: PresentationData): void {
+    this.renderGeneration++;
     this.presentation = presentation;
     this.setupAdaptiveResize();
   }
@@ -433,6 +435,8 @@ export class PptxViewer extends EventTarget {
   // -----------------------------------------------------------------------
 
   destroy(): void {
+    this.renderGeneration++;
+    this._isRendering = false;
     this.teardownAdaptiveResize();
     this.cleanupScrollObserver?.();
     this.cleanupScrollObserver = undefined;
@@ -497,48 +501,63 @@ export class PptxViewer extends EventTarget {
   }
 
   private async queueRender(): Promise<void> {
-    this.renderChain = this.renderChain.then(async () => {
-      if (!this.presentation) return;
-      this.emitRenderStart();
-      try {
-        const { scale, displayWidth, displayHeight } = this.getDisplayMetrics();
+    const renderGeneration = ++this.renderGeneration;
+    this.renderChain = this.renderChain
+      .catch(() => undefined)
+      .then(async () => {
+        if (this.isRenderStale(renderGeneration)) return;
+        this.emitRenderStart();
+        try {
+          if (this.isRenderStale(renderGeneration)) return;
+          const { scale, displayWidth, displayHeight } = this.getDisplayMetrics();
 
-        this.cleanupScrollObserver?.();
-        this.cleanupScrollObserver = undefined;
-        this.cleanupListMount?.();
-        this.cleanupListMount = undefined;
-        this.ensureListSlideMountedFn = undefined;
-        this.mountedSlides.clear();
-        for (const handle of this.slideHandles.values()) {
-          handle.dispose();
+          this.cleanupScrollObserver?.();
+          this.cleanupScrollObserver = undefined;
+          this.cleanupListMount?.();
+          this.cleanupListMount = undefined;
+          this.ensureListSlideMountedFn = undefined;
+          this.mountedSlides.clear();
+          for (const handle of this.slideHandles.values()) {
+            handle.dispose();
+          }
+          this.slideHandles.clear();
+          this.disposeAllCharts();
+          this.container.innerHTML = '';
+          this.container.style.position = 'relative';
+
+          if (this.activeRenderMode === 'slide') {
+            this.renderSingleSlide(scale, displayWidth, displayHeight);
+          } else if (this.listOptions.windowed) {
+            await this.renderAllSlidesWindowed(
+              scale,
+              displayWidth,
+              displayHeight,
+              renderGeneration,
+            );
+          } else {
+            await this.renderAllSlidesFull(scale, displayWidth, displayHeight, renderGeneration);
+          }
+
+          if (this.isRenderStale(renderGeneration)) return;
+
+          // Post-render width correction: appending slides may cause a scrollbar
+          // to appear on the page, narrowing the container. If the measured width
+          // changed, patch wrapper sizes and scale transforms in-place so content
+          // is not clipped by the (now narrower) container.
+          if (this.activeRenderMode !== 'slide') {
+            this.correctListMetricsIfNeeded();
+          }
+
+          this.emitSlideChange(this.currentSlide);
+        } finally {
+          this.emitRenderComplete();
         }
-        this.slideHandles.clear();
-        this.disposeAllCharts();
-        this.container.innerHTML = '';
-        this.container.style.position = 'relative';
-
-        if (this.activeRenderMode === 'slide') {
-          this.renderSingleSlide(scale, displayWidth, displayHeight);
-        } else if (this.listOptions.windowed) {
-          await this.renderAllSlidesWindowed(scale, displayWidth, displayHeight);
-        } else {
-          await this.renderAllSlidesFull(scale, displayWidth, displayHeight);
-        }
-
-        // Post-render width correction: appending slides may cause a scrollbar
-        // to appear on the page, narrowing the container. If the measured width
-        // changed, patch wrapper sizes and scale transforms in-place so content
-        // is not clipped by the (now narrower) container.
-        if (this.activeRenderMode !== 'slide') {
-          this.correctListMetricsIfNeeded();
-        }
-
-        this.emitSlideChange(this.currentSlide);
-      } finally {
-        this.emitRenderComplete();
-      }
-    });
+      });
     return this.renderChain;
+  }
+
+  private isRenderStale(renderGeneration: number): boolean {
+    return renderGeneration !== this.renderGeneration || !this.presentation;
   }
 
   private handleContainerResize(): void {
@@ -690,12 +709,14 @@ export class PptxViewer extends EventTarget {
     scale: number,
     displayWidth: number,
     displayHeight: number,
+    renderGeneration: number,
   ): Promise<void> {
     if (!this.presentation) return;
     const batchSize = this.listOptions.batchSize;
     let batchFragment = document.createDocumentFragment();
 
     for (let i = 0; i < this.presentation.slides.length; i++) {
+      if (this.isRenderStale(renderGeneration)) return;
       const { item, wrapper } = this.createListSlideItem(i, displayWidth, displayHeight);
       this.mountListSlide(i, wrapper, scale, displayWidth, displayHeight);
       batchFragment.appendChild(item);
@@ -704,9 +725,11 @@ export class PptxViewer extends EventTarget {
         this.container.appendChild(batchFragment);
         batchFragment = document.createDocumentFragment();
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        if (this.isRenderStale(renderGeneration)) return;
       }
     }
 
+    if (this.isRenderStale(renderGeneration)) return;
     if (batchFragment.childNodes.length > 0) {
       this.container.appendChild(batchFragment);
     }
@@ -718,6 +741,7 @@ export class PptxViewer extends EventTarget {
     scale: number,
     displayWidth: number,
     displayHeight: number,
+    renderGeneration: number,
   ): Promise<void> {
     if (!this.presentation) return;
     const batchSize = this.listOptions.batchSize;
@@ -725,6 +749,7 @@ export class PptxViewer extends EventTarget {
     const wrappers: HTMLDivElement[] = [];
 
     for (let i = 0; i < this.presentation.slides.length; i++) {
+      if (this.isRenderStale(renderGeneration)) return;
       const { item, wrapper } = this.createListSlideItem(i, displayWidth, displayHeight);
       wrappers.push(wrapper);
       batchFragment.appendChild(item);
@@ -733,9 +758,11 @@ export class PptxViewer extends EventTarget {
         this.container.appendChild(batchFragment);
         batchFragment = document.createDocumentFragment();
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        if (this.isRenderStale(renderGeneration)) return;
       }
     }
 
+    if (this.isRenderStale(renderGeneration)) return;
     if (batchFragment.childNodes.length > 0) {
       this.container.appendChild(batchFragment);
     }
