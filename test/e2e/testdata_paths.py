@@ -16,6 +16,7 @@ from pathlib import Path
 TESTDATA_DIR = Path(__file__).resolve().parent / "testdata"
 CASES_DIR = TESTDATA_DIR / "cases"
 WINDOWS_CASES_DIR = TESTDATA_DIR / "windows-cases"
+WINDOWS_CASE_PREFIX = "win__"
 
 
 def _resolve_cases_dir(source: str | None = None) -> Path:
@@ -24,20 +25,42 @@ def _resolve_cases_dir(source: str | None = None) -> Path:
     return CASES_DIR
 
 
+def split_case_ref(stem: str, source: str | None = None) -> tuple[str, str | None]:
+    """Resolve an encoded parametrized case id into its real stem and source."""
+    if source is not None:
+        return stem, source
+    if stem.startswith(WINDOWS_CASE_PREFIX):
+        return stem[len(WINDOWS_CASE_PREFIX):], "windows"
+    return stem, None
+
+
+def encode_case_ref(stem: str, source: str | None = None) -> str:
+    """Encode source in pytest ids while keeping historical case ids unchanged."""
+    return f"{WINDOWS_CASE_PREFIX}{stem}" if source == "windows" else stem
+
+
+def testdata_subdir(source: str | None = None) -> str:
+    return "windows-cases" if source == "windows" else "cases"
+
+
 def case_dir(stem: str, source: str | None = None) -> Path:
+    stem, source = split_case_ref(stem, source)
     return _resolve_cases_dir(source) / stem
 
 
 def source_pptx(stem: str, source: str | None = None) -> Path:
+    stem, source = split_case_ref(stem, source)
     return _resolve_cases_dir(source) / stem / "source.pptx"
 
 
 def ground_truth_pdf(stem: str, source: str | None = None) -> Path:
+    stem, source = split_case_ref(stem, source)
     return _resolve_cases_dir(source) / stem / "ground-truth.pdf"
 
 
 def slide_png(stem: str, slide_num: int, source: str | None = None) -> Path:
     """slide_num is 1-based."""
+    stem, source = split_case_ref(stem, source)
     return _resolve_cases_dir(source) / stem / "slides" / f"slide{slide_num}.png"
 
 

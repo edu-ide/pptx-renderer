@@ -52,6 +52,8 @@ interface DataLabelConfig {
   showSerName: boolean;
   showPercent: boolean;
   position?: string; // 'outEnd', 'inEnd', 'ctr', 'bestFit'
+  showLeaderLines?: boolean;
+  manualLayout?: DataLabelManualLayout;
   color?: string; // text color from dLbls > txPr
   fontSize?: number; // font size from dLbls > txPr > defRPr@sz
   bold?: boolean; // font bold from dLbls > txPr > defRPr@b
@@ -60,6 +62,8 @@ interface DataLabelConfig {
   borderWidth?: number; // label box stroke width
   padding?: [number, number, number, number]; // label text insets from txPr > bodyPr
 }
+
+type DataLabelManualLayout = Partial<Record<'x' | 'y' | 'width' | 'height', number>>;
 
 type ChartTextStyle = {
   color?: string;
@@ -518,6 +522,21 @@ function parseDlblBool(dLbls: SafeXmlNode, childName: string): boolean {
   return val !== '0' && val !== 'false';
 }
 
+function parseDataLabelManualLayout(node: SafeXmlNode): DataLabelManualLayout | undefined {
+  const manual = node.child('layout').child('manualLayout');
+  if (!manual.exists()) return undefined;
+  const out: DataLabelManualLayout = {};
+  const x = manual.child('x').numAttr('val');
+  const y = manual.child('y').numAttr('val');
+  const width = manual.child('w').numAttr('val');
+  const height = manual.child('h').numAttr('val');
+  if (x !== undefined) out.x = x;
+  if (y !== undefined) out.y = y;
+  if (width !== undefined) out.width = width;
+  if (height !== undefined) out.height = height;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 /**
  * Extract text color from a txPr element: txPr > p > pPr > defRPr > solidFill.
  */
@@ -548,8 +567,10 @@ function parseDataLabels(node: SafeXmlNode, ctx: RenderContext): DataLabelConfig
   const showCatName = parseDlblBool(dLbls, 'showCatName');
   const showSerName = parseDlblBool(dLbls, 'showSerName');
   const showPercent = parseDlblBool(dLbls, 'showPercent');
+  const showLeaderLines = parseDlblBool(dLbls, 'showLeaderLines');
   const posNode = dLbls.child('dLblPos');
   const position = posNode.exists() ? posNode.attr('val') || undefined : undefined;
+  const manualLayout = parseDataLabelManualLayout(dLbls);
 
   const txStyle = extractTxPrStyle(dLbls, ctx);
   const color = txStyle?.color ?? extractTxPrColor(dLbls, ctx);
@@ -566,6 +587,8 @@ function parseDataLabels(node: SafeXmlNode, ctx: RenderContext): DataLabelConfig
     showSerName,
     showPercent,
     position,
+    showLeaderLines,
+    manualLayout,
     color,
     fontSize,
     bold,
@@ -639,10 +662,14 @@ function parsePointDataLabelOverrides(
     const showCatName = parseDlblBoolOptional(dLbl, 'showCatName');
     const showSerName = parseDlblBoolOptional(dLbl, 'showSerName');
     const showPercent = parseDlblBoolOptional(dLbl, 'showPercent');
+    const showLeaderLines = parseDlblBoolOptional(dLbl, 'showLeaderLines');
+    const manualLayout = parseDataLabelManualLayout(dLbl);
     if (showVal !== undefined) cfg.showVal = showVal;
     if (showCatName !== undefined) cfg.showCatName = showCatName;
     if (showSerName !== undefined) cfg.showSerName = showSerName;
     if (showPercent !== undefined) cfg.showPercent = showPercent;
+    if (showLeaderLines !== undefined) cfg.showLeaderLines = showLeaderLines;
+    if (manualLayout) cfg.manualLayout = manualLayout;
     if (posNode.exists()) cfg.position = posNode.attr('val') || undefined;
     if (txStyle?.color) cfg.color = txStyle.color;
     else {
@@ -1327,12 +1354,17 @@ function findAxisById(
   axisNames: readonly string[],
   axisId: string | undefined,
 ): SafeXmlNode {
-  for (const axisName of axisNames) {
-    const axes = plotArea.children(axisName);
-    if (axisId) {
+  if (axisId) {
+    for (const axisName of axisNames) {
+      const axes = plotArea.children(axisName);
       const matched = axes.find((axis) => axis.child('axId').attr('val') === axisId);
       if (matched) return matched;
     }
+    return new SafeXmlNode(null);
+  }
+
+  for (const axisName of axisNames) {
+    const axes = plotArea.children(axisName);
     if (axes[0]?.exists()) return axes[0];
   }
   return new SafeXmlNode(null);
@@ -1399,6 +1431,10 @@ function applyAxisInfo(
     axisDef.axisTick = { show: false };
     if (kind === 'value') axisDef.splitLine = { show: false };
     return;
+  }
+
+  if (info.orientation === 'maxMin') {
+    axisDef.inverse = true;
   }
 
   // tickLblPos=none: hide labels only, keep axis line/tick
@@ -1511,6 +1547,198 @@ function tooltipExtraCss(textStyle: ChartTextStyle | undefined): string | undefi
   return `font-size: ${fontSize}px; line-height: ${lineHeight}px;`;
 }
 
+function chartGrouping(chartTypeNode: SafeXmlNode, fallback = 'clustered'): string {
+  const groupingNode = chartTypeNode.child('grouping');
+  return groupingNode.exists() ? groupingNode.attr('val') || fallback : fallback;
+}
+
+function isStackedGrouping(grouping: string): boolean {
+  return grouping === 'stacked' || grouping === 'percentStacked';
+}
+
+function isPercentStackedGrouping(grouping: string): boolean {
+  return grouping === 'percentStacked';
+}
+
+function normalizePercentStackedValues(seriesArr: SeriesData[]): number[][] {
+  const pointCount = Math.max(0, ...seriesArr.map((series) => series.values.length));
+  const totals = new Array<number>(pointCount).fill(0);
+  for (const series of seriesArr) {
+    for (let i = 0; i < pointCount; i++) {
+      totals[i] += Math.max(series.values[i] ?? 0, 0);
+    }
+  }
+  return seriesArr.map((series) =>
+    series.values.map((value, index) => {
+      const total = totals[index] ?? 0;
+      if (total === 0) return 0;
+      return Number((Math.max(value, 0) / total).toFixed(6));
+    }),
+  );
+}
+
+function forcePercentAxis(axisDef: Record<string, unknown>): void {
+  axisDef.min = 0;
+  axisDef.max = 1;
+  axisDef.interval = 0.1;
+  axisDef.axisLabel = {
+    ...((axisDef.axisLabel as object) || {}),
+    formatter: (val: number) => formatValue(val, '0%'),
+  };
+}
+
+function collectSeriesValues(seriesArr: SeriesData[], stacked: boolean): number[] {
+  if (!stacked) return seriesArr.flatMap((series) => series.values);
+  const pointCount = Math.max(0, ...seriesArr.map((series) => series.values.length));
+  const sums: number[] = [];
+  for (let i = 0; i < pointCount; i++) {
+    let sum = 0;
+    for (const series of seriesArr) {
+      sum += series.values[i] ?? 0;
+    }
+    sums.push(sum);
+  }
+  return sums;
+}
+
+function applyAreaAxisRange(
+  axisDef: Record<string, unknown>,
+  seriesArr: SeriesData[],
+  stacked: boolean,
+): void {
+  const values = collectSeriesValues(seriesArr, stacked).filter((value) => Number.isFinite(value));
+  if (values.length === 0) return;
+  const dataMin = Math.min(...values);
+  const dataMax = Math.max(...values);
+  const interval = niceAxisInterval(dataMax, dataMin, 7);
+  if (axisDef.min === undefined && dataMin >= 0) axisDef.min = 0;
+  if (axisDef.interval === undefined) axisDef.interval = interval;
+  if (axisDef.max === undefined) axisDef.max = Math.ceil(dataMax / interval) * interval + interval;
+}
+
+function mapPieLabelPosition(pos: string | undefined): 'inside' | 'outside' {
+  switch (pos) {
+    case 'ctr':
+    case 'inEnd':
+    case 'inBase':
+      return 'inside';
+    case 'outEnd':
+    case 'bestFit':
+    default:
+      return 'outside';
+  }
+}
+
+function mergeDataLabelConfig(
+  base: DataLabelConfig | undefined,
+  override: Partial<DataLabelConfig> | undefined,
+): DataLabelConfig | undefined {
+  if (!base && !override) return undefined;
+  return {
+    showVal: base?.showVal ?? false,
+    showCatName: base?.showCatName ?? false,
+    showSerName: base?.showSerName ?? false,
+    showPercent: base?.showPercent ?? false,
+    position: base?.position,
+    showLeaderLines: base?.showLeaderLines,
+    manualLayout: base?.manualLayout,
+    color: base?.color,
+    fontSize: base?.fontSize,
+    bold: base?.bold,
+    backgroundColor: base?.backgroundColor,
+    borderColor: base?.borderColor,
+    borderWidth: base?.borderWidth,
+    padding: base?.padding,
+    ...override,
+  };
+}
+
+function dataLabelShowsContent(cfg: DataLabelConfig | undefined): boolean {
+  return Boolean(cfg && (cfg.showVal || cfg.showCatName || cfg.showSerName || cfg.showPercent));
+}
+
+function buildPieLabelOption(
+  cfg: DataLabelConfig | undefined,
+  formatCode: string | undefined,
+  seriesName: string,
+): Record<string, unknown> | undefined {
+  if (!cfg || !dataLabelShowsContent(cfg)) return undefined;
+  const labelCfg = cfg;
+  const label = {
+    show: true,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    formatter: (params: any) => {
+      const parts: string[] = [];
+      if (labelCfg.showSerName && seriesName) parts.push(seriesName);
+      if (labelCfg.showCatName) parts.push(params.name);
+      if (labelCfg.showVal) parts.push(formatValue(params.value, formatCode));
+      if (labelCfg.showPercent) parts.push(`${params.percent}%`);
+      return parts.join(' ');
+    },
+    fontSize: labelCfg.fontSize ?? 10,
+    ...(labelCfg.bold === true ? { fontWeight: 'bold' as const } : {}),
+    ...(labelCfg.color ? { color: labelCfg.color } : {}),
+    position: mapPieLabelPosition(labelCfg.position),
+    ...dataLabelBoxProps(labelCfg),
+  };
+  return labelCfg.fontSize !== undefined ? markExplicitFontSize(label) : label;
+}
+
+function buildPieLabelLayout(
+  layouts: Map<number, DataLabelManualLayout>,
+): echarts.PieSeriesOption['labelLayout'] {
+  if (layouts.size === 0) return undefined;
+  const labelLayout = (params: {
+    dataIndex?: number;
+    rect?: { x: number; y: number; width: number; height: number };
+  }) => {
+    if (params.dataIndex === undefined) return undefined;
+    const layout = layouts.get(params.dataIndex);
+    if (!layout) return undefined;
+    const rect = params.rect;
+    const out: Record<string, number | string> = {};
+    if (layout.x !== undefined) out.x = rect ? rect.x + rect.width * layout.x : numToPct(layout.x);
+    if (layout.y !== undefined) out.y = rect ? rect.y + rect.height * layout.y : numToPct(layout.y);
+    if (layout.width !== undefined) {
+      out.width = rect ? rect.width * layout.width : numToPct(layout.width);
+    }
+    if (layout.height !== undefined) {
+      out.height = rect ? rect.height * layout.height : numToPct(layout.height);
+    }
+    return out;
+  };
+  return labelLayout as echarts.PieSeriesOption['labelLayout'];
+}
+
+function uniquePieLegendCategories(seriesArr: SeriesData[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const series of seriesArr) {
+    for (const category of series.categories) {
+      if (seen.has(category)) continue;
+      seen.add(category);
+      out.push(category);
+    }
+  }
+  return out;
+}
+
+function computeDoughnutRingRadius(
+  baseRadius: [string, string] | string,
+  ringIndex: number,
+  ringCount: number,
+): [string, string] | string {
+  if (!Array.isArray(baseRadius) || ringCount <= 1) return baseRadius;
+  const inner = Number.parseFloat(baseRadius[0]);
+  const outer = Number.parseFloat(baseRadius[1]);
+  if (!Number.isFinite(inner) || !Number.isFinite(outer) || outer <= inner) return baseRadius;
+  const gap = 1;
+  const band = (outer - inner - gap * (ringCount - 1)) / ringCount;
+  const ringInner = Math.round(inner + ringIndex * (band + gap));
+  const ringOuter = Math.round(ringInner + band);
+  return [`${ringInner}%`, `${ringOuter}%`];
+}
+
 function buildBarChartOption(
   chartTypeNode: SafeXmlNode,
   chartNode: SafeXmlNode,
@@ -1518,12 +1746,11 @@ function buildBarChartOption(
   ctx: RenderContext,
 ): echarts.EChartsOption {
   const barDir = chartTypeNode.child('barDir').attr('val') || chartTypeNode.attr('barDir') || 'col';
-  const groupingNode = chartTypeNode.child('grouping');
-  const grouping = groupingNode.exists() ? groupingNode.attr('val') || 'clustered' : 'clustered';
+  const grouping = chartGrouping(chartTypeNode);
   const isHorizontal = barDir === 'bar';
 
   // Layout parameters
-  const gapWidth = chartTypeNode.child('gapWidth').numAttr('val');
+  const gapWidth = chartTypeNode.child('gapWidth').numAttr('val') ?? 150;
   const overlap = chartTypeNode.child('overlap').numAttr('val');
 
   // Use categories from the first series that has them
@@ -1536,7 +1763,11 @@ function buildBarChartOption(
   const legendOpt = legendInfo?.option;
   const legendTextStyle = { fontSize: 10, ...(legendInfo?.textStyle ?? {}) };
 
-  const isStacked = grouping === 'stacked' || grouping === 'percentStacked';
+  const isStacked = isStackedGrouping(grouping);
+  const isPercentStacked = isPercentStackedGrouping(grouping);
+  const percentStackedValues = isPercentStacked
+    ? normalizePercentStackedValues(seriesArr)
+    : undefined;
 
   // Parse data labels: in OOXML they can be on chart type (barChart) or on series (ser); try both
   let sharedLabels = parseDataLabels(chartTypeNode, ctx);
@@ -1574,7 +1805,7 @@ function buildBarChartOption(
           const val =
             rawVal && typeof rawVal === 'object' && 'value' in rawVal ? rawVal.value : rawVal;
           if (val === 0 || val === null) return '';
-          return formatValue(val, fc);
+          return formatValue(val, isPercentStacked ? '0%' : fc);
         },
       };
       return cfg.fontSize !== undefined ? markExplicitFontSize(label) : label;
@@ -1584,7 +1815,8 @@ function buildBarChartOption(
     const label: echarts.BarSeriesOption['label'] = buildLabel(perSeriesLabels);
     const dLblsNode = (serNodesByOrder[idx] ?? chartTypeNode).child('dLbls');
     const pointOverrides = parsePointDataLabelOverrides(dLblsNode, ctx);
-    const data: echarts.BarSeriesOption['data'] = s.values.map((v, pointIdx) => {
+    const seriesValues = percentStackedValues?.[idx] ?? s.values;
+    const data: echarts.BarSeriesOption['data'] = seriesValues.map((v, pointIdx) => {
       const ov = pointOverrides.get(pointIdx);
       if (!ov) return v;
       const merged: DataLabelConfig = {
@@ -1593,6 +1825,8 @@ function buildBarChartOption(
         showSerName: perSeriesLabels?.showSerName ?? false,
         showPercent: perSeriesLabels?.showPercent ?? false,
         position: perSeriesLabels?.position,
+        showLeaderLines: perSeriesLabels?.showLeaderLines,
+        manualLayout: perSeriesLabels?.manualLayout,
         color: perSeriesLabels?.color,
         fontSize: perSeriesLabels?.fontSize,
         bold: perSeriesLabels?.bold,
@@ -1619,7 +1853,8 @@ function buildBarChartOption(
       ...(s.formatCode
         ? {
             tooltip: {
-              valueFormatter: (value: unknown) => formatValue(value as number, s.formatCode),
+              valueFormatter: (value: unknown) =>
+                formatValue(value as number, isPercentStacked ? '0%' : s.formatCode),
             },
           }
         : {}),
@@ -1647,7 +1882,9 @@ function buildBarChartOption(
 
   // Check if any series uses percentage format; axis numFmt takes priority
   const pctFormat =
-    valueAxis.numFmt || seriesArr.find((s) => s.formatCode?.includes('%'))?.formatCode;
+    (isPercentStacked ? '0%' : undefined) ||
+    valueAxis.numFmt ||
+    seriesArr.find((s) => s.formatCode?.includes('%'))?.formatCode;
   const valueAxisDef: Record<string, unknown> = {
     type: 'value',
     ...(pctFormat
@@ -1658,6 +1895,7 @@ function buildBarChartOption(
         }
       : {}),
   };
+  if (isPercentStacked) forcePercentAxis(valueAxisDef);
   applyAxisInfo(valueAxisDef, valueAxis, 'value');
 
   const gridTop = getGridTopPx(!!title, legendInfo);
@@ -1729,6 +1967,12 @@ function buildLineChartOption(
   const legendInfo = extractLegendInfo(chartNode, ctx);
   const legendOpt = legendInfo?.option;
   const legendTextStyle = { fontSize: 10, ...(legendInfo?.textStyle ?? {}) };
+  const grouping = chartGrouping(chartTypeNode, 'standard');
+  const isStacked = isStackedGrouping(grouping);
+  const isPercentStacked = isPercentStackedGrouping(grouping);
+  const percentStackedValues = isPercentStacked
+    ? normalizePercentStackedValues(seriesArr)
+    : undefined;
   let sharedLabels = parseDataLabels(chartTypeNode, ctx);
   if (!sharedLabels) {
     const firstSer = chartTypeNode.children('ser')[0];
@@ -1765,7 +2009,7 @@ function buildLineChartOption(
           const rawVal = params?.value;
           const val =
             rawVal && typeof rawVal === 'object' && 'value' in rawVal ? rawVal.value : rawVal;
-          return formatValue(val, fc);
+          return formatValue(val, isPercentStacked ? '0%' : fc);
         },
       };
       if (perSeriesLabels.fontSize !== undefined) markExplicitFontSize(label);
@@ -1777,19 +2021,25 @@ function buildLineChartOption(
         ? echartsSymbol
         : undefined;
     const symbolSize = forceSymbolForLabel ? 0 : s.markerSize;
-    const resolvedShowSymbol = forceSymbolForLabel ? true : showSymbol;
+    const resolvedShowSymbol = forceSymbolForLabel
+      ? true
+      : isArea && echartsSymbol === undefined
+        ? false
+        : showSymbol;
     return {
       type: 'line' as const,
       name: s.name,
-      data: s.values,
-      areaStyle: isArea ? (s.colorHex ? { color: s.colorHex } : {}) : undefined,
+      data: percentStackedValues?.[idx] ?? s.values,
+      stack: isStacked ? 'total' : undefined,
+      areaStyle: isArea ? { ...(s.colorHex ? { color: s.colorHex } : {}), opacity: 1 } : undefined,
       itemStyle: s.colorHex ? { color: s.colorHex } : undefined,
       lineStyle,
       label,
       ...(s.formatCode
         ? {
             tooltip: {
-              valueFormatter: (value: unknown) => formatValue(value as number, s.formatCode),
+              valueFormatter: (value: unknown) =>
+                formatValue(value as number, isPercentStacked ? '0%' : s.formatCode),
             },
           }
         : {}),
@@ -1805,7 +2055,9 @@ function buildLineChartOption(
   const { valueAxis, categoryAxis } = parseAxes(plotArea, ctx, chartTypeNode);
 
   const pctFormat =
-    valueAxis.numFmt || seriesArr.find((s) => s.formatCode?.includes('%'))?.formatCode;
+    (isPercentStacked ? '0%' : undefined) ||
+    valueAxis.numFmt ||
+    seriesArr.find((s) => s.formatCode?.includes('%'))?.formatCode;
   const yAxisDef: Record<string, unknown> = {
     type: 'value',
     ...(pctFormat
@@ -1816,11 +2068,16 @@ function buildLineChartOption(
         }
       : {}),
   };
+  if (isPercentStacked) forcePercentAxis(yAxisDef);
   applyAxisInfo(yAxisDef, valueAxis, 'value');
+  if (!isPercentStacked && isArea) {
+    applyAreaAxisRange(yAxisDef, seriesArr, isStacked);
+  }
 
   const xAxisDef: Record<string, unknown> = {
     type: 'category',
     data: categories,
+    ...(isArea ? { boundaryGap: false } : {}),
     axisLabel: { interval: 0, rotate: categories.length > 6 ? 30 : 0 },
   };
   applyAxisInfo(xAxisDef, categoryAxis, 'category');
@@ -1859,12 +2116,14 @@ function buildLineChartOption(
       legendOpt,
       legendInfo,
       legendTopPx,
-      seriesArr.map((s) => {
-        const icon = mapOoxmlSymbol(s.markerSymbol);
-        return icon && icon !== 'none'
-          ? { name: s.name, icon }
-          : { name: s.name, icon: lineLegendIconPath() };
-      }),
+      isArea
+        ? seriesArr.map((s) => s.name)
+        : seriesArr.map((s) => {
+            const icon = mapOoxmlSymbol(s.markerSymbol);
+            return icon && icon !== 'none'
+              ? { name: s.name, icon }
+              : { name: s.name, icon: lineLegendIconPath() };
+          }),
       legendTextStyle,
     ),
     grid: {
@@ -1895,111 +2154,100 @@ function buildPieChartOption(
   const legendOpt = legendInfo?.option;
   const legendTextStyle = { fontSize: 10, ...(legendInfo?.textStyle ?? {}) };
 
-  // Pie charts typically use the first series
-  const firstSeries = seriesArr[0];
-  if (!firstSeries) {
+  const renderSeriesArr = isDoughnut ? seriesArr : seriesArr.slice(0, 1);
+  if (renderSeriesArr.length === 0) {
     return { title: title ? { text: title } : undefined };
   }
 
-  // Parse data labels: for pie, prefer first series (ser) over chart-type — left/right pies may differ
-  const firstSer = chartTypeNode.children('ser')[0];
-  let sharedLabels = firstSer?.exists() ? parseDataLabels(firstSer, ctx) : undefined;
-  if (!sharedLabels) sharedLabels = parseDataLabels(chartTypeNode, ctx);
+  const serNodesByOrder = chartTypeNode
+    .children('ser')
+    .map((ser, i) => ({ ser, order: ser.child('order').numAttr('val') ?? i }))
+    .sort((a, b) => a.order - b.order)
+    .map((x) => x.ser);
 
-  // Check if dLbls explicitly exists — if it does but parseDataLabels returned undefined,
-  // that means all show flags are explicitly false → labels should be hidden.
-  const hasDLblsNode =
-    (firstSer?.exists() && firstSer.child('dLbls').exists()) ||
-    chartTypeNode.child('dLbls').exists();
-  const dLblsExplicitlyOff = hasDLblsNode && !sharedLabels;
-
-  // Parse explosion from the first c:ser element
-  const explosions = firstSer ? parseExplosion(firstSer, firstSeries.categories.length) : undefined;
-
-  const pieData = firstSeries.categories.map((cat, i) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const item: any = {
-      name: cat || `Item ${i + 1}`,
-      value: firstSeries.values[i] ?? 0,
+  const seriesLabelMeta = renderSeriesArr.map((series, idx) => {
+    const serNode = serNodesByOrder[idx];
+    const sharedLabels =
+      (serNode?.exists() ? parseDataLabels(serNode, ctx) : undefined) ??
+      parseDataLabels(chartTypeNode, ctx);
+    const dLblsNode = serNode?.exists() ? serNode.child('dLbls') : chartTypeNode.child('dLbls');
+    const hasDLblsNode =
+      (serNode?.exists() && serNode.child('dLbls').exists()) ||
+      chartTypeNode.child('dLbls').exists();
+    const pointOverrides = parsePointDataLabelOverrides(dLblsNode, ctx);
+    const hasPointLabelContent = [...pointOverrides.values()].some((override) =>
+      dataLabelShowsContent(mergeDataLabelConfig(sharedLabels, override)),
+    );
+    return {
+      series,
+      serNode,
+      sharedLabels,
+      pointOverrides,
+      labelsExplicitlyOff: hasDLblsNode && !sharedLabels && !hasPointLabelContent,
+      explosions: serNode ? parseExplosion(serNode, series.categories.length) : undefined,
     };
-    // Per-point color
-    if (firstSeries.dataPointColors && firstSeries.dataPointColors[i]) {
-      item.itemStyle = { color: firstSeries.dataPointColors[i] };
-    }
-    // Explosion (selected offset)
-    if (explosions && explosions[i] && explosions[i] > 0) {
-      item.selected = true;
-      item.selectedOffset = pieExplosionToOffset(explosions[i]);
-    }
-    return item;
   });
 
-  // Build label formatter based on data label config; show value and percent when requested
-  const fc = firstSeries.formatCode;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let labelFormatter: string | ((params: any) => string) = '{b}: {c} ({d}%)';
-  if (sharedLabels) {
-    if (sharedLabels.showVal && fc && fc.includes('%')) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      labelFormatter = (params: any) => {
-        const parts: string[] = [];
-        if (sharedLabels!.showCatName) parts.push(params.name);
-        parts.push(formatValue(params.value, fc));
-        if (sharedLabels!.showPercent) parts.push(`${params.percent}%`);
-        return parts.join(', ');
-      };
-    } else {
-      const parts: string[] = [];
-      if (sharedLabels.showCatName) parts.push('{b}');
-      if (sharedLabels.showVal) parts.push('{c}');
-      if (sharedLabels.showPercent) parts.push('{d}%');
-      if (parts.length > 0) {
-        labelFormatter = parts.join(' ');
-      } else {
-        // All show* flags are false — hide labels entirely
-        labelFormatter = '';
-      }
-    }
-  }
-
-  // Determine whether labels should be shown:
-  // - If dLbls exists with all show flags=false → labels explicitly disabled
-  // - If no dLbls exist → keep labels hidden by default, matching PowerPoint's default pie output
-  // - If sharedLabels has any show flag true → show labels
-  const showLabel =
-    !dLblsExplicitlyOff &&
-    !!sharedLabels &&
-    (sharedLabels.showVal ||
-      sharedLabels.showCatName ||
-      sharedLabels.showSerName ||
-      sharedLabels.showPercent);
+  const showLabel = seriesLabelMeta.some(
+    (meta) =>
+      !meta.labelsExplicitlyOff &&
+      (dataLabelShowsContent(meta.sharedLabels) ||
+        [...meta.pointOverrides.values()].some((override) =>
+          dataLabelShowsContent(mergeDataLabelConfig(meta.sharedLabels, override)),
+        )),
+  );
   const pieLayout = computePieLayout(legendInfo, isDoughnut, showLabel);
 
-  const series: echarts.PieSeriesOption[] = [
-    {
+  const series: echarts.PieSeriesOption[] = seriesLabelMeta.map((meta, idx) => {
+    const manualLayouts = new Map<number, DataLabelManualLayout>();
+    const pieData = meta.series.categories.map((cat, i) => {
+      const override = meta.pointOverrides.get(i);
+      const pointLabel = mergeDataLabelConfig(meta.sharedLabels, override);
+      if (pointLabel?.manualLayout) manualLayouts.set(i, pointLabel.manualLayout);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const item: any = {
+        name: cat || `Item ${i + 1}`,
+        value: meta.series.values[i] ?? 0,
+      };
+      if (meta.series.dataPointColors?.[i]) {
+        item.itemStyle = { color: meta.series.dataPointColors[i] };
+      }
+      if (meta.explosions?.[i] && meta.explosions[i] > 0) {
+        item.selected = true;
+        item.selectedOffset = pieExplosionToOffset(meta.explosions[i]);
+      }
+      if (override && dataLabelShowsContent(pointLabel)) {
+        item.label = buildPieLabelOption(pointLabel, meta.series.formatCode, meta.series.name);
+      }
+      return item;
+    });
+
+    const label = buildPieLabelOption(meta.sharedLabels, meta.series.formatCode, meta.series.name);
+    const hasLeaderLines =
+      Boolean(meta.sharedLabels?.showLeaderLines) ||
+      [...meta.pointOverrides.values()].some((cfg) => cfg.showLeaderLines === true);
+
+    return {
       type: 'pie' as const,
-      name: firstSeries.name,
-      radius: pieLayout.radius,
+      name: meta.series.name,
+      radius: isDoughnut
+        ? computeDoughnutRingRadius(pieLayout.radius, idx, seriesLabelMeta.length)
+        : pieLayout.radius,
       center: pieLayout.center,
       data: pieData,
-      selectedMode: explosions ? 'multiple' : false,
-      label: {
-        show: showLabel,
-        formatter: labelFormatter,
-        fontSize: sharedLabels?.fontSize ?? 10,
-        ...(sharedLabels?.bold === true ? { fontWeight: 'bold' as const } : {}),
-        position:
-          sharedLabels?.position === 'outEnd'
-            ? 'outside'
-            : sharedLabels?.position === 'ctr'
-              ? 'inside'
-              : 'outside',
-      },
-    },
-  ];
+      selectedMode: meta.explosions ? 'multiple' : false,
+      label: label ?? { show: false },
+      labelLine: { show: hasLeaderLines },
+      labelLayout: buildPieLabelLayout(manualLayouts),
+    };
+  });
 
   const legendTopPx = getLegendTopPx(!!title, legendInfo);
-  const tooltipFmt = fc;
+  const tooltipFmt = renderSeriesArr.find((s) => s.formatCode)?.formatCode;
+  const legendData = isDoughnut
+    ? uniquePieLegendCategories(renderSeriesArr)
+    : renderSeriesArr[0].categories;
   return {
     title: title
       ? {
@@ -2021,13 +2269,7 @@ function buildPieChartOption(
           }
         : {}),
     },
-    legend: buildLegendOption(
-      legendOpt,
-      legendInfo,
-      legendTopPx,
-      firstSeries.categories,
-      legendTextStyle,
-    ),
+    legend: buildLegendOption(legendOpt, legendInfo, legendTopPx, legendData, legendTextStyle),
     series,
   };
 }
@@ -2788,7 +3030,52 @@ function parseChartStyleId(chartXml: SafeXmlNode): number | undefined {
  * Build a chart color palette from theme accents and chart style id.
  * This improves parity with Office chart styles when series colors are implicit.
  */
-function buildChartPalette(chartXml: SafeXmlNode, ctx: RenderContext): string[] | undefined {
+const CHART_COLOR_NODE_NAMES = new Set([
+  'srgbClr',
+  'schemeClr',
+  'sysClr',
+  'prstClr',
+  'hslClr',
+  'scrgbClr',
+]);
+
+function resolveChartColorStyleColor(
+  colorNode: SafeXmlNode,
+  ctx: RenderContext,
+): string | undefined {
+  if (!colorNode.element || !CHART_COLOR_NODE_NAMES.has(colorNode.localName)) return undefined;
+  const doc = colorNode.element.ownerDocument;
+  const wrapper = doc.createElementNS(colorNode.element.namespaceURI, 'solidFill');
+  wrapper.appendChild(colorNode.element.cloneNode(true));
+  return resolveColorToHex(new SafeXmlNode(wrapper), ctx);
+}
+
+function parseChartColorStylePalette(
+  colorStyle: SafeXmlNode | undefined,
+  ctx: RenderContext,
+): string[] {
+  if (!colorStyle?.exists()) return [];
+  const colors: string[] = [];
+  for (const child of colorStyle.allChildren()) {
+    const color = resolveChartColorStyleColor(child, ctx);
+    if (color) colors.push(color);
+  }
+  return colors;
+}
+
+function buildChartPalette(
+  chartXml: SafeXmlNode,
+  ctx: RenderContext,
+  chartPath?: string,
+): string[] | undefined {
+  if (chartPath) {
+    const chartColorStylePalette = parseChartColorStylePalette(
+      ctx.presentation.chartColorStyles?.get(chartPath),
+      ctx,
+    );
+    if (chartColorStylePalette.length > 0) return chartColorStylePalette;
+  }
+
   const accents = ['accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6']
     .map((k) => ctx.theme.colorScheme.get(k))
     .filter((v): v is string => !!v)
@@ -3547,9 +3834,13 @@ function mergeCartesianComboOptions(
  * Parse a chart XML (chartSpace root) into an ECharts option object and optional data table info.
  * Exported for unit testing.
  */
-export function parseChartXml(chartXml: SafeXmlNode, ctx: RenderContext): ParseChartResult {
+export function parseChartXml(
+  chartXml: SafeXmlNode,
+  ctx: RenderContext,
+  chartPath?: string,
+): ParseChartResult {
   const chartCtx = createChartRenderContext(chartXml, ctx);
-  const chartPalette = buildChartPalette(chartXml, chartCtx);
+  const chartPalette = buildChartPalette(chartXml, chartCtx, chartPath);
   // Navigate: chartSpace > chart > plotArea
   const chart = chartXml.child('chart');
   const plotArea = chart.child('plotArea');
@@ -3705,7 +3996,7 @@ export function renderChart(node: ChartNodeData, ctx: RenderContext): HTMLElemen
   // Parse chart data and create ECharts option
   const chartTheme = ctx.presentation.chartThemes?.get(node.chartPath);
   const chartCtx = chartTheme ? { ...ctx, theme: chartTheme, colorCache: new Map() } : ctx;
-  const { option, dataTable } = parseChartXml(chartXml, chartCtx);
+  const { option, dataTable } = parseChartXml(chartXml, chartCtx, node.chartPath);
   const customLegend = buildCustomLegendOverlay(option, node.size);
   const legendOption = getLegendOptionObject(option.legend);
   if (customLegend && legendOption) {

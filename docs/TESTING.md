@@ -46,6 +46,20 @@ pytest test_visual.py -v        # Layer 2: HTML screenshots vs PDF (SSIM >= 0.65
 pytest test_regression.py -v    # Layer 3: scores vs stored baselines
 ```
 
+The default corpus is `testdata/cases`. Windows-generated oracle cases live under
+`testdata/windows-cases` and can be selected without changing test code:
+
+```bash
+pytest -v --testdata-source=windows    # Windows-generated cases only
+pytest -v --testdata-source=all        # Default + Windows-generated cases
+
+# Equivalent environment override:
+PPTX_E2E_TESTDATA_SOURCE=windows pytest test_visual.py -v
+```
+
+Windows case ids are encoded with a `win__` prefix during pytest
+parametrization so baseline/report filenames stay distinct from default cases.
+
 ### Test Layers
 
 | Layer               | File                             | What it checks                                              |
@@ -169,6 +183,21 @@ For complex shape regressions (curved arrows, multi-segment geometry, 3D faces):
 7. Only then mark the case fixed and move to the next.
 
 Do not use blind parameter tuning. When topology or shape semantics are wrong, derive the fix from the OOXML spec.
+
+## Chart Fix Protocol
+
+Chart rendering is validated at two levels:
+
+1. Add focused unit tests in `test/unit/renderer/ChartRenderer.test.ts` for OOXML
+   semantics such as stacking mode, axis orientation, per-point data labels,
+   chart color styles, legend data, and combo-axis wiring.
+2. Run targeted oracle comparisons through the E2E API or pytest. Use
+   `--testdata-source=windows` for Windows-generated chart oracle cases, which
+   include many Office chart defaults not present in lightweight generated decks.
+
+Current chart 3D support is intentionally a 2D fallback for render continuity.
+Do not treat `surface3DChart` or 3D perspective/depth mismatches as fixed unless
+there is a real 3D rendering implementation and corresponding oracle coverage.
 
 ## Test Pages
 

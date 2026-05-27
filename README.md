@@ -310,7 +310,9 @@ Full OOXML text cascade: master → layout → shape → paragraph → run. Supp
 
 ### Charts via ECharts
 
-Bar/Column, Line, Area, Pie, Doughnut, Radar, Scatter, Bubble, Surface, Stock/Candlestick — each with 2D and 3D variants. Powered by [ECharts](https://echarts.apache.org/), with axis labels, legends, data labels, grid lines, series colors from theme, marker symbols, and custom number formats.
+Powered by [ECharts](https://echarts.apache.org/). Supports Bar/Column (clustered, stacked, 100% stacked), Line/Area (standard, stacked, 100% stacked), Pie, multi-ring Doughnut, Radar, Scatter, Bubble, and Stock/Candlestick charts, with axis labels, legends, data labels, grid lines, chart color-style palettes, marker symbols, and custom number formats.
+
+OOXML 3D chart elements such as `bar3DChart`, `line3DChart`, `pie3DChart`, `area3DChart`, and `surface3DChart` are parsed as graceful 2D fallbacks where possible. True 3D perspective, depth walls, and surface meshes are not PowerPoint-perfect.
 
 ### Fill, Stroke & Color
 
@@ -405,7 +407,7 @@ Dev pages at `http://127.0.0.1:5173`:
 
 ## What's Not Yet Supported
 
-3D effects, animations/transitions, equations (OMML), EMF/WMF vector rendering, shadow/reflection/glow effects, combo charts, secondary chart axes, embedded OLE objects, slide notes rendering.
+3D effects, true 3D chart perspective/depth/surface meshes, animations/transitions, equations (OMML), EMF/WMF vector rendering, shadow/reflection/glow effects, embedded OLE objects, and slide notes rendering.
 
 ## FAQ
 

@@ -32,9 +32,6 @@ DEV_SERVER_URL = f"http://localhost:{DEV_SERVER_PORT}"
 PYTHON_SERVER_PORT = 8080
 PYTHON_SERVER_URL = f"http://localhost:{PYTHON_SERVER_PORT}"
 
-# E2E test cases: all case stems under testdata/cases/ that have source.pptx + ground-truth.pdf
-AVAILABLE_TEST_FILES = tdp.list_cases_with_ground_truth()
-
 # Timeouts
 PAGE_TIMEOUT_MS = 120_000  # 120s for large PPTX fetch + parse
 SERVER_STARTUP_TIMEOUT = 30  # seconds
@@ -55,6 +52,12 @@ def pytest_addoption(parser):
         "--dev-server-url",
         default=DEV_SERVER_URL,
         help=f"URL of running dev server (default: {DEV_SERVER_URL})",
+    )
+    parser.addoption(
+        "--testdata-source",
+        choices=("cases", "windows", "all"),
+        default=os.getenv("PPTX_E2E_TESTDATA_SOURCE", "cases"),
+        help="Ground-truth corpus for parametrized E2E tests: cases, windows, or all.",
     )
     parser.addoption(
         "--oracle-macro-host",
@@ -161,11 +164,14 @@ def export_presentation(browser, dev_server_url, _export_cache):
         if test_file in _export_cache:
             return _export_cache[test_file]
 
+        stem, source = tdp.split_case_ref(test_file)
+        subdir = tdp.testdata_subdir(source)
+
         ctx = browser.new_context()
         pg = ctx.new_page()
         pg.set_default_timeout(PAGE_TIMEOUT_MS)
 
-        url = f"{dev_server_url}/test/pages/export.html?file=testdata/cases/{test_file}/source.pptx"
+        url = f"{dev_server_url}/test/pages/export.html?file=testdata/{subdir}/{stem}/source.pptx"
         pg.goto(url)
 
         # Wait for export to complete
@@ -198,7 +204,16 @@ def export_presentation(browser, dev_server_url, _export_cache):
 def pytest_generate_tests(metafunc):
     """Parametrize tests that request 'test_file' fixture."""
     if "test_file" in metafunc.fixturenames:
-        metafunc.parametrize("test_file", AVAILABLE_TEST_FILES)
+        source = metafunc.config.getoption("--testdata-source")
+        cases = []
+        if source in ("cases", "all"):
+            cases.extend(tdp.list_cases_with_ground_truth())
+        if source in ("windows", "all"):
+            cases.extend(
+                tdp.encode_case_ref(stem, "windows")
+                for stem in tdp.list_cases_with_ground_truth("windows")
+            )
+        metafunc.parametrize("test_file", cases)
 
 
 # ---------------------------------------------------------------------------

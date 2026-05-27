@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Added chart regression coverage for 100% stacked bars, stacked line/area charts, reversed axes, per-point pie labels, multi-ring doughnut charts, and chart color-style palettes.
+- Added `--testdata-source=windows|all` for pytest E2E runs so Windows-generated chart oracle cases can be exercised without changing test code.
+
+### Changed
+
+- Chart rendering now honors OOXML stacked and 100% stacked grouping for bar, line, and area charts, including percentage axis scaling.
+- Chart rendering now applies closer Office defaults for bar `gapWidth`, 100% stacked tick intervals, and area-chart value-axis headroom.
+- Doughnut charts with multiple series now render as concentric rings instead of dropping later series.
+- Implicit chart palettes now use chart color-style parts when related from the chart part.
+- Documentation now distinguishes chart 3D graceful fallbacks from true 3D chart fidelity.
+
+### Fixed
+
+- Fixed reversed chart axes (`orientation="maxMin"`) being parsed but not applied.
+- Fixed chart axis lookup falling back to the first axis before checking all matching `axId` values.
+- Fixed pie charts ignoring per-point `c:dLbl` position, style, leader-line, and manual-layout overrides.
+
 ## [1.0.3] - 2026-05-26
 
 ### Added

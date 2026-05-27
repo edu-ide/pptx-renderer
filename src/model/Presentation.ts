@@ -30,6 +30,10 @@ export interface PresentationData {
   charts: Map<string, SafeXmlNode>;
   /** Chart-local theme overrides keyed by chart part path. */
   chartThemes?: Map<string, ThemeData>;
+  /** Chart style parts keyed by chart part path. */
+  chartStyles?: Map<string, SafeXmlNode>;
+  /** Chart color style parts keyed by chart part path. */
+  chartColorStyles?: Map<string, SafeXmlNode>;
   isWps: boolean;
 }
 
@@ -185,6 +189,8 @@ export function buildPresentation(files: PptxFiles): PresentationData {
   // --- Parse charts ---
   const charts = new Map<string, SafeXmlNode>();
   const chartThemes = new Map<string, ThemeData>();
+  const chartStyles = new Map<string, SafeXmlNode>();
+  const chartColorStyles = new Map<string, SafeXmlNode>();
   for (const [chartPath, chartXml] of files.charts) {
     const chartRoot = parseXml(chartXml);
     if (chartRoot.exists()) {
@@ -195,6 +201,27 @@ export function buildPresentation(files: PptxFiles): PresentationData {
     const chartRelsXml = files.chartRels?.get(chartRelsPath);
     if (!chartRelsXml) continue;
     const chartRels = parseRels(chartRelsXml);
+
+    const chartStyleRel = findRelByType(chartRels, 'chartStyle');
+    if (chartStyleRel) {
+      const chartStylePath = resolveRelTarget(basePath(chartPath), chartStyleRel.target);
+      const chartStyleXml = files.chartStyles?.get(chartStylePath);
+      if (chartStyleXml) {
+        const chartStyleRoot = parseXml(chartStyleXml);
+        if (chartStyleRoot.exists()) chartStyles.set(chartPath, chartStyleRoot);
+      }
+    }
+
+    const chartColorStyleRel = findRelByType(chartRels, 'chartColorStyle');
+    if (chartColorStyleRel) {
+      const chartColorStylePath = resolveRelTarget(basePath(chartPath), chartColorStyleRel.target);
+      const chartColorStyleXml = files.chartColors?.get(chartColorStylePath);
+      if (chartColorStyleXml) {
+        const chartColorStyleRoot = parseXml(chartColorStyleXml);
+        if (chartColorStyleRoot.exists()) chartColorStyles.set(chartPath, chartColorStyleRoot);
+      }
+    }
+
     const themeOverrideRel = findRelByType(chartRels, 'themeOverride');
     if (!themeOverrideRel) continue;
     const themeOverridePath = resolveRelTarget(basePath(chartPath), themeOverrideRel.target);
@@ -300,6 +327,8 @@ export function buildPresentation(files: PptxFiles): PresentationData {
     defaultTextStyle: defaultTextStyle.exists() ? defaultTextStyle : undefined,
     charts,
     chartThemes,
+    chartStyles,
+    chartColorStyles,
     isWps,
   };
 

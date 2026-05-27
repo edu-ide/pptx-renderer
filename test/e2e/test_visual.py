@@ -55,7 +55,9 @@ def pdf_page_to_image(pdf_path: Path, page_idx: int, dpi: int = 150) -> np.ndarr
 
 def screenshot_slide(page, dev_server_url: str, test_file: str, slide_idx: int) -> np.ndarray:
     """Take a Playwright screenshot of a rendered slide, return numpy RGB array."""
-    url = f"{dev_server_url}/test/pages/render-slide.html?file=testdata/cases/{test_file}/source.pptx&slide={slide_idx}"
+    stem, source = tdp.split_case_ref(test_file)
+    subdir = tdp.testdata_subdir(source)
+    url = f"{dev_server_url}/test/pages/render-slide.html?file=testdata/{subdir}/{stem}/source.pptx&slide={slide_idx}"
     page.goto(url)
 
     # Wait for render to complete

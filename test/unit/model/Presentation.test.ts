@@ -963,8 +963,17 @@ describe('buildPresentation', () => {
   });
 
   describe('chart style and color parsing', () => {
-    it('parses chart styles', () => {
+    it('maps chart style relationships to chart-local style parts', () => {
+      const chartXml =
+        '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" />';
+      const chartRelsXml = `
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+          <Relationship Id="rId1" Type="http://schemas.microsoft.com/office/2011/relationships/chartStyle" Target="style1.xml"/>
+        </Relationships>
+      `;
       const files = makeMinimalFiles({
+        charts: new Map([['ppt/charts/chart1.xml', chartXml]]),
+        chartRels: new Map([['ppt/charts/_rels/chart1.xml.rels', chartRelsXml]]),
         chartStyles: new Map([
           [
             'ppt/charts/style1.xml',
@@ -973,11 +982,20 @@ describe('buildPresentation', () => {
         ]),
       } as any);
       const pres = buildPresentation(files);
-      expect(pres).toBeDefined();
+      expect(pres.chartStyles?.get('ppt/charts/chart1.xml')?.localName).toBe('chartStyle');
     });
 
-    it('parses chart colors', () => {
+    it('maps chart color style relationships to chart-local color parts', () => {
+      const chartXml =
+        '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" />';
+      const chartRelsXml = `
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+          <Relationship Id="rId1" Type="http://schemas.microsoft.com/office/2011/relationships/chartColorStyle" Target="colors1.xml"/>
+        </Relationships>
+      `;
       const files = makeMinimalFiles({
+        charts: new Map([['ppt/charts/chart1.xml', chartXml]]),
+        chartRels: new Map([['ppt/charts/_rels/chart1.xml.rels', chartRelsXml]]),
         chartColors: new Map([
           [
             'ppt/charts/colors1.xml',
@@ -986,7 +1004,7 @@ describe('buildPresentation', () => {
         ]),
       } as any);
       const pres = buildPresentation(files);
-      expect(pres).toBeDefined();
+      expect(pres.chartColorStyles?.get('ppt/charts/chart1.xml')?.localName).toBe('colorStyle');
     });
 
     it('maps chart themeOverride relationships to chart-local themes', () => {
