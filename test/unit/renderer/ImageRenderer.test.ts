@@ -93,6 +93,143 @@ describe('renderImage', () => {
     });
   });
 
+  describe('picture shape properties', () => {
+    it('renders the picture background fill from spPr solidFill', () => {
+      const ctx = createCtxWithMedia();
+      const source = xmlNode(
+        `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <nvPicPr><cNvPr id="1" name="pic"/><nvPr/></nvPicPr>
+          <blipFill><blip r:embed="rId1"/></blipFill>
+          <spPr>
+            <xfrm><off x="0" y="0"/><ext cx="0" cy="0"/></xfrm>
+            <solidFill><schemeClr val="accent5"><alpha val="25000"/></schemeClr></solidFill>
+          </spPr>
+        </pic>`,
+      );
+      const node = createPicNode({ source, fill: source.child('spPr').child('solidFill') });
+
+      const el = renderImage(node, ctx);
+
+      expect(el.style.background).toBe('rgba(91, 155, 213, 0.25)');
+    });
+
+    it('renders the picture outline from spPr ln', () => {
+      const ctx = createCtxWithMedia();
+      const source = xmlNode(
+        `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <nvPicPr><cNvPr id="1" name="pic"/><nvPr/></nvPicPr>
+          <blipFill><blip r:embed="rId1"/></blipFill>
+          <spPr>
+            <xfrm><off x="0" y="0"/><ext cx="0" cy="0"/></xfrm>
+            <ln w="12700"><solidFill><srgbClr val="FF0000"/></solidFill></ln>
+          </spPr>
+        </pic>`,
+      );
+      const node = createPicNode({ source, line: source.child('spPr').child('ln') });
+
+      const el = renderImage(node, ctx);
+
+      expect(el.style.boxSizing).toBe('border-box');
+      expect(el.style.borderStyle).toBe('solid');
+      expect(el.style.borderColor).toBe('rgb(255, 0, 0)');
+      expect(parseFloat(el.style.borderWidth)).toBeCloseTo(1.333, 2);
+    });
+
+    it('does not render an outline for picture ln noFill', () => {
+      const ctx = createCtxWithMedia();
+      const source = xmlNode(
+        `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <nvPicPr><cNvPr id="1" name="pic"/><nvPr/></nvPicPr>
+          <blipFill><blip r:embed="rId1"/></blipFill>
+          <spPr>
+            <xfrm><off x="0" y="0"/><ext cx="0" cy="0"/></xfrm>
+            <ln w="12700"><noFill/></ln>
+          </spPr>
+        </pic>`,
+      );
+      const node = createPicNode({ source, line: source.child('spPr').child('ln') });
+
+      const el = renderImage(node, ctx);
+
+      expect(el.style.borderStyle).toBe('');
+      expect(el.style.borderWidth).toBe('');
+    });
+
+    it('applies picture outer shadow from spPr effectLst', () => {
+      const ctx = createCtxWithMedia();
+      const source = xmlNode(
+        `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <nvPicPr><cNvPr id="1" name="pic"/><nvPr/></nvPicPr>
+          <blipFill><blip r:embed="rId1"/></blipFill>
+          <spPr>
+            <xfrm><off x="0" y="0"/><ext cx="0" cy="0"/></xfrm>
+            <effectLst>
+              <outerShdw blurRad="38100" dist="38100" dir="2700000">
+                <srgbClr val="000000"><alpha val="40000"/></srgbClr>
+              </outerShdw>
+            </effectLst>
+          </spPr>
+        </pic>`,
+      );
+      const node = createPicNode({ source });
+
+      const el = renderImage(node, ctx);
+
+      expect(el.style.filter).toContain('drop-shadow');
+      expect(el.style.filter).toContain('rgba(0,0,0,0.400)');
+    });
+
+    it('applies picture reflection from spPr effectLst', () => {
+      const ctx = createCtxWithMedia();
+      const source = xmlNode(
+        `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <nvPicPr><cNvPr id="1" name="pic"/><nvPr/></nvPicPr>
+          <blipFill><blip r:embed="rId1"/></blipFill>
+          <spPr>
+            <xfrm><off x="0" y="0"/><ext cx="0" cy="0"/></xfrm>
+            <effectLst><reflection dist="25400" stA="50000" endA="0"/></effectLst>
+          </spPr>
+        </pic>`,
+      );
+      const node = createPicNode({ source });
+
+      const el = renderImage(node, ctx);
+      const reflect =
+        el.style.getPropertyValue('-webkit-box-reflect') ||
+        (el.style as unknown as { webkitBoxReflect?: string }).webkitBoxReflect ||
+        '';
+
+      expect(reflect).toContain('below');
+      expect(reflect).toContain('2.7px');
+    });
+
+    it('navigates picture-level external hyperlinks through onNavigate', () => {
+      const onNavigate = vi.fn();
+      const ctx = createCtxWithMedia();
+      ctx.onNavigate = onNavigate;
+      ctx.slide.rels.set('rIdLink', {
+        type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+        target: 'https://example.com/details',
+        targetMode: 'External',
+      });
+      const node = createPicNode({
+        hlinkClick: { rId: 'rIdLink', tooltip: 'Open details' },
+      });
+
+      const el = renderImage(node, ctx);
+      el.click();
+
+      expect(el.style.cursor).toBe('pointer');
+      expect(el.title).toBe('Open details');
+      expect(onNavigate).toHaveBeenCalledWith({ url: 'https://example.com/details' });
+    });
+  });
+
   describe('crop with pixel-based margins', () => {
     it('uses pixel values for crop offset (not percentages)', () => {
       const ctx = createCtxWithMedia();

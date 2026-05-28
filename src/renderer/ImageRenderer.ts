@@ -5,11 +5,13 @@
 import { PicNodeData } from '../model/nodes/PicNode';
 import { RenderContext } from './RenderContext';
 import { resolveMediaPath, getOrCreateBlobUrl } from '../utils/media';
-import { resolveColor } from './StyleResolver';
+import { resolveColor, resolveFill, resolveLineStyle } from './StyleResolver';
 import { hexToRgb } from '../utils/color';
 import { parseEmfContent } from '../utils/emfParser';
 import { renderPdfToImage } from '../utils/pdfRenderer';
-import { isAllowedExternalMediaUrl } from '../utils/urlSafety';
+import { emuToPx } from '../parser/units';
+import { SafeXmlNode } from '../parser/XmlParser';
+import { isAllowedExternalMediaUrl, isAllowedExternalUrl } from '../utils/urlSafety';
 
 /**
  * Check if a file extension is an unsupported legacy format (WMF only now; EMF is handled).
@@ -65,6 +67,8 @@ export function renderImage(node: PicNodeData, ctx: RenderContext): HTMLElement 
   if (transforms.length > 0) {
     wrapper.style.transform = transforms.join(' ');
   }
+
+  applyPictureShapeProperties(wrapper, node, ctx);
 
   // ---- Handle video ----
   if (node.isVideo) {
@@ -186,6 +190,132 @@ export function renderImage(node: PicNodeData, ctx: RenderContext): HTMLElement 
 
   wrapper.appendChild(img);
   return wrapper;
+}
+
+function applyPictureShapeProperties(
+  wrapper: HTMLElement,
+  node: PicNodeData,
+  ctx: RenderContext,
+): void {
+  applyPictureFill(wrapper, node, ctx);
+  applyPictureOutline(wrapper, node, ctx);
+  applyPictureEffects(wrapper, node, ctx);
+  applyPictureHyperlink(wrapper, node, ctx);
+}
+
+function applyPictureFill(wrapper: HTMLElement, node: PicNodeData, ctx: RenderContext): void {
+  const spPr = node.source.child('spPr');
+  const fillCss = resolveFill(spPr, ctx);
+  if (fillCss && fillCss !== 'transparent') {
+    wrapper.style.background = fillCss;
+  }
+}
+
+function applyPictureOutline(wrapper: HTMLElement, node: PicNodeData, ctx: RenderContext): void {
+  const line = node.line;
+  if (!line?.exists() || line.child('noFill').exists()) return;
+
+  const style = resolveLineStyle(line, ctx);
+  if (style.width <= 0 || style.color === 'transparent') return;
+
+  wrapper.style.boxSizing = 'border-box';
+  wrapper.style.border = `${style.width}px ${style.dash} ${style.color}`;
+}
+
+function applyPictureEffects(wrapper: HTMLElement, node: PicNodeData, ctx: RenderContext): void {
+  const effectLst = node.source.child('spPr').child('effectLst');
+  if (!effectLst.exists()) return;
+
+  const outerShdw = effectLst.child('outerShdw');
+  if (outerShdw.exists()) {
+    applyPictureOuterShadow(wrapper, node, outerShdw, ctx);
+  }
+
+  const reflection = effectLst.child('reflection');
+  if (reflection.exists()) {
+    applyPictureReflection(wrapper, reflection);
+  }
+}
+
+function applyPictureOuterShadow(
+  wrapper: HTMLElement,
+  node: PicNodeData,
+  outerShdw: SafeXmlNode,
+  ctx: RenderContext,
+): void {
+  const dir = outerShdw.numAttr('dir') ?? 0;
+  const distPx = emuToPx(outerShdw.numAttr('dist') ?? 0);
+  const blurPx = emuToPx(outerShdw.numAttr('blurRad') ?? 0);
+  const dirDeg = dir / 60000;
+  const offsetX = distPx * Math.cos((dirDeg * Math.PI) / 180);
+  const offsetY = distPx * Math.sin((dirDeg * Math.PI) / 180);
+  const shadowColor = resolveEffectColor(outerShdw, ctx, 'rgba(0,0,0,0.4)');
+
+  const sx = outerShdw.numAttr('sx');
+  const sy = outerShdw.numAttr('sy');
+  if (sx != null && sy != null && sx > 0 && sy > 0) {
+    const scaleX = sx / 100000;
+    const scaleY = sy / 100000;
+    const spreadX = (node.size.w * (scaleX - 1)) / 2;
+    const spreadY = (node.size.h * (scaleY - 1)) / 2;
+    const spread = Math.max(0, (spreadX + spreadY) / 2);
+    wrapper.style.boxShadow = `${offsetX.toFixed(1)}px ${offsetY.toFixed(1)}px ${blurPx.toFixed(1)}px ${spread.toFixed(1)}px ${shadowColor}`;
+    return;
+  }
+
+  wrapper.style.filter = `drop-shadow(${offsetX.toFixed(1)}px ${offsetY.toFixed(1)}px ${blurPx.toFixed(1)}px ${shadowColor})`;
+}
+
+function resolveEffectColor(node: SafeXmlNode, ctx: RenderContext, fallback: string): string {
+  const { color, alpha } = resolveColor(node, ctx);
+  if (!color) return fallback;
+  const hex = color.startsWith('#') ? color : `#${color}`;
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
+}
+
+function applyPictureReflection(wrapper: HTMLElement, reflection: SafeXmlNode): void {
+  const dist = emuToPx(reflection.numAttr('dist') ?? 0);
+  const stA = (reflection.numAttr('stA') ?? 50000) / 100000;
+  const endA = (reflection.numAttr('endA') ?? 0) / 100000;
+  const stPos = Math.max(0, Math.min(100, (reflection.numAttr('stPos') ?? 0) / 1000));
+  const endPos = Math.max(0, Math.min(100, (reflection.numAttr('endPos') ?? 100000) / 1000));
+  const mask = `linear-gradient(to bottom, rgba(255,255,255,${stA.toFixed(3)}) ${stPos.toFixed(1)}%, rgba(255,255,255,${endA.toFixed(3)}) ${endPos.toFixed(1)}%)`;
+  const reflectValue = `below ${dist.toFixed(1)}px ${mask}`;
+  wrapper.style.setProperty('-webkit-box-reflect', reflectValue);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (wrapper.style as any).webkitBoxReflect = reflectValue;
+}
+
+function applyPictureHyperlink(wrapper: HTMLElement, node: PicNodeData, ctx: RenderContext): void {
+  if (!node.hlinkClick || !ctx.onNavigate) return;
+
+  const { action, rId } = node.hlinkClick;
+  if (action === 'ppaction://hlinksldjump' && rId) {
+    const rel = ctx.slide.rels.get(rId);
+    const match = rel?.target.match(/slide(\d+)\.xml/);
+    if (!match) return;
+
+    const slideIndex = parseInt(match[1], 10) - 1;
+    wrapper.style.cursor = 'pointer';
+    wrapper.title = node.hlinkClick.tooltip || `Go to slide ${slideIndex + 1}`;
+    wrapper.addEventListener('click', (e) => {
+      e.stopPropagation();
+      ctx.onNavigate!({ slideIndex });
+    });
+    return;
+  }
+
+  if (!rId) return;
+  const rel = ctx.slide.rels.get(rId);
+  if (!rel || rel.targetMode !== 'External' || !isAllowedExternalUrl(rel.target)) return;
+
+  wrapper.style.cursor = 'pointer';
+  wrapper.title = node.hlinkClick.tooltip || rel.target;
+  wrapper.addEventListener('click', (e) => {
+    e.stopPropagation();
+    ctx.onNavigate!({ url: rel.target });
+  });
 }
 
 /**
@@ -494,8 +624,6 @@ function createFillImage(url: string): HTMLImageElement {
 // ---------------------------------------------------------------------------
 // Duotone Effect
 // ---------------------------------------------------------------------------
-
-import { SafeXmlNode } from '../parser/XmlParser';
 
 /**
  * Apply a duotone effect to an image via canvas pixel manipulation.
