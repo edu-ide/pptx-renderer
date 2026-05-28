@@ -7,7 +7,7 @@ import { ChartNodeData } from '../model/nodes/ChartNode';
 import { RenderContext } from './RenderContext';
 import { SafeXmlNode } from '../parser/XmlParser';
 import { emuToPx } from '../parser/units';
-import { resolveColor } from './StyleResolver';
+import { resolveColor, resolveLineStyle } from './StyleResolver';
 
 const MAX_CHART_CACHE_POINTS = 10_000;
 const EXPLICIT_FONT_SIZE = Symbol('pptxExplicitFontSize');
@@ -25,11 +25,27 @@ interface SeriesData {
   bubbleSizes?: number[]; // bubble chart sizes from c:bubbleSize
   colorHex?: string | object; // optional explicit series color (hex string or ECharts gradient)
   dataPointColors?: (string | undefined)[]; // per-point colors (for pie charts)
+  dataPointStyles?: (DataPointStyle | undefined)[]; // per-point fill and border styles
   formatCode?: string; // numCache formatCode (e.g. "0%", "0.0%", "General")
   markerSymbol?: string; // OOXML c:marker > c:symbol val
   markerSize?: number; // OOXML c:marker > c:size val (points)
   smooth?: boolean; // OOXML c:smooth val for scatter/line-like charts
   lineWidth?: number; // c:spPr > a:ln@w converted to renderer px scale
+}
+
+type ChartLineType = 'solid' | 'dashed' | 'dotted';
+
+interface ChartLineStyle {
+  color?: string;
+  width?: number;
+  type?: ChartLineType;
+}
+
+interface DataPointStyle {
+  color?: string;
+  borderColor?: string;
+  borderWidth?: number;
+  borderType?: ChartLineType;
 }
 
 /** Parsed axis information from plotArea valAx / catAx / dateAx. */
@@ -44,6 +60,7 @@ interface AxisInfo {
   labelColor?: string; // hex color from txPr for axis labels
   labelFontSize?: number; // px from txPr defRPr@sz
   lineColor?: string; // hex color from spPr > ln for axis line
+  majorGridlineStyle?: ChartLineStyle; // c:majorGridlines > c:spPr > a:ln
 }
 
 interface DataLabelConfig {
@@ -437,6 +454,25 @@ function extractSeriesLineWidth(ser: SafeXmlNode): number | undefined {
   return Math.max(1, Number((lnWidthEmu / 12700).toFixed(3)));
 }
 
+function toChartLineType(cssDash: string): ChartLineType {
+  if (cssDash === 'dotted') return 'dotted';
+  if (cssDash === 'dashed') return 'dashed';
+  return 'solid';
+}
+
+function extractChartLineStyle(ln: SafeXmlNode, ctx: RenderContext): ChartLineStyle | undefined {
+  if (!ln.exists() || ln.child('noFill').exists()) return undefined;
+
+  const style = resolveLineStyle(ln, ctx);
+  if (style.width <= 0 || style.color === 'transparent') return undefined;
+
+  return {
+    color: style.color,
+    width: Math.max(style.width, 0.5),
+    type: toChartLineType(style.dash),
+  };
+}
+
 /**
  * Build an ECharts LinearGradient from an OOXML a:gradFill node.
  */
@@ -483,17 +519,17 @@ function buildEChartsGradient(gradFill: SafeXmlNode, ctx: RenderContext): object
 }
 
 /**
- * Extract per-data-point colors from c:ser > c:dPt elements.
- * Each c:dPt has c:idx and c:spPr > a:solidFill.
+ * Extract per-data-point fill and border styles from c:ser > c:dPt elements.
+ * Each c:dPt can define c:spPr fill and a:ln slice border independently.
  */
-function extractDataPointColors(
+function extractDataPointStyles(
   ser: SafeXmlNode,
   ctx: RenderContext,
-): (string | undefined)[] | undefined {
+): (DataPointStyle | undefined)[] | undefined {
   const dPts = ser.children('dPt');
   if (dPts.length === 0) return undefined;
 
-  const colors: (string | undefined)[] = [];
+  const styles: (DataPointStyle | undefined)[] = [];
   for (const dPt of dPts) {
     const idx = dPt.child('idx').numAttr('val');
     if (idx === undefined) continue;
@@ -501,17 +537,29 @@ function extractDataPointColors(
     const spPr = dPt.child('spPr');
     if (!spPr.exists()) continue;
 
+    const pointStyle: DataPointStyle = {};
     const solidFill = spPr.child('solidFill');
     if (solidFill.exists()) {
       const hex = resolveColorToHex(solidFill, ctx);
       if (hex) {
-        while (colors.length <= idx) colors.push(undefined);
-        colors[idx] = hex;
+        pointStyle.color = hex;
       }
+    }
+
+    const lineStyle = extractChartLineStyle(spPr.child('ln'), ctx);
+    if (lineStyle) {
+      pointStyle.borderColor = lineStyle.color;
+      pointStyle.borderWidth = lineStyle.width;
+      pointStyle.borderType = lineStyle.type;
+    }
+
+    if (Object.keys(pointStyle).length > 0) {
+      while (styles.length <= idx) styles.push(undefined);
+      styles[idx] = pointStyle;
     }
   }
 
-  return colors.length > 0 ? colors : undefined;
+  return styles.length > 0 ? styles : undefined;
 }
 
 /** In OOXML, boolean elements are true when present unless val="0" or val="false". */
@@ -761,7 +809,8 @@ function parseSeries(chartTypeNode: SafeXmlNode, ctx: RenderContext): SeriesData
 
     const colorHex = extractSeriesColor(ser, ctx);
     const lineWidth = extractSeriesLineWidth(ser);
-    const dataPointColors = extractDataPointColors(ser, ctx);
+    const dataPointStyles = extractDataPointStyles(ser, ctx);
+    const dataPointColors = dataPointStyles?.map((style) => style?.color);
 
     // Extract marker info (c:marker > c:symbol, c:size)
     const marker = ser.child('marker');
@@ -778,6 +827,7 @@ function parseSeries(chartTypeNode: SafeXmlNode, ctx: RenderContext): SeriesData
       bubbleSizes,
       colorHex,
       dataPointColors,
+      dataPointStyles,
       formatCode,
       markerSymbol,
       markerSize,
@@ -1309,6 +1359,14 @@ function extractAxisLineColor(ax: SafeXmlNode, ctx: RenderContext): string | und
   return resolveColorToHex(fill, ctx);
 }
 
+function extractMajorGridlineStyle(
+  ax: SafeXmlNode,
+  ctx: RenderContext,
+): ChartLineStyle | undefined {
+  const ln = ax.child('majorGridlines').child('spPr').child('ln');
+  return extractChartLineStyle(ln, ctx);
+}
+
 /**
  * Parse a single axis node (c:valAx, c:catAx, or c:dateAx) into AxisInfo.
  */
@@ -1329,6 +1387,7 @@ function parseAxisNode(ax: SafeXmlNode, ctx: RenderContext): AxisInfo {
   const labelColor = txStyle?.color ?? extractAxisLabelColor(ax, ctx);
   const labelFontSize = txStyle?.fontSize;
   const lineColor = extractAxisLineColor(ax, ctx);
+  const majorGridlineStyle = hasMajorGridlines ? extractMajorGridlineStyle(ax, ctx) : undefined;
   return {
     deleted,
     tickLblPos,
@@ -1340,6 +1399,7 @@ function parseAxisNode(ax: SafeXmlNode, ctx: RenderContext): AxisInfo {
     labelColor,
     labelFontSize,
     lineColor,
+    majorGridlineStyle,
   };
 }
 
@@ -1466,8 +1526,16 @@ function applyAxisInfo(
   if (kind === 'value') {
     if (!info.hasMajorGridlines) {
       axisDef.splitLine = { show: false };
+    } else if (info.majorGridlineStyle) {
+      const existingSplitLine = (axisDef.splitLine as Record<string, unknown>) || {};
+      const existingLineStyle = (existingSplitLine.lineStyle as Record<string, unknown>) || {};
+      axisDef.splitLine = {
+        ...existingSplitLine,
+        show: true,
+        lineStyle: { ...existingLineStyle, ...info.majorGridlineStyle },
+      };
     }
-    // If has gridlines, ECharts shows them by default — no action needed
+    // If has gridlines without explicit styling, ECharts shows them by default.
   }
 
   // Axis label color from txPr
@@ -2213,7 +2281,15 @@ function buildPieChartOption(
         name: cat || `Item ${i + 1}`,
         value: meta.series.values[i] ?? 0,
       };
-      if (meta.series.dataPointColors?.[i]) {
+      const pointStyle = meta.series.dataPointStyles?.[i];
+      if (pointStyle) {
+        item.itemStyle = {
+          ...(pointStyle.color ? { color: pointStyle.color } : {}),
+          ...(pointStyle.borderColor ? { borderColor: pointStyle.borderColor } : {}),
+          ...(pointStyle.borderWidth !== undefined ? { borderWidth: pointStyle.borderWidth } : {}),
+          ...(pointStyle.borderType ? { borderType: pointStyle.borderType } : {}),
+        };
+      } else if (meta.series.dataPointColors?.[i]) {
         item.itemStyle = { color: meta.series.dataPointColors[i] };
       }
       if (meta.explosions?.[i] && meta.explosions[i] > 0) {

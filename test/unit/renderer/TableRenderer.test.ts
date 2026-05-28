@@ -183,6 +183,21 @@ describe('renderTable', () => {
     expect(td.style.backgroundColor).toBe('rgb(255, 0, 0)');
   });
 
+  it('respects cell horzOverflow="overflow"', () => {
+    const tcPrXml = parseXml('<tcPr horzOverflow="overflow"/>');
+    const rows: TableRow[] = [
+      {
+        height: 100,
+        cells: [
+          { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml },
+        ],
+      },
+    ];
+    const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
+    const td = el.querySelector('td')!;
+    expect(td.style.overflow).toBe('visible');
+  });
+
   it('applies cell borders from tcPr', () => {
     const tcPrXml = parseXml(`
       <tcPr>
@@ -296,6 +311,29 @@ describe('renderTable', () => {
       const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{ABC}' }), ctx);
       const td = el.querySelector('td')!;
       expect(td.style.backgroundColor).not.toBe('');
+    });
+
+    it('direct cell noFill clears table-style cell background', () => {
+      const ctx = makeCtxWithTableStyle(`
+        <tblStyleLst>
+          <tblStyle styleId="{CLEAR_FILL}">
+            <wholeTbl>
+              <tcStyle>
+                <fill><solidFill><srgbClr val="4472C4"/></solidFill></fill>
+              </tcStyle>
+            </wholeTbl>
+          </tblStyle>
+        </tblStyleLst>
+      `);
+      const tcPrXml = parseXml('<tcPr><noFill/></tcPr>');
+      const rows: TableRow[] = [{
+        height: 100,
+        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
+      }];
+      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{CLEAR_FILL}' }), ctx);
+      const td = el.querySelector('td')!;
+      expect(td.style.backgroundColor).toBe('transparent');
+      expect(td.style.backgroundImage).toBe('');
     });
 
     it('applies firstRow style when firstRow="1" in tblPr', () => {

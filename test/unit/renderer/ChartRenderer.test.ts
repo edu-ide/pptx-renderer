@@ -1412,6 +1412,53 @@ describe('ChartRenderer', () => {
       expect(series[0].data).toBeDefined();
     });
 
+    it('should apply dPt line style to pie slice borders', () => {
+      const xml = `
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <c:chart>
+            <c:plotArea>
+              <c:pieChart>
+                <c:ser>
+                  <c:idx val="0"/><c:order val="0"/>
+                  <c:tx>
+                    <c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Share</c:v></c:pt></c:strCache></c:strRef>
+                  </c:tx>
+                  <c:cat>
+                    <c:strRef><c:strCache><c:ptCount val="2"/>
+                      <c:pt idx="0"><c:v>A</c:v></c:pt>
+                      <c:pt idx="1"><c:v>B</c:v></c:pt>
+                    </c:strCache></c:strRef>
+                  </c:cat>
+                  <c:val>
+                    <c:numRef><c:numCache><c:formatCode>0</c:formatCode><c:ptCount val="2"/>
+                      <c:pt idx="0"><c:v>30</c:v></c:pt>
+                      <c:pt idx="1"><c:v>70</c:v></c:pt>
+                    </c:numCache></c:numRef>
+                  </c:val>
+                  <c:dPt>
+                    <c:idx val="0"/>
+                    <c:spPr>
+                      <a:solidFill><a:schemeClr val="accent1"/></a:solidFill>
+                      <a:ln w="19050"><a:solidFill><a:schemeClr val="lt1"/></a:solidFill></a:ln>
+                    </c:spPr>
+                  </c:dPt>
+                </c:ser>
+              </c:pieChart>
+            </c:plotArea>
+          </c:chart>
+        </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const series = (option.series as any[])[0];
+      const firstSlice = series.data[0];
+      expect(firstSlice.itemStyle).toMatchObject({
+        color: '#4472C4',
+        borderColor: '#FFFFFF',
+        borderWidth: 2,
+      });
+    });
+
     it('should hide pie labels by default when no dLbls are present', () => {
       const xml = `
         <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
@@ -4570,6 +4617,60 @@ describe('ChartRenderer', () => {
       expect(yAxis.interval).toBe(0.1);
       expect(yAxis.axisLabel.formatter(0.5)).toBe('50%');
       expect(yAxis.splitLine?.show).not.toBe(false);
+    });
+
+    it('applies major gridline line style from value axis spPr', () => {
+      const xml = `<c:chartSpace
+        xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+        xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <c:chart>
+          <c:autoTitleDeleted val="1"/>
+          <c:plotArea>
+            <c:barChart>
+              <c:barDir val="col"/>
+              <c:grouping val="clustered"/>
+              <c:ser>
+                <c:idx val="0"/><c:order val="0"/>
+                <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>A</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                <c:cat><c:strRef><c:strCache><c:ptCount val="2"/><c:pt idx="0"><c:v>Q1</c:v></c:pt><c:pt idx="1"><c:v>Q2</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                <c:val><c:numRef><c:numCache><c:ptCount val="2"/><c:pt idx="0"><c:v>20</c:v></c:pt><c:pt idx="1"><c:v>50</c:v></c:pt></c:numCache></c:numRef></c:val>
+              </c:ser>
+              <c:axId val="1"/><c:axId val="2"/>
+            </c:barChart>
+            <c:catAx><c:axId val="1"/><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/></c:catAx>
+            <c:valAx>
+              <c:axId val="2"/>
+              <c:delete val="0"/>
+              <c:axPos val="l"/>
+              <c:majorGridlines>
+                <c:spPr>
+                  <a:ln w="9525">
+                    <a:solidFill>
+                      <a:schemeClr val="tx1">
+                        <a:lumMod val="35000"/>
+                        <a:lumOff val="65000"/>
+                      </a:schemeClr>
+                    </a:solidFill>
+                    <a:prstDash val="dash"/>
+                  </a:ln>
+                </c:spPr>
+              </c:majorGridlines>
+              <c:crossAx val="1"/>
+            </c:valAx>
+          </c:plotArea>
+        </c:chart>
+      </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const yAxis = option.yAxis as any;
+      expect(yAxis.splitLine).toMatchObject({
+        show: true,
+        lineStyle: {
+          width: 1,
+          type: 'dashed',
+        },
+      });
+      expect(yAxis.splitLine.lineStyle.color.toLowerCase()).toBe('#a6a6a6');
     });
 
     it('stacks area and line charts according to OOXML grouping', () => {

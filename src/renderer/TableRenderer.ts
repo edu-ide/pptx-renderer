@@ -541,9 +541,16 @@ function applyCellProperties(td: HTMLElement, cell: TableCell, ctx: RenderContex
   const tcPr = cell.properties;
   if (!tcPr) return;
 
+  if (tcPr.attr('horzOverflow') === 'overflow') {
+    td.style.overflow = 'visible';
+  }
+
   // Fill (overrides table style fill)
-  const solidFill = tcPr.child('solidFill');
-  if (solidFill.exists()) {
+  const noFill = tcPr.child('noFill');
+  if (noFill.exists()) {
+    td.style.background = 'transparent';
+  } else if (tcPr.child('solidFill').exists()) {
+    const solidFill = tcPr.child('solidFill');
     const { color, alpha } = resolveColor(solidFill, ctx);
     const hex = color.startsWith('#') ? color : `#${color}`;
     if (alpha < 1) {
