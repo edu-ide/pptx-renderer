@@ -5096,7 +5096,7 @@ multiPathPresets.set('bevel', (w, h, adjustments) => {
   return [
     { d: inner, fill: 'norm', stroke: true },
     { d: top, fill: 'lightenLess', stroke: true },
-    { d: right, fill: 'darkenLess', stroke: true },
+    { d: right, fill: 'darken', stroke: true },
     { d: bottom, fill: 'darken', stroke: true },
     { d: left, fill: 'lighten', stroke: true },
   ];

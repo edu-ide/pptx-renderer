@@ -1261,6 +1261,18 @@ describe('curved arrow symmetry', () => {
     expect(down![0].d).not.toMatch(/[ML]\s*330(?:,|\s)\s*280\b/);
     expect(down![1].d).toMatch(/[ML]\s*330(?:,|\s)\s*280\b/);
   });
+
+  it('renders bevel faces with top/left highlights and right/bottom shadows', () => {
+    const paths = getMultiPathPreset('bevel', 480, 384, new Map([['adj', 35000]]));
+
+    expect(paths).not.toBeNull();
+    expect(paths).toHaveLength(5);
+    expect(paths![0]).toMatchObject({ fill: 'norm', stroke: true });
+    expect(paths![1]).toMatchObject({ fill: 'lightenLess', stroke: true });
+    expect(paths![2]).toMatchObject({ fill: 'darken', stroke: true });
+    expect(paths![3]).toMatchObject({ fill: 'darken', stroke: true });
+    expect(paths![4]).toMatchObject({ fill: 'lighten', stroke: true });
+  });
 });
 
 describe('bulk coverage — untested multi-path presets', () => {

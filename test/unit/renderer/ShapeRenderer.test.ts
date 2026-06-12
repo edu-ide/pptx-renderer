@@ -1427,6 +1427,61 @@ describe('ShapeRenderer', () => {
     }
   });
 
+  it('keeps Office default line height for multiline spAutoFit paragraphs with spacing (oracle-pypptx-text-0038-line-spacing)', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr>
+          <p:cNvPr id="4" name="TextBox 3"/>
+          <p:cNvSpPr txBox="1"/>
+          <p:nvPr/>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="914400" y="457200"/><a:ext cx="9144000" cy="5486400"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:noFill/>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr wrap="square"><a:spAutoFit/></a:bodyPr>
+          <a:lstStyle/>
+          <a:p>
+            <a:pPr>
+              <a:spcBef><a:spcPts val="600"/></a:spcBef>
+              <a:spcAft><a:spcPts val="1200"/></a:spcAft>
+              <a:defRPr sz="1800"><a:latin typeface="Calibri"/></a:defRPr>
+            </a:pPr>
+            <a:r><a:t>Line 1</a:t></a:r>
+          </a:p>
+          <a:p>
+            <a:pPr>
+              <a:spcBef><a:spcPts val="600"/></a:spcBef>
+              <a:spcAft><a:spcPts val="1200"/></a:spcAft>
+              <a:defRPr sz="1800"><a:latin typeface="Calibri"/></a:defRPr>
+            </a:pPr>
+            <a:r><a:t>Line 2</a:t></a:r>
+          </a:p>
+        </p:txBody>
+      </p:sp>
+    `;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const textContainer = Array.from(el.querySelectorAll('div')).find(
+      (div) => div.textContent?.includes('Line 2') && div.style.flexDirection === 'column',
+    ) as HTMLElement | undefined;
+    const paragraphs = Array.from(textContainer?.children ?? []).filter(
+      (child): child is HTMLElement =>
+        child instanceof HTMLElement && child.textContent?.startsWith('Line '),
+    );
+
+    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs[0].style.lineHeight).toBe('');
+    expect(paragraphs[1].style.lineHeight).toBe('');
+    expect(paragraphs[0].style.marginTop).toBe('0px');
+    expect(paragraphs[0].style.marginBottom).toBe('12pt');
+    expect(paragraphs[1].style.marginTop).toBe('6pt');
+    expect(paragraphs[1].style.marginBottom).toBe('0px');
+  });
+
   it('renders supported prstTxWarp text as SVG textPath (ai-computing slide 28)', () => {
     const xml = `
       <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
@@ -1713,7 +1768,7 @@ describe('ShapeRenderer', () => {
     expect(paths[1]?.getAttribute('fill')).toMatch(/^url\(#grad-fill-detail-/);
     expect(paths[2]?.getAttribute('fill')).toMatch(/^url\(#grad-fill-detail-/);
     expect(paths[3]?.getAttribute('fill')).toMatch(/^url\(#grad-fill-detail-/);
-    expect(paths[4]?.getAttribute('fill')).toBe(mixHex('#4472C4', '#ffffff', 0.3));
+    expect(paths[4]?.getAttribute('fill')).toMatch(/^url\(#grad-fill-detail-/);
   });
 
   it('derives a tinted gradient for can top face when fillRef resolves to a theme gradient', () => {

@@ -1411,9 +1411,14 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
             } else if (presetLower === 'can' && mainPathFill.startsWith('url(')) {
               canHighlight = mainPathFill;
             }
+            const gradientHighlight =
+              presetLower === 'can'
+                ? undefined
+                : appendTintedGradientFill(0.3, { r: 255, g: 255, b: 255 });
             extraPath.setAttribute(
               'fill',
               canHighlight ||
+                gradientHighlight ||
                 (baseRgb
                   ? mixRgb(baseRgb, { r: 255, g: 255, b: 255 }, 0.3)
                   : 'rgba(255,255,255,0.3)'),
@@ -1780,8 +1785,12 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
               ...(hasSpAutoFit && !hasNormAutofit
                 ? {
                     trimOuterParagraphSpacing: true,
-                    compactSingleLineSpacing: true,
-                    defaultLineHeight: '1',
+                    ...(isSingleLineSpAutoFit
+                      ? {
+                          compactSingleLineSpacing: true,
+                          defaultLineHeight: '1',
+                        }
+                      : {}),
                   }
                 : {}),
             }
