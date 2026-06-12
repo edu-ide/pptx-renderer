@@ -309,6 +309,155 @@ function svgDashArrayForKind(dashKind: string, strokeWidth: number): string | nu
   }
 }
 
+function appendSvgPatternFill(
+  svgNs: string,
+  defs: SVGDefsElement,
+  pattFill: SafeXmlNode,
+  ctx: RenderContext,
+): string | null {
+  if (!pattFill.exists()) return null;
+
+  const preset = pattFill.attr('prst') ?? 'solid';
+  if (preset === 'solid' || preset === 'solidDmnd') return null;
+
+  const tile = 8;
+  const strokeWidth = 1;
+  const fgClr = pattFill.child('fgClr');
+  const bgClr = pattFill.child('bgClr');
+  const fg = fgClr.exists() ? resolveColorToCss(fgClr, ctx) : '#000000';
+  const bg = bgClr.exists() ? resolveColorToCss(bgClr, ctx) : '#ffffff';
+
+  const patternId = `shape-pattern-${++gradientIdCounter}`;
+  const pattern = document.createElementNS(svgNs, 'pattern');
+  pattern.setAttribute('id', patternId);
+  pattern.setAttribute('patternUnits', 'userSpaceOnUse');
+  pattern.setAttribute('width', String(tile));
+  pattern.setAttribute('height', String(tile));
+
+  const rect = document.createElementNS(svgNs, 'rect');
+  rect.setAttribute('width', String(tile));
+  rect.setAttribute('height', String(tile));
+  rect.setAttribute('fill', bg);
+  pattern.appendChild(rect);
+
+  let hasForeground = false;
+  const addLine = (x1: number, y1: number, x2: number, y2: number, dashArray?: string) => {
+    const line = document.createElementNS(svgNs, 'line');
+    line.setAttribute('x1', String(x1));
+    line.setAttribute('y1', String(y1));
+    line.setAttribute('x2', String(x2));
+    line.setAttribute('y2', String(y2));
+    line.setAttribute('stroke', fg);
+    line.setAttribute('stroke-width', String(strokeWidth));
+    if (dashArray) line.setAttribute('stroke-dasharray', dashArray);
+    pattern.appendChild(line);
+    hasForeground = true;
+  };
+  const addDot = (cx: number, cy: number, radius: number) => {
+    const dot = document.createElementNS(svgNs, 'circle');
+    dot.setAttribute('cx', String(cx));
+    dot.setAttribute('cy', String(cy));
+    dot.setAttribute('r', String(radius));
+    dot.setAttribute('fill', fg);
+    pattern.appendChild(dot);
+    hasForeground = true;
+  };
+
+  const lineOffset = strokeWidth / 2;
+  const dotRadius = strokeWidth;
+  const dashArray = `${strokeWidth * 3},${strokeWidth * 2}`;
+  let patternYOffset = 0;
+
+  switch (preset) {
+    case 'pct5':
+    case 'pct10':
+    case 'pct20':
+    case 'pct25':
+      addDot(tile / 2, tile / 2, dotRadius * 0.75);
+      break;
+    case 'pct30':
+    case 'pct40':
+    case 'pct50':
+    case 'dotGrid':
+    case 'dotDmnd':
+      addDot(tile / 2, tile / 2, dotRadius);
+      break;
+    case 'pct60':
+    case 'pct70':
+    case 'pct75':
+    case 'pct80':
+    case 'pct90':
+    case 'sphere':
+    case 'shingle':
+    case 'plaid':
+    case 'divot':
+    case 'zigZag':
+      addDot(tile / 2, tile / 2, dotRadius * 1.5);
+      break;
+    case 'horz':
+    case 'ltHorz':
+    case 'narHorz':
+    case 'dkHorz':
+      addLine(0, lineOffset, tile, lineOffset);
+      break;
+    case 'vert':
+    case 'ltVert':
+    case 'narVert':
+    case 'dkVert':
+      addLine(lineOffset, 0, lineOffset, tile);
+      break;
+    case 'dnDiag':
+    case 'ltDnDiag':
+    case 'narDnDiag':
+    case 'dkDnDiag':
+    case 'wdDnDiag':
+      addLine(0, tile, tile, 0);
+      break;
+    case 'upDiag':
+    case 'ltUpDiag':
+    case 'narUpDiag':
+    case 'dkUpDiag':
+    case 'wdUpDiag':
+      addLine(0, 0, tile, tile);
+      break;
+    case 'smGrid':
+    case 'lgGrid':
+    case 'cross':
+      patternYOffset = -3;
+      addLine(0, lineOffset, tile, lineOffset);
+      addLine(lineOffset, 0, lineOffset, tile);
+      break;
+    case 'smCheck':
+    case 'lgCheck':
+    case 'diagCross':
+    case 'openDmnd':
+    case 'trellis':
+    case 'weave':
+      addLine(0, tile, tile, 0);
+      addLine(0, 0, tile, tile);
+      break;
+    case 'dashHorz':
+      addLine(0, lineOffset, tile, lineOffset, dashArray);
+      break;
+    case 'dashVert':
+      addLine(lineOffset, 0, lineOffset, tile, dashArray);
+      break;
+    case 'dashDnDiag':
+      addLine(0, tile, tile, 0, dashArray);
+      break;
+    case 'dashUpDiag':
+      addLine(0, 0, tile, tile, dashArray);
+      break;
+    default:
+      return null;
+  }
+
+  if (!hasForeground) return null;
+  if (patternYOffset !== 0) pattern.setAttribute('y', String(patternYOffset));
+  defs.appendChild(pattern);
+  return patternId;
+}
+
 function parseCssColorToRgb(color: string): { r: number; g: number; b: number } | null {
   if (!color) return null;
   const hex = color.trim();
@@ -798,7 +947,14 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
 
       // Fill
       if (fillCss) {
-        if (gradientFillData && gradientFillData.stops.length > 0) {
+        const pattFill = spPr.child('pattFill');
+        const patternFillId = pattFill.exists()
+          ? appendSvgPatternFill(svgNs, defs, pattFill, ctx)
+          : null;
+
+        if (patternFillId) {
+          path.setAttribute('fill', `url(#${patternFillId})`);
+        } else if (gradientFillData && gradientFillData.stops.length > 0) {
           // Create SVG gradient definition for proper shape-clipped gradient fills
           const fillGradId = `grad-fill-${++gradientIdCounter}`;
 

@@ -2882,6 +2882,43 @@ describe('ShapeRenderer', () => {
     expect(el).toBeTruthy();
   });
 
+  it('renders cross pattFill as a shape-clipped SVG pattern with Office grid cadence', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="209" name="PatternCross"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="5080000" cy="3556000"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:pattFill prst="cross">
+            <a:fgClr><a:srgbClr val="000000"/></a:fgClr>
+            <a:bgClr><a:srgbClr val="FFFFFF"/></a:bgClr>
+          </a:pattFill>
+          <a:ln w="25400">
+            <a:solidFill><a:srgbClr val="000000"/></a:solidFill>
+            <a:prstDash val="dashDot"/>
+          </a:ln>
+        </p:spPr>
+      </p:sp>
+    `;
+    const shapeNode = parseShapeNode(parseXml(xml));
+    const el = renderShape(shapeNode, createMockRenderContext());
+
+    const pattern = el.querySelector('pattern');
+    const path = el.querySelector('path');
+    const patternLines = pattern?.querySelectorAll('line') ?? [];
+
+    expect(pattern).toBeTruthy();
+    expect(parseFloat(pattern?.getAttribute('width') ?? '0')).toBeCloseTo(8, 2);
+    expect(parseFloat(pattern?.getAttribute('height') ?? '0')).toBeCloseTo(8, 2);
+    expect(pattern?.getAttribute('y')).toBe('-3');
+    expect(pattern?.querySelector('rect')?.getAttribute('fill')).toMatch(/[Ff]{6}/);
+    expect(patternLines.length).toBe(2);
+    expect(path?.getAttribute('fill')).toBe(`url(#${pattern?.getAttribute('id')})`);
+    expect(path?.getAttribute('stroke-dasharray')).toBeTruthy();
+    expect(el.style.background).toBe('');
+  });
+
   it('renders connector shape (cxnSp) as straightConnector1', () => {
     const xml = `
       <p:cxnSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
