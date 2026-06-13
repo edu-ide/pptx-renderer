@@ -2801,6 +2801,48 @@ function buildScatterChartOption(
 // Bubble Chart
 // ---------------------------------------------------------------------------
 
+function applyBubbleAxisHeadroom(
+  axisDef: Record<string, unknown>,
+  values: number[],
+  bubbleSizes: number[],
+): void {
+  if (axisDef.max !== undefined || values.length === 0) return;
+
+  const finitePairs = values
+    .map((value, index) => ({ value, bubbleSize: bubbleSizes[index] ?? 0 }))
+    .filter(({ value }) => Number.isFinite(value));
+  if (finitePairs.length === 0) return;
+
+  const dataMin = Math.min(...finitePairs.map(({ value }) => value));
+  const dataMax = Math.max(...finitePairs.map(({ value }) => value));
+  const spanFromZero = dataMax - Math.min(0, dataMin);
+  const desiredTicks = spanFromZero <= 3 ? 3 : 8;
+  const interval = niceAxisInterval(dataMax, dataMin, desiredTicks);
+  let max = niceAxisMax(dataMax, dataMin, desiredTicks);
+  if (max > dataMax && max - dataMax < interval * 0.25) {
+    max += interval;
+  }
+
+  const maxBubbleSize = Math.max(...finitePairs.map(({ bubbleSize }) => bubbleSize));
+  const highEdgeBubbleSize = Math.max(
+    ...finitePairs
+      .filter(({ value }) => Math.abs(value - dataMax) < 1e-9)
+      .map(({ bubbleSize }) => bubbleSize),
+    0,
+  );
+  if (maxBubbleSize > 0 && highEdgeBubbleSize / maxBubbleSize >= 0.75) {
+    max += interval;
+  }
+
+  axisDef.max = max;
+  if (axisDef.min === undefined && dataMin >= 0) {
+    axisDef.min = 0;
+  }
+  if (axisDef.interval === undefined) {
+    axisDef.interval = interval;
+  }
+}
+
 function buildBubbleChartOption(
   chartTypeNode: SafeXmlNode,
   chartNode: SafeXmlNode,
@@ -2861,6 +2903,23 @@ function buildBubbleChartOption(
   const yAxisDef: Record<string, unknown> = { type: 'value' };
   applyAxisInfo(xAxisDef, xAxisInfo, 'value');
   applyAxisInfo(yAxisDef, yAxisInfo, 'value');
+  const bubblePoints = seriesArr.flatMap((s) =>
+    s.values.map((y, i) => ({
+      x: s.xValues && i < s.xValues.length ? s.xValues[i] : i,
+      y,
+      bubbleSize: s.bubbleSizes && i < s.bubbleSizes.length ? s.bubbleSizes[i] : 0,
+    })),
+  );
+  applyBubbleAxisHeadroom(
+    xAxisDef,
+    bubblePoints.map((point) => point.x),
+    bubblePoints.map((point) => point.bubbleSize),
+  );
+  applyBubbleAxisHeadroom(
+    yAxisDef,
+    bubblePoints.map((point) => point.y),
+    bubblePoints.map((point) => point.bubbleSize),
+  );
 
   return {
     title: title
@@ -2882,7 +2941,7 @@ function buildBubbleChartOption(
       legendOpt,
       legendInfo,
       legendTopPx,
-      seriesArr.map((s) => s.name),
+      seriesArr.map((s) => ({ name: s.name, icon: 'circle' })),
       legendTextStyle,
     ),
     grid: {

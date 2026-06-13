@@ -4562,6 +4562,40 @@ describe('ChartRenderer', () => {
       expect(series[0].symbolSize([0, 0, 15])).toBeCloseTo(77.4597, 3);
       expect(series[0].symbolSize([0, 0, 25])).toBeCloseTo(100, 3);
     });
+
+    it('adds top axis headroom for large edge bubbles (oracle-pypptx-chart-0020)', () => {
+      const xml = `
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <c:chart>
+            <c:plotArea>
+              <c:bubbleChart>
+                <c:ser>
+                  <c:idx val="0"/><c:order val="0"/>
+                  <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Markets</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                  <c:xVal><c:numRef><c:numCache><c:ptCount val="4"/><c:pt idx="0"><c:v>1.5</c:v></c:pt><c:pt idx="1"><c:v>3.0</c:v></c:pt><c:pt idx="2"><c:v>5.0</c:v></c:pt><c:pt idx="3"><c:v>2.5</c:v></c:pt></c:numCache></c:numRef></c:xVal>
+                  <c:yVal><c:numRef><c:numCache><c:ptCount val="4"/><c:pt idx="0"><c:v>2.5</c:v></c:pt><c:pt idx="1"><c:v>4.0</c:v></c:pt><c:pt idx="2"><c:v>1.5</c:v></c:pt><c:pt idx="3"><c:v>3.5</c:v></c:pt></c:numCache></c:numRef></c:yVal>
+                  <c:bubbleSize><c:numRef><c:numCache><c:ptCount val="4"/><c:pt idx="0"><c:v>10</c:v></c:pt><c:pt idx="1"><c:v>25</c:v></c:pt><c:pt idx="2"><c:v>15</c:v></c:pt><c:pt idx="3"><c:v>30</c:v></c:pt></c:numCache></c:numRef></c:bubbleSize>
+                </c:ser>
+                <c:bubbleScale val="100"/>
+                <c:axId val="1"/><c:axId val="2"/>
+              </c:bubbleChart>
+              <c:valAx><c:axId val="1"/><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/></c:valAx>
+              <c:valAx><c:axId val="2"/><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:crossAx val="1"/></c:valAx>
+            </c:plotArea>
+            <c:legend><c:legendPos val="r"/><c:layout/><c:overlay val="0"/></c:legend>
+          </c:chart>
+        </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const xAxis = option.xAxis as any;
+      const yAxis = option.yAxis as any;
+      expect(xAxis.max).toBe(6);
+      expect(xAxis.interval).toBe(1);
+      expect(yAxis.max).toBe(5);
+      expect(yAxis.interval).toBe(0.5);
+      expect((option.legend as any).icon).toBe('circle');
+    });
   });
 
   // ==========================================================================
