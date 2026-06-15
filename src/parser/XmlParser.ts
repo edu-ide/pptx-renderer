@@ -13,7 +13,32 @@ export class SafeXmlNode {
   /** Get a string attribute value, or undefined if missing. */
   attr(name: string): string | undefined {
     if (!this.el) return undefined;
-    return this.el.hasAttribute(name) ? this.el.getAttribute(name)! : undefined;
+    if (this.el.hasAttribute(name)) return this.el.getAttribute(name)!;
+
+    const colonIndex = name.indexOf(':');
+    const localName = colonIndex >= 0 ? name.slice(colonIndex + 1) : name;
+    const namespaceUri =
+      colonIndex >= 0 ? this.resolveAttributeNamespace(name.slice(0, colonIndex)) : undefined;
+
+    for (let i = 0; i < this.el.attributes.length; i++) {
+      const attr = this.el.attributes[i];
+      if (attr.localName !== localName) continue;
+      if (colonIndex < 0) return attr.value;
+      if (namespaceUri ? attr.namespaceURI === namespaceUri : attr.namespaceURI !== null) {
+        return attr.value;
+      }
+    }
+
+    return undefined;
+  }
+
+  private resolveAttributeNamespace(prefix: string): string | undefined {
+    return (
+      this.el?.lookupNamespaceURI(prefix) ??
+      (prefix === 'r'
+        ? 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+        : undefined)
+    );
   }
 
   /** Get a numeric attribute value, or undefined if missing or not a number. */

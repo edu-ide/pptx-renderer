@@ -73,6 +73,31 @@ describe('parsePicNode', () => {
     expect(node.size.w).toBeGreaterThan(0);
   });
 
+  it('parses blip embed relationship attributes when the relationship prefix is not r', () => {
+    const node = parsePicNode(
+      parseXml(`
+        <pic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+             xmlns:rel="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <nvPicPr>
+            <cNvPr id="5" name="Picture 1"/>
+            <nvPr/>
+          </nvPicPr>
+          <blipFill>
+            <blip rel:embed="rIdAlt"/>
+          </blipFill>
+          <spPr>
+            <xfrm>
+              <off x="914400" y="914400"/>
+              <ext cx="1828800" cy="1371600"/>
+            </xfrm>
+          </spPr>
+        </pic>
+      `),
+    );
+
+    expect(node.blipEmbed).toBe('rIdAlt');
+  });
+
   it('parses crop rect', () => {
     const node = parsePicNode(
       makePicXml({

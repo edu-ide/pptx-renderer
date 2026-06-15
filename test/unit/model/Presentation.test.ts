@@ -275,6 +275,49 @@ describe('buildPresentation', () => {
     expect(pres.slides[1].index).toBe(1);
   });
 
+  it('preserves sldIdLst ordering when relationship attributes use a non-r prefix', () => {
+    const presXml = `
+      <Presentation xmlns:rel="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+        <sldSz cx="9144000" cy="6858000"/>
+        <sldIdLst>
+          <sldId id="256" rel:id="rId10"/>
+          <sldId id="257" rel:id="rId2"/>
+        </sldIdLst>
+      </Presentation>
+    `;
+    const presRels = `
+      <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+        <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide2.xml"/>
+        <Relationship Id="rId10" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide10.xml"/>
+      </Relationships>
+    `;
+    const slideRels = `
+      <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+        <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>
+      </Relationships>
+    `;
+
+    const pres = buildPresentation(
+      makeMinimalFiles({
+        presentation: presXml,
+        presentationRels: presRels,
+        slides: new Map([
+          ['ppt/slides/slide2.xml', '<sld><cSld><spTree/></cSld></sld>'],
+          ['ppt/slides/slide10.xml', '<sld><cSld><spTree/></cSld></sld>'],
+        ]),
+        slideRels: new Map([
+          ['ppt/slides/_rels/slide2.xml.rels', slideRels],
+          ['ppt/slides/_rels/slide10.xml.rels', slideRels],
+        ]),
+      }),
+    );
+
+    expect(pres.slides.map((slide) => slide.slidePath)).toEqual([
+      'ppt/slides/slide10.xml',
+      'ppt/slides/slide2.xml',
+    ]);
+  });
+
   it('detects WPS format', () => {
     const files = makeMinimalFiles({
       presentation: `
