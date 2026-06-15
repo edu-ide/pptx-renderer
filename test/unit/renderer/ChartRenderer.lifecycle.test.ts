@@ -204,9 +204,7 @@ describe('ChartRenderer chartInstances lifecycle', () => {
   it('registers ECharts instance into chartInstances set', () => {
     const chartInstances = new Set<ECharts>();
     const ctx = createMockRenderContext({ chartInstances });
-    ctx.presentation.charts = new Map([
-      ['ppt/charts/chart1.xml', parseXml(buildSimpleChartXml())],
-    ]);
+    ctx.presentation.charts = new Map([['ppt/charts/chart1.xml', parseXml(buildSimpleChartXml())]]);
 
     const wrapper = renderChart(makeChartNode(), ctx);
     document.body.appendChild(wrapper);
@@ -223,12 +221,88 @@ describe('ChartRenderer chartInstances lifecycle', () => {
     document.body.removeChild(wrapper);
   });
 
+  it('initializes chart when ResizeObserver is unavailable', () => {
+    const originalResizeObserver = window.ResizeObserver;
+    const chartInstances = new Set<ECharts>();
+    const ctx = createMockRenderContext({ chartInstances });
+    ctx.presentation.charts = new Map([['ppt/charts/chart1.xml', parseXml(buildSimpleChartXml())]]);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      delete (window as any).ResizeObserver;
+
+      const wrapper = renderChart(makeChartNode(), ctx);
+      document.body.appendChild(wrapper);
+
+      const chartDiv = wrapper.querySelector('div') as HTMLElement;
+      Object.defineProperty(chartDiv, 'offsetWidth', { value: 400, configurable: true });
+      Object.defineProperty(chartDiv, 'offsetHeight', { value: 300, configurable: true });
+
+      for (const cb of rafCallbacks) cb();
+
+      expect(mockChartInstance.setOption).toHaveBeenCalled();
+      expect(chartInstances.has(mockChartInstance as any)).toBe(true);
+      expect(wrapper.textContent).not.toBe('Chart render error');
+      expect(warnSpy).not.toHaveBeenCalled();
+
+      document.body.removeChild(wrapper);
+    } finally {
+      if (originalResizeObserver) {
+        window.ResizeObserver = originalResizeObserver;
+      } else {
+        delete (window as any).ResizeObserver;
+      }
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('does not initialize deferred chart after the container is removed', () => {
+    const originalResizeObserver = window.ResizeObserver;
+    const chartInstances = new Set<ECharts>();
+    const ctx = createMockRenderContext({ chartInstances });
+    ctx.presentation.charts = new Map([['ppt/charts/chart1.xml', parseXml(buildSimpleChartXml())]]);
+    let roCallback: ResizeObserverCallback | undefined;
+    const disconnectSpy = vi.fn();
+
+    (window as any).ResizeObserver = class {
+      constructor(callback: ResizeObserverCallback) {
+        roCallback = callback;
+      }
+      observe = vi.fn();
+      disconnect = disconnectSpy;
+    };
+
+    try {
+      const wrapper = renderChart(makeChartNode(), ctx);
+      document.body.appendChild(wrapper);
+
+      const chartDiv = wrapper.querySelector('div') as HTMLElement;
+      Object.defineProperty(chartDiv, 'offsetWidth', { value: 0, configurable: true });
+      Object.defineProperty(chartDiv, 'offsetHeight', { value: 0, configurable: true });
+
+      for (const cb of rafCallbacks) cb();
+      document.body.removeChild(wrapper);
+      roCallback?.(
+        [{ contentRect: { width: 400, height: 300 } } as ResizeObserverEntry],
+        {} as any,
+      );
+
+      expect(disconnectSpy).toHaveBeenCalled();
+      expect(mockChartInstance.setOption).not.toHaveBeenCalled();
+      expect(chartInstances.size).toBe(0);
+    } finally {
+      if (originalResizeObserver) {
+        window.ResizeObserver = originalResizeObserver;
+      } else {
+        delete (window as any).ResizeObserver;
+      }
+    }
+  });
+
   it('registered instances can be disposed via set iteration (disposeAllCharts pattern)', () => {
     const chartInstances = new Set<ECharts>();
     const ctx = createMockRenderContext({ chartInstances });
-    ctx.presentation.charts = new Map([
-      ['ppt/charts/chart1.xml', parseXml(buildSimpleChartXml())],
-    ]);
+    ctx.presentation.charts = new Map([['ppt/charts/chart1.xml', parseXml(buildSimpleChartXml())]]);
 
     const wrapper = renderChart(makeChartNode(), ctx);
     document.body.appendChild(wrapper);
@@ -254,9 +328,7 @@ describe('ChartRenderer chartInstances lifecycle', () => {
 
   it('does not register when chartInstances is undefined', () => {
     const ctx = createMockRenderContext(); // no chartInstances
-    ctx.presentation.charts = new Map([
-      ['ppt/charts/chart1.xml', parseXml(buildSimpleChartXml())],
-    ]);
+    ctx.presentation.charts = new Map([['ppt/charts/chart1.xml', parseXml(buildSimpleChartXml())]]);
 
     const wrapper = renderChart(makeChartNode(), ctx);
     document.body.appendChild(wrapper);
@@ -313,7 +385,9 @@ describe('ChartRenderer chartInstances lifecycle', () => {
 
     for (const cb of rafCallbacks) cb();
 
-    const iconPath = wrapper.querySelector('.pptx-chart-custom-legend svg path') as SVGPathElement | null;
+    const iconPath = wrapper.querySelector(
+      '.pptx-chart-custom-legend svg path',
+    ) as SVGPathElement | null;
     expect(iconPath).not.toBeNull();
     expect(iconPath?.getAttribute('stroke-width')).toBe('3');
 

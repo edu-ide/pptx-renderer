@@ -407,13 +407,27 @@
         } catch (e) {
           console.error('Render failed:', e);
           showError(`Render failed: ${e.message || e}`);
-          container.innerHTML = `<div class="empty-state"><p style="color:#e94560">Failed to render PPTX</p><small>${e.message || e}</small></div>`;
+          renderEmptyStateError(e);
         }
       }
 
       function showError(msg) {
         errorBanner.textContent = msg;
         errorBanner.style.display = msg ? 'block' : 'none';
+      }
+
+      function renderEmptyStateError(e) {
+        const message = e && typeof e === 'object' && 'message' in e ? e.message : String(e);
+        container.innerHTML = '';
+        const state = document.createElement('div');
+        state.className = 'empty-state';
+        const title = document.createElement('p');
+        title.style.color = '#e94560';
+        title.textContent = 'Failed to render PPTX';
+        const detail = document.createElement('small');
+        detail.textContent = message;
+        state.append(title, detail);
+        container.appendChild(state);
       }
 
       function resetSidePanel() {

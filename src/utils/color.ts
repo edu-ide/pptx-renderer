@@ -230,6 +230,64 @@ export function applySatOff(hex: string, satOff: number): string {
   return rgbToHex(rgb.r, rgb.g, rgb.b);
 }
 
+function pctToChannel(val: number): number {
+  return (val / 100000) * 255;
+}
+
+function applyChannelValue(
+  hex: string,
+  channel: 'r' | 'g' | 'b',
+  transform: (current: number) => number,
+): string {
+  const rgb = hexToRgb(hex);
+  rgb[channel] = transform(rgb[channel]);
+  return rgbToHex(rgb.r, rgb.g, rgb.b);
+}
+
+function applyRgbMod(hex: string, channel: 'r' | 'g' | 'b', val: number): string {
+  return applyChannelValue(hex, channel, (current) => current * (val / 100000));
+}
+
+function applyRgbOff(hex: string, channel: 'r' | 'g' | 'b', val: number): string {
+  return applyChannelValue(hex, channel, (current) => current + pctToChannel(val));
+}
+
+function applyRgbAbs(hex: string, channel: 'r' | 'g' | 'b', val: number): string {
+  return applyChannelValue(hex, channel, () => pctToChannel(val));
+}
+
+function applyLumAbs(hex: string, lum: number): string {
+  const { r, g, b } = hexToRgb(hex);
+  const { h, s } = rgbToHsl(r, g, b);
+  const rgb = hslToRgb(h, s, lum / 100000);
+  return rgbToHex(rgb.r, rgb.g, rgb.b);
+}
+
+function applySatAbs(hex: string, sat: number): string {
+  const { r, g, b } = hexToRgb(hex);
+  const { h, l } = rgbToHsl(r, g, b);
+  const rgb = hslToRgb(h, sat / 100000, l);
+  return rgbToHex(rgb.r, rgb.g, rgb.b);
+}
+
+function applyHueAbs(hex: string, hue: number): string {
+  const { r, g, b } = hexToRgb(hex);
+  const { s, l } = rgbToHsl(r, g, b);
+  const rgb = hslToRgb(hue / 60000, s, l);
+  return rgbToHex(rgb.r, rgb.g, rgb.b);
+}
+
+function applyInvert(hex: string): string {
+  const { r, g, b } = hexToRgb(hex);
+  return rgbToHex(255 - r, 255 - g, 255 - b);
+}
+
+function applyGray(hex: string): string {
+  const { r, g, b } = hexToRgb(hex);
+  const gray = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return rgbToHex(gray, gray, gray);
+}
+
 /**
  * Convert OOXML alpha value (0-100000) to CSS opacity (0-1).
  * 100000 = fully opaque, 0 = fully transparent.
@@ -260,45 +318,81 @@ export function applyColorModifiers(
   let alpha = 1;
 
   for (const mod of modifiers) {
-    switch (mod.name) {
+    const name = mod.name.startsWith('a:') ? mod.name.slice(2) : mod.name;
+    switch (name) {
       case 'tint':
-      case 'a:tint':
         color = applyTint(color, mod.val);
         break;
       case 'shade':
-      case 'a:shade':
         color = applyShade(color, mod.val);
         break;
+      case 'red':
+        color = applyRgbAbs(color, 'r', mod.val);
+        break;
+      case 'green':
+        color = applyRgbAbs(color, 'g', mod.val);
+        break;
+      case 'blue':
+        color = applyRgbAbs(color, 'b', mod.val);
+        break;
+      case 'redMod':
+        color = applyRgbMod(color, 'r', mod.val);
+        break;
+      case 'greenMod':
+        color = applyRgbMod(color, 'g', mod.val);
+        break;
+      case 'blueMod':
+        color = applyRgbMod(color, 'b', mod.val);
+        break;
+      case 'redOff':
+        color = applyRgbOff(color, 'r', mod.val);
+        break;
+      case 'greenOff':
+        color = applyRgbOff(color, 'g', mod.val);
+        break;
+      case 'blueOff':
+        color = applyRgbOff(color, 'b', mod.val);
+        break;
+      case 'lum':
+        color = applyLumAbs(color, mod.val);
+        break;
       case 'lumMod':
-      case 'a:lumMod':
         color = applyLumMod(color, mod.val);
         break;
       case 'lumOff':
-      case 'a:lumOff':
         color = applyLumOff(color, mod.val);
         break;
+      case 'sat':
+        color = applySatAbs(color, mod.val);
+        break;
       case 'satMod':
-      case 'a:satMod':
         color = applySatMod(color, mod.val);
         break;
+      case 'hue':
+        color = applyHueAbs(color, mod.val);
+        break;
       case 'hueMod':
-      case 'a:hueMod':
         color = applyHueMod(color, mod.val);
         break;
       case 'hueOff':
-      case 'a:hueOff':
         color = applyHueOff(color, mod.val);
         break;
       case 'satOff':
-      case 'a:satOff':
         color = applySatOff(color, mod.val);
         break;
+      case 'inv':
+        color = applyInvert(color);
+        break;
+      case 'gray':
+        color = applyGray(color);
+        break;
       case 'alpha':
-      case 'a:alpha':
         alpha = applyAlpha(mod.val);
         break;
+      case 'alphaMod':
+        alpha = Math.max(0, Math.min(1, alpha * (mod.val / 100000)));
+        break;
       case 'alphaOff':
-      case 'a:alphaOff':
         alpha = Math.max(0, Math.min(1, alpha + mod.val / 100000));
         break;
       default:

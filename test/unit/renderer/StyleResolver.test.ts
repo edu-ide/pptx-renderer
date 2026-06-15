@@ -114,6 +114,32 @@ describe('resolveColor', () => {
       // Shade moves toward black
       expect(result.color).not.toMatch(/[Ff][Ff][Ff][Ff][Ff][Ff]/);
     });
+
+    it('collects val-less inv modifier from color XML', () => {
+      const ctx = createMockRenderContext();
+      const node = xmlNode(`<solidFill>
+        <srgbClr val="123456">
+          <inv/>
+        </srgbClr>
+      </solidFill>`);
+
+      const result = resolveColor(node, ctx);
+
+      expect(result.color).toBe('#edcba9');
+    });
+
+    it('collects val-less gray modifier from color XML', () => {
+      const ctx = createMockRenderContext();
+      const node = xmlNode(`<solidFill>
+        <srgbClr val="FF0000">
+          <gray/>
+        </srgbClr>
+      </solidFill>`);
+
+      const result = resolveColor(node, ctx);
+
+      expect(result.color).toBe('#363636');
+    });
   });
 
   describe('caching', () => {
@@ -291,7 +317,9 @@ describe('resolveLineStyle', () => {
 
   it('resolves dashed line', () => {
     const ctx = createMockRenderContext();
-    const node = xmlNode(`<ln w="12700"><solidFill><srgbClr val="000000"/></solidFill><prstDash val="dash"/></ln>`);
+    const node = xmlNode(
+      `<ln w="12700"><solidFill><srgbClr val="000000"/></solidFill><prstDash val="dash"/></ln>`,
+    );
     const result = resolveLineStyle(node, ctx);
     expect(result.dash).toBe('dashed');
   });
@@ -306,7 +334,9 @@ describe('resolveLineStyle', () => {
 
   it('resolves dotted line', () => {
     const ctx = createMockRenderContext();
-    const node = xmlNode(`<ln w="12700"><solidFill><srgbClr val="000000"/></solidFill><prstDash val="dot"/></ln>`);
+    const node = xmlNode(
+      `<ln w="12700"><solidFill><srgbClr val="000000"/></solidFill><prstDash val="dot"/></ln>`,
+    );
     const result = resolveLineStyle(node, ctx);
     expect(result.dash).toBe('dotted');
   });
@@ -315,7 +345,9 @@ describe('resolveLineStyle', () => {
     const ctx = createMockRenderContext({
       theme: {
         ...createMockRenderContext().theme,
-        lineStyles: [xmlNode('<ln w="38100"><solidFill><schemeClr val="accent1"/></solidFill></ln>')],
+        lineStyles: [
+          xmlNode('<ln w="38100"><solidFill><schemeClr val="accent1"/></solidFill></ln>'),
+        ],
       },
     });
     const ln = xmlNode('<ln><solidFill><srgbClr val="FF0000"/></solidFill></ln>');
@@ -493,9 +525,7 @@ describe('resolveColorToCss', () => {
 
   it('returns rgba string for fully transparent color (alpha=0)', () => {
     const ctx = createMockRenderContext();
-    const node = xmlNode(
-      `<solidFill><srgbClr val="000000"><alpha val="0"/></srgbClr></solidFill>`,
-    );
+    const node = xmlNode(`<solidFill><srgbClr val="000000"><alpha val="0"/></srgbClr></solidFill>`);
     const result = resolveColorToCss(node, ctx);
     expect(result).toMatch(/^rgba\(/);
     expect(result).toContain('0.000');
@@ -1170,9 +1200,7 @@ describe('resolveGradientFill', () => {
 describe('resolveGradientStroke', () => {
   it('returns null when ln has no gradFill', () => {
     const ctx = createMockRenderContext();
-    const node = xmlNode(
-      `<ln w="12700"><solidFill><srgbClr val="FF0000"/></solidFill></ln>`,
-    );
+    const node = xmlNode(`<ln w="12700"><solidFill><srgbClr val="FF0000"/></solidFill></ln>`);
     const result = resolveGradientStroke(node, ctx);
     expect(result).toBeNull();
   });
@@ -1335,9 +1363,7 @@ describe('resolveColor — unrecognized child elements are skipped', () => {
   it('skips unrecognized child tags and falls back to black when all children are unknown', () => {
     const ctx = createMockRenderContext();
     // The solidFill wrapper has a child that is not a recognized color type
-    const node = xmlNode(
-      `<solidFill><unknownColorType val="FF0000"/></solidFill>`,
-    );
+    const node = xmlNode(`<solidFill><unknownColorType val="FF0000"/></solidFill>`);
     const result = resolveColor(node, ctx);
     // Should fall through all children and reach the selfTag checks, then return black
     expect(result.color).toBe('#000000');

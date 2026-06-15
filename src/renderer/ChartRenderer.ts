@@ -4582,25 +4582,49 @@ export function renderChart(node: ChartNodeData, ctx: RenderContext): HTMLElemen
     wrapper.appendChild(tableEl);
   }
 
+  const chartSet = ctx.chartInstances;
+
   // Initialize ECharts after the element is attached to the DOM.
   // Use requestAnimationFrame to ensure the container has dimensions.
-  const chartSet = ctx.chartInstances;
-  requestAnimationFrame(() => {
-    if (!chartDiv.isConnected) return;
-    // Guard against 0-size containers (e.g. hidden tabs); defer until non-zero.
-    if (chartDiv.offsetWidth === 0 || chartDiv.offsetHeight === 0) {
-      const sizeObserver = new ResizeObserver((entries) => {
-        const { width, height } = entries[0].contentRect;
-        if (width > 0 && height > 0) {
-          sizeObserver.disconnect();
-          initChart(chartDiv, option, chartSet);
+  const chartReady = new Promise<void>((resolve) => {
+    const finishInit = (): void => {
+      initChart(chartDiv, option, chartSet);
+      resolve();
+    };
+
+    requestAnimationFrame(() => {
+      if (!chartDiv.isConnected) {
+        resolve();
+        return;
+      }
+
+      // Guard against 0-size containers (e.g. hidden tabs); defer until non-zero.
+      if (chartDiv.offsetWidth === 0 || chartDiv.offsetHeight === 0) {
+        if (typeof ResizeObserver === 'undefined') {
+          finishInit();
+          return;
         }
-      });
-      sizeObserver.observe(chartDiv);
-      return;
-    }
-    initChart(chartDiv, option, chartSet);
+
+        const sizeObserver = new ResizeObserver((entries) => {
+          if (!chartDiv.isConnected) {
+            sizeObserver.disconnect();
+            return;
+          }
+          const { width, height } = entries[0]?.contentRect ?? { width: 0, height: 0 };
+          if (width > 0 && height > 0) {
+            sizeObserver.disconnect();
+            finishInit();
+          }
+        });
+        sizeObserver.observe(chartDiv);
+        resolve();
+        return;
+      }
+
+      finishInit();
+    });
   });
+  ctx.asyncTasks?.push(chartReady);
 
   return wrapper;
 }
@@ -4615,6 +4639,10 @@ function initChart(
     const chart = echarts.init(container);
     chart.setOption(option);
     chartInstances?.add(chart);
+
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
 
     // Handle container resize
     const ro = new ResizeObserver(() => {

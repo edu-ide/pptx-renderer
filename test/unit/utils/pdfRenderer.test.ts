@@ -208,6 +208,7 @@ describe('pdfRenderer', () => {
         .spyOn(URL, 'createObjectURL')
         .mockReturnValueOnce('blob:renderer-worker')
         .mockReturnValueOnce('blob:rendered-pdf');
+      const revokeObjectUrlSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
 
       const mod = await import('../../../src/utils/pdfRenderer');
       const result = await mod.renderPdfToImage(new Uint8Array([0x25, 0x50, 0x44, 0x46]), 32, 24, {
@@ -218,8 +219,11 @@ describe('pdfRenderer', () => {
       expect(result).toBe('blob:rendered-pdf');
       expect(postedMessage?.pdfjsUrl).toBe('/assets/pdf.min.mjs');
       expect(postedMessage?.pdfWorkerUrl).toBe('/assets/pdf.worker.min.mjs');
+      expect(revokeObjectUrlSpy).toHaveBeenCalledWith('blob:renderer-worker');
+      expect(revokeObjectUrlSpy).not.toHaveBeenCalledWith('blob:rendered-pdf');
 
       createObjectUrlSpy.mockRestore();
+      revokeObjectUrlSpy.mockRestore();
     } finally {
       Object.defineProperty(globalThis, 'Worker', {
         configurable: true,

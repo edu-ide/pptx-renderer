@@ -95,6 +95,90 @@ describe('renderImage', () => {
     });
   });
 
+  describe('blipFill tile mode', () => {
+    it('renders picture tile fills as a repeated clipped background instead of stretching one img', () => {
+      const ctx = createCtxWithMedia();
+      const source = xmlNode(
+        `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <nvPicPr><cNvPr id="1" name="pic"/><nvPr/></nvPicPr>
+          <blipFill>
+            <blip r:embed="rId1"/>
+            <tile tx="0" ty="0" sx="100000" sy="100000" flip="none" algn="tl"/>
+          </blipFill>
+          <spPr><xfrm><off x="0" y="0"/><ext cx="0" cy="0"/></xfrm></spPr>
+        </pic>`,
+      );
+      const node = createPicNode({ source });
+
+      const el = renderImage(node, ctx);
+
+      expect(el.style.backgroundImage).toMatch(/^url\(/);
+      expect(el.style.backgroundRepeat).toBe('repeat');
+      expect(el.style.backgroundSize).toBe('auto');
+      expect(el.querySelector('img')).toBeNull();
+    });
+  });
+
+  describe('blipFill stretch fillRect', () => {
+    it('honors non-zero stretch fillRect insets for picture images', () => {
+      const ctx = createCtxWithMedia();
+      const source = xmlNode(
+        `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <nvPicPr><cNvPr id="1" name="pic"/><nvPr/></nvPicPr>
+          <blipFill>
+            <blip r:embed="rId1"/>
+            <stretch><fillRect l="25000" t="10000" r="25000" b="10000"/></stretch>
+          </blipFill>
+          <spPr><xfrm><off x="0" y="0"/><ext cx="0" cy="0"/></xfrm></spPr>
+        </pic>`,
+      );
+      const node = createPicNode({ source });
+
+      const el = renderImage(node, ctx);
+      const img = el.querySelector('img')!;
+
+      expect(img.style.position).toBe('absolute');
+      expect(img.style.left).toBe('25%');
+      expect(img.style.top).toBe('10%');
+      expect(img.style.width).toBe('50%');
+      expect(img.style.height).toBe('80%');
+    });
+
+    it('combines srcRect crop scaling with stretch fillRect destination insets', () => {
+      const ctx = createCtxWithMedia();
+      const source = xmlNode(
+        `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <nvPicPr><cNvPr id="1" name="pic"/><nvPr/></nvPicPr>
+          <blipFill>
+            <blip r:embed="rId1"/>
+            <srcRect l="10000" t="20000" r="10000" b="20000"/>
+            <stretch><fillRect l="25000" t="10000" r="25000" b="10000"/></stretch>
+          </blipFill>
+          <spPr><xfrm><off x="0" y="0"/><ext cx="0" cy="0"/></xfrm></spPr>
+        </pic>`,
+      );
+      const node = createPicNode({
+        source,
+        size: { w: 200, h: 100 },
+        crop: { left: 0.1, right: 0.1, top: 0.2, bottom: 0.2 },
+      });
+
+      const el = renderImage(node, ctx);
+      const img = el.querySelector('img')!;
+
+      expect(img.style.position).toBe('absolute');
+      expect(img.style.left).toBe('25%');
+      expect(img.style.top).toBe('10%');
+      expect(parseFloat(img.style.width)).toBeCloseTo(125, 1);
+      expect(parseFloat(img.style.height)).toBeCloseTo(133.333, 1);
+      expect(parseFloat(img.style.marginLeft)).toBeCloseTo(-12.5, 1);
+      expect(parseFloat(img.style.marginTop)).toBeCloseTo(-26.667, 1);
+    });
+  });
+
   describe('picture shape properties', () => {
     it('renders the picture background fill from spPr solidFill', () => {
       const ctx = createCtxWithMedia();
@@ -158,6 +242,56 @@ describe('renderImage', () => {
 
       expect(el.style.borderStyle).toBe('');
       expect(el.style.borderWidth).toBe('');
+    });
+
+    it('renders picture pattern fill as stable background longhands', () => {
+      const ctx = createCtxWithMedia();
+      const source = xmlNode(
+        `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <nvPicPr><cNvPr id="1" name="pic"/><nvPr/></nvPicPr>
+          <blipFill><blip r:embed="rId1"/></blipFill>
+          <spPr>
+            <xfrm><off x="0" y="0"/><ext cx="0" cy="0"/></xfrm>
+            <pattFill prst="pct20">
+              <fgClr><srgbClr val="000000"/></fgClr>
+              <bgClr><srgbClr val="FFFFFF"/></bgClr>
+            </pattFill>
+          </spPr>
+        </pic>`,
+      );
+      const node = createPicNode({ source });
+
+      const el = renderImage(node, ctx);
+
+      expect(el.style.backgroundImage).toContain('radial-gradient');
+      expect(el.style.backgroundSize).toBe('8px 8px');
+      expect(el.style.backgroundRepeat).toBe('repeat');
+    });
+
+    it('renders picture outline from p:style lnRef when spPr has no explicit ln', () => {
+      const ctx = createCtxWithMedia();
+      ctx.theme.lineStyles = [
+        xmlNode('<ln w="25400"><solidFill><schemeClr val="accent1"/></solidFill></ln>') as never,
+      ];
+      const source = xmlNode(
+        `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <nvPicPr><cNvPr id="1" name="pic"/><nvPr/></nvPicPr>
+          <blipFill><blip r:embed="rId1"/></blipFill>
+          <spPr><xfrm><off x="0" y="0"/><ext cx="0" cy="0"/></xfrm></spPr>
+          <style>
+            <lnRef idx="1"><schemeClr val="accent1"/></lnRef>
+          </style>
+        </pic>`,
+      );
+      const node = createPicNode({ source, line: undefined });
+
+      const el = renderImage(node, ctx);
+
+      expect(el.style.borderStyle).toBe('solid');
+      expect(el.style.borderColor).toBe('rgb(68, 114, 196)');
+      expect(parseFloat(el.style.borderWidth)).toBeGreaterThan(2);
     });
 
     it('applies picture outer shadow from spPr effectLst', () => {

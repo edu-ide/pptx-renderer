@@ -137,10 +137,20 @@
           slideSelect.value = String(idx);
           await showSlide(idx);
         } catch (e) {
-          container.innerHTML = `<div class="loading" style="color:#e94560">${e.message}</div>`;
+          renderLoadError(e);
           statusEl.textContent = `Error: ${e.message}`;
           console.error(e);
         }
+      }
+
+      function renderLoadError(e) {
+        const message = e && typeof e === 'object' && 'message' in e ? e.message : String(e);
+        container.innerHTML = '';
+        const box = document.createElement('div');
+        box.className = 'loading';
+        box.style.color = '#e94560';
+        box.textContent = message;
+        container.appendChild(box);
       }
 
       async function showSlide(idx) {

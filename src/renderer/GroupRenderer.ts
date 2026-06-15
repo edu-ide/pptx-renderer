@@ -6,6 +6,8 @@ import { GroupNodeData } from '../model/nodes/GroupNode';
 import { RenderContext } from './RenderContext';
 import { BaseNodeData } from '../model/nodes/BaseNode';
 import type { ShapeNodeData } from '../model/nodes/ShapeNode';
+import { parseRenderableChild } from '../model/RenderableChild';
+import { resolveNodePlaceholderInheritance } from '../model/Presentation';
 import { emuToPx } from '../parser/units';
 import { SafeXmlNode } from '../parser/XmlParser';
 import { hexToRgb } from '../utils/color';
@@ -159,7 +161,7 @@ export function renderGroup(
   const parsedChildren = new Map<number, BaseNodeData | undefined>();
   const parseByIndex = (index: number): BaseNodeData | undefined => {
     if (!parsedChildren.has(index)) {
-      parsedChildren.set(index, parseGroupChild(node.children[index], ctx));
+      parsedChildren.set(index, parseGroupChild(node.children[index], ctx, node));
     }
     return parsedChildren.get(index);
   };
@@ -275,53 +277,23 @@ export function renderGroup(
 // Child Node Parsing
 // ---------------------------------------------------------------------------
 
-// Import parsers for child dispatch
-import { parseShapeNode } from '../model/nodes/ShapeNode';
-import { parsePicNode } from '../model/nodes/PicNode';
-import { parseTableNode } from '../model/nodes/TableNode';
-import { parseGroupNode } from '../model/nodes/GroupNode';
-import { parseChartNode } from '../model/nodes/ChartNode';
-import { parseOleFrameAsPicture } from '../model/Slide';
-
-function isPlaceholderNode(node: SafeXmlNode): boolean {
-  for (const wrapper of ['nvSpPr', 'nvPicPr', 'nvGrpSpPr', 'nvGraphicFramePr', 'nvCxnSpPr']) {
-    const nv = node.child(wrapper);
-    if (nv.exists() && nv.child('nvPr').child('ph').exists()) return true;
-  }
-  return false;
-}
-
 /**
  * Parse a raw XML child node from a group's spTree into a typed node object.
  * Returns undefined for unrecognized or unsupported elements.
  */
-function parseGroupChild(childXml: SafeXmlNode, ctx: RenderContext): BaseNodeData | undefined {
-  if (ctx.skipPlaceholderChildren && isPlaceholderNode(childXml)) return undefined;
-
-  const tag = childXml.localName;
-
-  switch (tag) {
-    case 'sp':
-    case 'cxnSp':
-      return parseShapeNode(childXml);
-    case 'pic':
-      return parsePicNode(childXml);
-    case 'grpSp':
-      return parseGroupNode(childXml);
-    case 'graphicFrame': {
-      const graphic = childXml.child('graphic');
-      const graphicData = graphic.child('graphicData');
-      if (graphicData.child('tbl').exists()) {
-        return parseTableNode(childXml);
-      }
-      if ((graphicData.attr('uri') || '').includes('chart')) {
-        return parseChartNode(childXml, ctx.slide.rels, ctx.partPath ?? ctx.slide.slidePath ?? '');
-      }
-      const olePic = parseOleFrameAsPicture(childXml);
-      if (olePic) return olePic;
-      return undefined;
-    }
-    default:
-      return undefined;
+function parseGroupChild(
+  childXml: SafeXmlNode,
+  ctx: RenderContext,
+  parentGroup: GroupNodeData,
+): BaseNodeData | undefined {
+  const child = parseRenderableChild(childXml, {
+    rels: ctx.slide.rels,
+    partPath: ctx.partPath ?? ctx.slide.slidePath,
+    diagramDrawings: ctx.presentation.diagramDrawings,
+    skipPlaceholders: ctx.skipPlaceholderChildren,
+  });
+  if (child) {
+    resolveNodePlaceholderInheritance(child, ctx.layout, ctx.master, { parentGroup });
   }
+  return child;
 }

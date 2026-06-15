@@ -225,8 +225,10 @@ export class PptxViewer extends EventTarget {
    */
   load(presentation: PresentationData): void {
     this.renderGeneration++;
-    this.clearSearchHighlights();
+    this._isRendering = false;
+    this.unloadRenderedState();
     this.presentation = presentation;
+    this.currentSlide = 0;
     this.textIndexCache = null;
     this.setupAdaptiveResize();
   }
@@ -618,8 +620,13 @@ export class PptxViewer extends EventTarget {
   destroy(): void {
     this.renderGeneration++;
     this._isRendering = false;
-    this.clearSearchHighlights();
     this.teardownAdaptiveResize();
+    this.unloadRenderedState();
+    this.presentation = null;
+  }
+
+  private unloadRenderedState(): void {
+    this.clearSearchHighlights();
     this.cleanupScrollObserver?.();
     this.cleanupScrollObserver = undefined;
     this.cleanupListMount?.();
@@ -637,7 +644,6 @@ export class PptxViewer extends EventTarget {
     }
     this.mediaUrlCache.clear();
     this.container.innerHTML = '';
-    this.presentation = null;
     this.activeRenderMode = null;
   }
 

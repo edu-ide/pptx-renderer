@@ -7,11 +7,13 @@ function makeRels(entries: Array<[string, RelEntry]> = []): Map<string, RelEntry
   return new Map(entries);
 }
 
-function makeSlideXml(opts: {
-  bg?: string;
-  shapes?: string;
-  showMasterSp?: string;
-} = {}) {
+function makeSlideXml(
+  opts: {
+    bg?: string;
+    shapes?: string;
+    showMasterSp?: string;
+  } = {},
+) {
   const bgXml = opts.bg ? `<bg>${opts.bg}</bg>` : '';
   const shapes = opts.shapes ?? '';
   const showAttr = opts.showMasterSp !== undefined ? ` showMasterSp="${opts.showMasterSp}"` : '';
@@ -38,9 +40,13 @@ describe('parseSlide', () => {
   });
 
   it('parses background', () => {
-    const slide = parseSlide(makeSlideXml({
-      bg: '<bgPr><solidFill><srgbClr val="FF0000"/></solidFill></bgPr>',
-    }), 0, makeRels());
+    const slide = parseSlide(
+      makeSlideXml({
+        bg: '<bgPr><solidFill><srgbClr val="FF0000"/></solidFill></bgPr>',
+      }),
+      0,
+      makeRels(),
+    );
     expect(slide.background).toBeDefined();
   });
 
@@ -55,8 +61,9 @@ describe('parseSlide', () => {
   });
 
   it('parses sp as shape node', () => {
-    const slide = parseSlide(makeSlideXml({
-      shapes: `
+    const slide = parseSlide(
+      makeSlideXml({
+        shapes: `
         <sp>
           <nvSpPr><cNvPr id="2" name="Rect"/><nvPr/></nvSpPr>
           <spPr>
@@ -65,15 +72,19 @@ describe('parseSlide', () => {
           </spPr>
         </sp>
       `,
-    }), 0, makeRels());
+      }),
+      0,
+      makeRels(),
+    );
     expect(slide.nodes).toHaveLength(1);
     expect(slide.nodes[0].nodeType).toBe('shape');
     expect(slide.nodes[0].name).toBe('Rect');
   });
 
   it('parses cxnSp as shape node', () => {
-    const slide = parseSlide(makeSlideXml({
-      shapes: `
+    const slide = parseSlide(
+      makeSlideXml({
+        shapes: `
         <cxnSp>
           <nvCxnSpPr><cNvPr id="3" name="Connector"/><nvPr/></nvCxnSpPr>
           <spPr>
@@ -82,14 +93,18 @@ describe('parseSlide', () => {
           </spPr>
         </cxnSp>
       `,
-    }), 0, makeRels());
+      }),
+      0,
+      makeRels(),
+    );
     expect(slide.nodes).toHaveLength(1);
     expect(slide.nodes[0].nodeType).toBe('shape');
   });
 
   it('parses pic as picture node', () => {
-    const slide = parseSlide(makeSlideXml({
-      shapes: `
+    const slide = parseSlide(
+      makeSlideXml({
+        shapes: `
         <pic>
           <nvPicPr><cNvPr id="4" name="Img"/><nvPr/></nvPicPr>
           <blipFill><blip r:embed="rId1"/></blipFill>
@@ -98,14 +113,18 @@ describe('parseSlide', () => {
           </spPr>
         </pic>
       `,
-    }), 0, makeRels());
+      }),
+      0,
+      makeRels(),
+    );
     expect(slide.nodes).toHaveLength(1);
     expect(slide.nodes[0].nodeType).toBe('picture');
   });
 
   it('parses grpSp as group node', () => {
-    const slide = parseSlide(makeSlideXml({
-      shapes: `
+    const slide = parseSlide(
+      makeSlideXml({
+        shapes: `
         <grpSp>
           <nvGrpSpPr><cNvPr id="5" name="Group"/><nvPr/></nvGrpSpPr>
           <grpSpPr>
@@ -116,14 +135,18 @@ describe('parseSlide', () => {
           </grpSpPr>
         </grpSp>
       `,
-    }), 0, makeRels());
+      }),
+      0,
+      makeRels(),
+    );
     expect(slide.nodes).toHaveLength(1);
     expect(slide.nodes[0].nodeType).toBe('group');
   });
 
   it('parses graphicFrame with table', () => {
-    const slide = parseSlide(makeSlideXml({
-      shapes: `
+    const slide = parseSlide(
+      makeSlideXml({
+        shapes: `
         <graphicFrame>
           <nvGraphicFramePr><cNvPr id="6" name="Table"/><nvPr/></nvGraphicFramePr>
           <xfrm><off x="0" y="0"/><ext cx="914400" cy="914400"/></xfrm>
@@ -138,17 +161,27 @@ describe('parseSlide', () => {
           </graphic>
         </graphicFrame>
       `,
-    }), 0, makeRels());
+      }),
+      0,
+      makeRels(),
+    );
     expect(slide.nodes).toHaveLength(1);
     expect(slide.nodes[0].nodeType).toBe('table');
   });
 
   it('parses graphicFrame with chart', () => {
     const rels = makeRels([
-      ['rId1', { type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart', target: '../charts/chart1.xml' }],
+      [
+        'rId1',
+        {
+          type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart',
+          target: '../charts/chart1.xml',
+        },
+      ],
     ]);
-    const slide = parseSlide(makeSlideXml({
-      shapes: `
+    const slide = parseSlide(
+      makeSlideXml({
+        shapes: `
         <graphicFrame>
           <nvGraphicFramePr><cNvPr id="7" name="Chart"/><nvPr/></nvGraphicFramePr>
           <xfrm><off x="0" y="0"/><ext cx="914400" cy="914400"/></xfrm>
@@ -159,14 +192,24 @@ describe('parseSlide', () => {
           </graphic>
         </graphicFrame>
       `,
-    }), 0, rels, 'ppt/slides/slide1.xml');
+      }),
+      0,
+      rels,
+      'ppt/slides/slide1.xml',
+    );
     expect(slide.nodes).toHaveLength(1);
     expect(slide.nodes[0].nodeType).toBe('chart');
   });
 
   it('finds layout relationship from rels', () => {
     const rels = makeRels([
-      ['rId1', { type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout', target: '../slideLayouts/slideLayout1.xml' }],
+      [
+        'rId1',
+        {
+          type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout',
+          target: '../slideLayouts/slideLayout1.xml',
+        },
+      ],
     ]);
     const slide = parseSlide(makeSlideXml(), 0, rels);
     expect(slide.layoutIndex).toBe('../slideLayouts/slideLayout1.xml');
@@ -179,15 +222,20 @@ describe('parseSlide', () => {
   });
 
   it('skips unknown child tags', () => {
-    const slide = parseSlide(makeSlideXml({
-      shapes: '<unknownElement><foo/></unknownElement>',
-    }), 0, makeRels());
+    const slide = parseSlide(
+      makeSlideXml({
+        shapes: '<unknownElement><foo/></unknownElement>',
+      }),
+      0,
+      makeRels(),
+    );
     expect(slide.nodes).toHaveLength(0);
   });
 
   it('parses multiple shapes', () => {
-    const slide = parseSlide(makeSlideXml({
-      shapes: `
+    const slide = parseSlide(
+      makeSlideXml({
+        shapes: `
         <sp>
           <nvSpPr><cNvPr id="2" name="Shape1"/><nvPr/></nvSpPr>
           <spPr>
@@ -203,13 +251,17 @@ describe('parseSlide', () => {
           </spPr>
         </sp>
       `,
-    }), 0, makeRels());
+      }),
+      0,
+      makeRels(),
+    );
     expect(slide.nodes).toHaveLength(2);
   });
 
   it('skips graphicFrame that is neither table, chart, diagram, nor OLE', () => {
-    const slide = parseSlide(makeSlideXml({
-      shapes: `
+    const slide = parseSlide(
+      makeSlideXml({
+        shapes: `
         <graphicFrame>
           <nvGraphicFramePr><cNvPr id="8" name="Unknown"/><nvPr/></nvGraphicFramePr>
           <xfrm><off x="0" y="0"/><ext cx="914400" cy="914400"/></xfrm>
@@ -218,7 +270,10 @@ describe('parseSlide', () => {
           </graphic>
         </graphicFrame>
       `,
-    }), 0, makeRels());
+      }),
+      0,
+      makeRels(),
+    );
     expect(slide.nodes).toHaveLength(0);
   });
 });
@@ -294,6 +349,61 @@ describe('parseOleFrameAsPicture', () => {
     expect(pic!.blipEmbed).toBe('rId6');
   });
 
+  it('extracts linked picture from OLE fallback when the fallback blip uses r:link', () => {
+    const xml = parseXml(`
+      <graphicFrame xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+        <nvGraphicFramePr><cNvPr id="16" name="OLE linked"/><nvPr/></nvGraphicFramePr>
+        <xfrm><off x="0" y="0"/><ext cx="914400" cy="914400"/></xfrm>
+        <graphic>
+          <graphicData uri="http://schemas.openxmlformats.org/presentationml/2006/ole">
+            <AlternateContent>
+              <Fallback>
+                <oleObj>
+                  <pic>
+                    <nvPicPr><cNvPr id="17" name="LinkedOlePic"/><nvPr/></nvPicPr>
+                    <blipFill><blip r:link="rIdLinked"/></blipFill>
+                    <spPr/>
+                  </pic>
+                </oleObj>
+              </Fallback>
+            </AlternateContent>
+          </graphicData>
+        </graphic>
+      </graphicFrame>
+    `);
+
+    const pic = parseOleFrameAsPicture(xml);
+
+    expect(pic).toBeDefined();
+    expect(pic!.blipEmbed).toBeUndefined();
+    expect(pic!.blipLink).toBe('rIdLinked');
+  });
+
+  it('extracts picture from direct OLE object fallback without AlternateContent wrapper', () => {
+    const xml = parseXml(`
+      <graphicFrame xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+        <nvGraphicFramePr><cNvPr id="18" name="Direct OLE"/><nvPr/></nvGraphicFramePr>
+        <xfrm><off x="0" y="0"/><ext cx="914400" cy="914400"/></xfrm>
+        <graphic>
+          <graphicData uri="http://schemas.openxmlformats.org/presentationml/2006/ole">
+            <oleObj>
+              <pic>
+                <nvPicPr><cNvPr id="19" name="DirectOlePic"/><nvPr/></nvPicPr>
+                <blipFill><blip r:embed="rIdDirect"/></blipFill>
+                <spPr/>
+              </pic>
+            </oleObj>
+          </graphicData>
+        </graphic>
+      </graphicFrame>
+    `);
+
+    const pic = parseOleFrameAsPicture(xml);
+
+    expect(pic).toBeDefined();
+    expect(pic!.blipEmbed).toBe('rIdDirect');
+  });
+
   it('returns undefined when OLE has no pic with embed', () => {
     const xml = parseXml(`
       <graphicFrame xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
@@ -328,13 +438,15 @@ describe('parseOleFrameAsPicture', () => {
  * Build a minimal diagram graphicFrame XML string.
  * The r:dm attribute on relIds points to the data relationship ID.
  */
-function makeDiagramFrameXml(opts: {
-  dmRId?: string;
-  frameX?: number;
-  frameY?: number;
-  frameCx?: number;
-  frameCy?: number;
-} = {}): string {
+function makeDiagramFrameXml(
+  opts: {
+    dmRId?: string;
+    frameX?: number;
+    frameY?: number;
+    frameCx?: number;
+    frameCy?: number;
+  } = {},
+): string {
   const { dmRId = 'rId1', frameX = 0, frameY = 0, frameCx = 9144000, frameCy = 6858000 } = opts;
   return `
     <graphicFrame
@@ -355,13 +467,15 @@ function makeDiagramFrameXml(opts: {
  * Build a minimal dsp: diagram drawing XML string.
  * Each shape entry is a dsp:sp with a dsp:spPr > a:xfrm holding position/size in EMU.
  */
-function makeDiagramDrawingXml(shapes: Array<{
-  x: number;
-  y: number;
-  cx: number;
-  cy: number;
-  prst?: string;
-}> = []): string {
+function makeDiagramDrawingXml(
+  shapes: Array<{
+    x: number;
+    y: number;
+    cx: number;
+    cy: number;
+    prst?: string;
+  }> = [],
+): string {
   const spXml = shapes
     .map(
       (s) => `
@@ -393,13 +507,9 @@ describe('diagram/SmartArt parsing', () => {
   // Test 1: parseSlide recognises a diagram graphicFrame and returns a group
   // -------------------------------------------------------------------------
   it('parseSlide recognises diagram graphicFrame and produces a group node', () => {
-    const drawingXml = makeDiagramDrawingXml([
-      { x: 0, y: 0, cx: 914400, cy: 914400 },
-    ]);
+    const drawingXml = makeDiagramDrawingXml([{ x: 0, y: 0, cx: 914400, cy: 914400 }]);
 
-    const diagramDrawings = new Map<string, string>([
-      ['ppt/diagrams/drawing1.xml', drawingXml],
-    ]);
+    const diagramDrawings = new Map<string, string>([['ppt/diagrams/drawing1.xml', drawingXml]]);
 
     const rels = makeRels([
       [
@@ -435,14 +545,10 @@ describe('diagram/SmartArt parsing', () => {
   //         (strategy 1): data1.xml dm rel → drawing1.xml
   // -------------------------------------------------------------------------
   it('parseDiagramFrame resolves drawing via data file number matching (strategy 1)', () => {
-    const drawingXml = makeDiagramDrawingXml([
-      { x: 914400, y: 914400, cx: 1828800, cy: 1828800 },
-    ]);
+    const drawingXml = makeDiagramDrawingXml([{ x: 914400, y: 914400, cx: 1828800, cy: 1828800 }]);
 
     // drawing1 is reachable via the diagrams/drawing1.xml key
-    const diagramDrawings = new Map<string, string>([
-      ['ppt/diagrams/drawing1.xml', drawingXml],
-    ]);
+    const diagramDrawings = new Map<string, string>([['ppt/diagrams/drawing1.xml', drawingXml]]);
 
     const rels = makeRels([
       // rId1 points to data1.xml — number "1" matches drawing1.xml
@@ -475,7 +581,9 @@ describe('diagram/SmartArt parsing', () => {
     const group = slide.nodes[0];
     expect(group.nodeType).toBe('group');
     // The group children list should contain one shape node (parsed from drawing XML)
-    expect((group as import('../../../src/model/nodes/GroupNode').GroupNodeData).children).toHaveLength(1);
+    expect(
+      (group as import('../../../src/model/nodes/GroupNode').GroupNodeData).children,
+    ).toHaveLength(1);
   });
 
   // -------------------------------------------------------------------------
@@ -483,9 +591,7 @@ describe('diagram/SmartArt parsing', () => {
   //         when the data-file-number strategy cannot locate the drawing.
   // -------------------------------------------------------------------------
   it('parseDiagramFrame falls back to any diagramDrawing rel when strategy 1 fails', () => {
-    const drawingXml = makeDiagramDrawingXml([
-      { x: 0, y: 0, cx: 914400, cy: 914400 },
-    ]);
+    const drawingXml = makeDiagramDrawingXml([{ x: 0, y: 0, cx: 914400, cy: 914400 }]);
 
     // The drawing is stored under a path that has NO numeric suffix — strategy 1 cannot match.
     const diagramDrawings = new Map<string, string>([
@@ -594,7 +700,9 @@ describe('diagram/SmartArt parsing', () => {
     ]);
 
     const slide = parseSlide(
-      makeSlideXml({ shapes: makeDiagramFrameXml({ dmRId: 'rId1', frameCx: 1828800, frameCy: 914400 }) }),
+      makeSlideXml({
+        shapes: makeDiagramFrameXml({ dmRId: 'rId1', frameCx: 1828800, frameCy: 914400 }),
+      }),
       0,
       rels,
       'ppt/slides/slide1.xml',
@@ -622,9 +730,7 @@ describe('diagram/SmartArt parsing', () => {
       { x: 2743200, y: 914400, cx: 914400, cy: 914400, prst: 'rect' },
     ]);
 
-    const diagramDrawings = new Map<string, string>([
-      ['ppt/diagrams/drawing1.xml', drawingXml],
-    ]);
+    const diagramDrawings = new Map<string, string>([['ppt/diagrams/drawing1.xml', drawingXml]]);
 
     const rels = makeRels([
       [
@@ -645,7 +751,9 @@ describe('diagram/SmartArt parsing', () => {
 
     // Frame: 9144000 x 4572000 EMU → 960 x 480 px
     const slide = parseSlide(
-      makeSlideXml({ shapes: makeDiagramFrameXml({ dmRId: 'rId1', frameCx: 9144000, frameCy: 4572000 }) }),
+      makeSlideXml({
+        shapes: makeDiagramFrameXml({ dmRId: 'rId1', frameCx: 9144000, frameCy: 4572000 }),
+      }),
       0,
       rels,
       'ppt/slides/slide1.xml',
@@ -674,9 +782,7 @@ describe('diagram/SmartArt parsing', () => {
       { x: 0, y: 0, cx: 4572000, cy: 4572000, prst: 'donut' },
     ]);
 
-    const diagramDrawings = new Map<string, string>([
-      ['ppt/diagrams/drawing1.xml', drawingXml],
-    ]);
+    const diagramDrawings = new Map<string, string>([['ppt/diagrams/drawing1.xml', drawingXml]]);
 
     const rels = makeRels([
       [
@@ -699,7 +805,9 @@ describe('diagram/SmartArt parsing', () => {
     // Frame dimensions are used directly as the child coordinate space (1:1 mapping).
     // This avoids enlarging shapes when the bounding box is smaller than the frame.
     const slide = parseSlide(
-      makeSlideXml({ shapes: makeDiagramFrameXml({ dmRId: 'rId1', frameCx: 9144000, frameCy: 4572000 }) }),
+      makeSlideXml({
+        shapes: makeDiagramFrameXml({ dmRId: 'rId1', frameCx: 9144000, frameCy: 4572000 }),
+      }),
       0,
       rels,
       'ppt/slides/slide1.xml',
@@ -728,9 +836,7 @@ describe('diagram/SmartArt parsing', () => {
       { x: -9144000, y: 0, cx: 1828800, cy: 1828800, prst: 'donut' },
     ]);
 
-    const diagramDrawings = new Map<string, string>([
-      ['ppt/diagrams/drawing1.xml', drawingXml],
-    ]);
+    const diagramDrawings = new Map<string, string>([['ppt/diagrams/drawing1.xml', drawingXml]]);
 
     const rels = makeRels([
       [
@@ -751,7 +857,9 @@ describe('diagram/SmartArt parsing', () => {
 
     // Frame: 9144000 x 4572000 EMU → 960 x 480 px
     const slide = parseSlide(
-      makeSlideXml({ shapes: makeDiagramFrameXml({ dmRId: 'rId1', frameCx: 9144000, frameCy: 4572000 }) }),
+      makeSlideXml({
+        shapes: makeDiagramFrameXml({ dmRId: 'rId1', frameCx: 9144000, frameCy: 4572000 }),
+      }),
       0,
       rels,
       'ppt/slides/slide1.xml',

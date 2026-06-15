@@ -11,7 +11,11 @@ function makeCtx(overrides: Partial<RenderContext> = {}): RenderContext {
     presentation: { width: 960, height: 540, media: new Map(), tableStyles: emptyXml } as any,
     slide: { rels: new Map() } as any,
     theme: {
-      colorScheme: new Map([['dk1', '000000'], ['lt1', 'FFFFFF'], ['accent1', '4472C4']]),
+      colorScheme: new Map([
+        ['dk1', '000000'],
+        ['lt1', 'FFFFFF'],
+        ['accent1', '4472C4'],
+      ]),
       majorFont: { latin: 'Calibri', ea: '', cs: '' },
       minorFont: { latin: 'Calibri', ea: '', cs: '' },
       fillStyles: [],
@@ -19,7 +23,10 @@ function makeCtx(overrides: Partial<RenderContext> = {}): RenderContext {
       effectStyles: [],
     },
     master: {
-      colorMap: new Map([['tx1', 'dk1'], ['bg1', 'lt1']]),
+      colorMap: new Map([
+        ['tx1', 'dk1'],
+        ['bg1', 'lt1'],
+      ]),
       textStyles: {},
       placeholders: [],
       spTree: emptyXml,
@@ -37,15 +44,17 @@ function makeCtx(overrides: Partial<RenderContext> = {}): RenderContext {
   };
 }
 
-function makeTable(opts: {
-  columns?: number[];
-  rows?: TableRow[];
-  rotation?: number;
-  flipH?: boolean;
-  flipV?: boolean;
-  tableStyleId?: string;
-  properties?: SafeXmlNode;
-} = {}): TableNodeData {
+function makeTable(
+  opts: {
+    columns?: number[];
+    rows?: TableRow[];
+    rotation?: number;
+    flipH?: boolean;
+    flipV?: boolean;
+    tableStyleId?: string;
+    properties?: SafeXmlNode;
+  } = {},
+): TableNodeData {
   return {
     id: '1',
     name: 'Table 1',
@@ -172,9 +181,7 @@ describe('renderTable', () => {
     const rows: TableRow[] = [
       {
         height: 100,
-        cells: [
-          { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml },
-        ],
+        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
       },
     ];
     const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
@@ -183,14 +190,59 @@ describe('renderTable', () => {
     expect(td.style.backgroundColor).toBe('rgb(255, 0, 0)');
   });
 
+  it('applies direct cell gradient fill from tcPr', () => {
+    const tcPrXml = parseXml(`
+        <tcPr>
+          <gradFill>
+            <gsLst>
+              <gs pos="0"><srgbClr val="FF0000"/></gs>
+              <gs pos="100000"><srgbClr val="0000FF"/></gs>
+            </gsLst>
+            <lin ang="5400000"/>
+          </gradFill>
+        </tcPr>
+      `);
+    const rows: TableRow[] = [
+      {
+        height: 100,
+        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
+      },
+    ];
+    const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
+    const td = el.querySelector('td')!;
+
+    expect(td.style.background).toContain('linear-gradient');
+  });
+
+  it('applies direct cell pattern fill from tcPr as stable background longhands', () => {
+    const tcPrXml = parseXml(`
+        <tcPr>
+          <pattFill prst="pct20">
+            <fgClr><srgbClr val="000000"/></fgClr>
+            <bgClr><srgbClr val="FFFFFF"/></bgClr>
+          </pattFill>
+        </tcPr>
+      `);
+    const rows: TableRow[] = [
+      {
+        height: 100,
+        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
+      },
+    ];
+    const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
+    const td = el.querySelector('td')!;
+
+    expect(td.style.backgroundImage).toContain('radial-gradient');
+    expect(td.style.backgroundSize).toBe('8px 8px');
+    expect(td.style.backgroundRepeat).toBe('repeat');
+  });
+
   it('respects cell horzOverflow="overflow"', () => {
     const tcPrXml = parseXml('<tcPr horzOverflow="overflow"/>');
     const rows: TableRow[] = [
       {
         height: 100,
-        cells: [
-          { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml },
-        ],
+        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
       },
     ];
     const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
@@ -207,9 +259,7 @@ describe('renderTable', () => {
     const rows: TableRow[] = [
       {
         height: 100,
-        cells: [
-          { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml },
-        ],
+        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
       },
     ];
     const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
@@ -222,9 +272,7 @@ describe('renderTable', () => {
     const rows: TableRow[] = [
       {
         height: 100,
-        cells: [
-          { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml },
-        ],
+        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
       },
     ];
     const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
@@ -237,15 +285,29 @@ describe('renderTable', () => {
     const rows: TableRow[] = [
       {
         height: 100,
-        cells: [
-          { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml },
-        ],
+        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
       },
     ];
     const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
     const td = el.querySelector('td')!;
     // Default margin is 91440 EMU ≈ 9.6px
     expect(parseFloat(td.style.paddingLeft)).toBeCloseTo(9.6, 0);
+  });
+
+  it('applies Office default cell padding and top alignment when tcPr is omitted', () => {
+    const rows: TableRow[] = [
+      {
+        height: 100,
+        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+      },
+    ];
+
+    const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
+    const td = el.querySelector('td')!;
+
+    expect(parseFloat(td.style.paddingLeft)).toBeCloseTo(9.6, 0);
+    expect(parseFloat(td.style.paddingTop)).toBeCloseTo(4.8, 0);
+    expect(td.style.verticalAlign).toBe('top');
   });
 
   it('applies cell border with solid fill line', () => {
@@ -257,9 +319,7 @@ describe('renderTable', () => {
     const rows: TableRow[] = [
       {
         height: 100,
-        cells: [
-          { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml },
-        ],
+        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
       },
     ];
     const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
@@ -304,10 +364,12 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
       const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{ABC}' }), ctx);
       const td = el.querySelector('td')!;
       expect(td.style.backgroundColor).not.toBe('');
@@ -326,14 +388,59 @@ describe('renderTable', () => {
         </tblStyleLst>
       `);
       const tcPrXml = parseXml('<tcPr><noFill/></tcPr>');
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
-      }];
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{CLEAR_FILL}' }), ctx);
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
+        },
+      ];
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{CLEAR_FILL}' }),
+        ctx,
+      );
       const td = el.querySelector('td')!;
       expect(td.style.backgroundColor).toBe('transparent');
       expect(td.style.backgroundImage).toBe('');
+    });
+
+    it('direct cell solidFill clears table-style pattern layers before applying its own fill', () => {
+      const ctx = makeCtxWithTableStyle(`
+        <tblStyleLst>
+          <tblStyle styleId="{PATTERN_BASE}">
+            <wholeTbl>
+              <tcStyle>
+                <fill>
+                  <fillRef idx="1"><schemeClr val="accent1"/></fillRef>
+                </fill>
+              </tcStyle>
+            </wholeTbl>
+          </tblStyle>
+        </tblStyleLst>
+      `);
+      ctx.theme.fillStyles = [
+        parseXml(`
+          <pattFill prst="pct20">
+            <fgClr><srgbClr val="000000"/></fgClr>
+            <bgClr><srgbClr val="FFFFFF"/></bgClr>
+          </pattFill>
+        `),
+      ];
+      const tcPrXml = parseXml('<tcPr><solidFill><srgbClr val="FF0000"/></solidFill></tcPr>');
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
+        },
+      ];
+
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{PATTERN_BASE}' }),
+        ctx,
+      );
+      const td = el.querySelector('td')!;
+
+      expect(td.style.backgroundImage).toBe('');
+      expect(td.style.backgroundColor).toBe('rgb(255, 0, 0)');
     });
 
     it('applies firstRow style when firstRow="1" in tblPr', () => {
@@ -350,7 +457,10 @@ describe('renderTable', () => {
         { height: 50, cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }] },
         { height: 50, cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }] },
       ];
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{ABC}', properties: tblPr }), ctx);
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{ABC}', properties: tblPr }),
+        ctx,
+      );
       const tds = el.querySelectorAll('td');
       // First row should have red fill (FF0000)
       expect(tds[0].style.backgroundColor).toBe('rgb(255, 0, 0)');
@@ -372,7 +482,10 @@ describe('renderTable', () => {
         { height: 50, cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }] },
         { height: 50, cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }] },
       ];
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{ABC}', properties: tblPr }), ctx);
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{ABC}', properties: tblPr }),
+        ctx,
+      );
       const tds = el.querySelectorAll('td');
       expect(tds[1].style.backgroundColor).toBe('rgb(0, 255, 0)');
     });
@@ -388,12 +501,18 @@ describe('renderTable', () => {
       `);
       const tblPr = parseXml('<tblPr firstCol="1"/>');
       const rows: TableRow[] = [
-        { height: 100, cells: [
-          { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false },
-          { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false },
-        ]},
+        {
+          height: 100,
+          cells: [
+            { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false },
+            { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false },
+          ],
+        },
       ];
-      const el = renderTable(makeTable({ columns: [200, 200], rows, tableStyleId: '{ABC}', properties: tblPr }), ctx);
+      const el = renderTable(
+        makeTable({ columns: [200, 200], rows, tableStyleId: '{ABC}', properties: tblPr }),
+        ctx,
+      );
       const tds = el.querySelectorAll('td');
       expect(tds[0].style.backgroundColor).toBe('rgb(0, 0, 255)');
       expect(tds[1].style.backgroundColor).toBe('rgb(255, 255, 255)');
@@ -411,14 +530,24 @@ describe('renderTable', () => {
         </tblStyleLst>
       `);
       const tblPr = parseXml('<tblPr firstRow="1"/>');
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{
-          gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false,
-          textBody: { paragraphs: [{ runs: [{ text: 'Header' }], level: 0 }] },
-        }],
-      }];
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{ABC}', properties: tblPr }), ctx);
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [
+            {
+              gridSpan: 1,
+              rowSpan: 1,
+              hMerge: false,
+              vMerge: false,
+              textBody: { paragraphs: [{ runs: [{ text: 'Header' }], level: 0 }] },
+            },
+          ],
+        },
+      ];
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{ABC}', properties: tblPr }),
+        ctx,
+      );
       const td = el.querySelector('td')!;
       // Cell should have text rendered
       expect(td.textContent).toContain('Header');
@@ -432,13 +561,125 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
       const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{ABC}' }), ctx);
       const table = el.querySelector('table')!;
       expect(table.style.backgroundColor).toBe('rgb(255, 255, 204)');
+    });
+
+    it('applies table background from tblBg gradFill', () => {
+      const ctx = makeCtxWithTableStyle(`
+        <tblStyleLst>
+          <tblStyle styleId="{TBLBG_GRAD}">
+            <tblBg>
+              <gradFill>
+                <gsLst>
+                  <gs pos="0"><srgbClr val="FF0000"/></gs>
+                  <gs pos="100000"><srgbClr val="0000FF"/></gs>
+                </gsLst>
+                <lin ang="5400000"/>
+              </gradFill>
+            </tblBg>
+          </tblStyle>
+        </tblStyleLst>
+      `);
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{TBLBG_GRAD}' }),
+        ctx,
+      );
+      const table = el.querySelector('table')!;
+
+      expect(table.style.background).toContain('linear-gradient');
+    });
+
+    it('applies table background from tblBg pattFill as stable background longhands', () => {
+      const ctx = makeCtxWithTableStyle(`
+        <tblStyleLst>
+          <tblStyle styleId="{TBLBG_PATTERN}">
+            <tblBg>
+              <pattFill prst="pct20">
+                <fgClr><srgbClr val="000000"/></fgClr>
+                <bgClr><srgbClr val="FFFFFF"/></bgClr>
+              </pattFill>
+            </tblBg>
+          </tblStyle>
+        </tblStyleLst>
+      `);
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{TBLBG_PATTERN}' }),
+        ctx,
+      );
+      const table = el.querySelector('table')!;
+
+      expect(table.style.backgroundImage).toContain('radial-gradient');
+      expect(table.style.backgroundSize).toBe('8px 8px');
+    });
+
+    it('later solidFill table style sections clear earlier pattern layers', () => {
+      const ctx = makeCtxWithTableStyle(`
+        <tblStyleLst>
+          <tblStyle styleId="{PATTERN_THEN_FIRST}">
+            <wholeTbl>
+              <tcStyle>
+                <fill>
+                  <fillRef idx="1"><schemeClr val="accent1"/></fillRef>
+                </fill>
+              </tcStyle>
+            </wholeTbl>
+            <firstRow>
+              <tcStyle>
+                <fill><solidFill><srgbClr val="FF0000"/></solidFill></fill>
+              </tcStyle>
+            </firstRow>
+          </tblStyle>
+        </tblStyleLst>
+      `);
+      ctx.theme.fillStyles = [
+        parseXml(`
+          <pattFill prst="pct20">
+            <fgClr><srgbClr val="000000"/></fgClr>
+            <bgClr><srgbClr val="FFFFFF"/></bgClr>
+          </pattFill>
+        `),
+      ];
+      const tblPr = parseXml('<tblPr firstRow="1"/>');
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
+
+      const el = renderTable(
+        makeTable({
+          columns: [400],
+          rows,
+          tableStyleId: '{PATTERN_THEN_FIRST}',
+          properties: tblPr,
+        }),
+        ctx,
+      );
+      const td = el.querySelector('td')!;
+
+      expect(td.style.backgroundImage).toBe('');
+      expect(td.style.backgroundColor).toBe('rgb(255, 0, 0)');
     });
 
     it('applies style borders from tcBdr', () => {
@@ -456,10 +697,12 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
       const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{ABC}' }), ctx);
       const td = el.querySelector('td')!;
       expect(td.style.borderTop).not.toBe('');
@@ -480,10 +723,12 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
       const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{ABC}' }), ctx);
       const td = el.querySelector('td')!;
       // borderTop should not be set when noFill
@@ -492,10 +737,12 @@ describe('renderTable', () => {
 
     it('applies custom cell margins', () => {
       const tcPrXml = parseXml('<tcPr marL="182880" marR="182880" marT="91440" marB="91440"/>');
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
+        },
+      ];
       const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
       const td = el.querySelector('td')!;
       // 182880 EMU ≈ 19.2px
@@ -504,29 +751,40 @@ describe('renderTable', () => {
     });
 
     it('renders cell text body', () => {
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{
-          gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false,
-          textBody: { paragraphs: [{ runs: [{ text: 'Cell Text' }], level: 0 }] },
-        }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [
+            {
+              gridSpan: 1,
+              rowSpan: 1,
+              hMerge: false,
+              vMerge: false,
+              textBody: { paragraphs: [{ runs: [{ text: 'Cell Text' }], level: 0 }] },
+            },
+          ],
+        },
+      ];
       const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
       const td = el.querySelector('td')!;
       expect(td.textContent).toContain('Cell Text');
     });
 
     it('uses Office single line spacing for table cell text without explicit line spacing', () => {
-      const rows: TableRow[] = [{
-        height: 0,
-        cells: [{
-          gridSpan: 1,
-          rowSpan: 1,
-          hMerge: false,
-          vMerge: false,
-          textBody: { paragraphs: [{ runs: [{ text: 'Auto row height text' }], level: 0 }] },
-        }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 0,
+          cells: [
+            {
+              gridSpan: 1,
+              rowSpan: 1,
+              hMerge: false,
+              vMerge: false,
+              textBody: { paragraphs: [{ runs: [{ text: 'Auto row height text' }], level: 0 }] },
+            },
+          ],
+        },
+      ];
 
       const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
       const paragraph = el.querySelector('td div') as HTMLElement;
@@ -535,22 +793,28 @@ describe('renderTable', () => {
     });
 
     it('preserves explicit table cell line spacing over the Office default', () => {
-      const rows: TableRow[] = [{
-        height: 0,
-        cells: [{
-          gridSpan: 1,
-          rowSpan: 1,
-          hMerge: false,
-          vMerge: false,
-          textBody: {
-            paragraphs: [{
-              properties: parseXml('<pPr><lnSpc><spcPct val="150000"/></lnSpc></pPr>'),
-              runs: [{ text: 'Explicit line spacing' }],
-              level: 0,
-            }],
-          },
-        }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 0,
+          cells: [
+            {
+              gridSpan: 1,
+              rowSpan: 1,
+              hMerge: false,
+              vMerge: false,
+              textBody: {
+                paragraphs: [
+                  {
+                    properties: parseXml('<pPr><lnSpc><spcPct val="150000"/></lnSpc></pPr>'),
+                    runs: [{ text: 'Explicit line spacing' }],
+                    level: 0,
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ];
 
       const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
       const paragraph = el.querySelector('td div') as HTMLElement;
@@ -578,13 +842,20 @@ describe('renderTable', () => {
       `);
       const tblPr = parseXml('<tblPr firstRow="1"/>');
       // Cell must have textBody so renderTextBody is called and the color is actually exercised
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{
-          gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false,
-          textBody: { paragraphs: [{ runs: [{ text: 'Alpha Text' }], level: 0 }] },
-        }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [
+            {
+              gridSpan: 1,
+              rowSpan: 1,
+              hMerge: false,
+              vMerge: false,
+              textBody: { paragraphs: [{ runs: [{ text: 'Alpha Text' }], level: 0 }] },
+            },
+          ],
+        },
+      ];
       const el = renderTable(
         makeTable({ columns: [400], rows, tableStyleId: '{ALPHA}', properties: tblPr }),
         ctx,
@@ -609,13 +880,20 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{
-          gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false,
-          textBody: { paragraphs: [{ runs: [{ text: 'Red Text' }], level: 0 }] },
-        }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [
+            {
+              gridSpan: 1,
+              rowSpan: 1,
+              hMerge: false,
+              vMerge: false,
+              textBody: { paragraphs: [{ runs: [{ text: 'Red Text' }], level: 0 }] },
+            },
+          ],
+        },
+      ];
       const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{SRGB}' }), ctx);
       const td = el.querySelector('td')!;
       expect(td.textContent).toContain('Red Text');
@@ -632,13 +910,20 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{
-          gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false,
-          textBody: { paragraphs: [{ runs: [{ text: 'Plain' }], level: 0 }] },
-        }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [
+            {
+              gridSpan: 1,
+              rowSpan: 1,
+              hMerge: false,
+              vMerge: false,
+              textBody: { paragraphs: [{ runs: [{ text: 'Plain' }], level: 0 }] },
+            },
+          ],
+        },
+      ];
       const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{NOTXSTYLE}' }), ctx);
       const td = el.querySelector('td')!;
       // Rendered without error; no cellTextColor override applied
@@ -664,10 +949,12 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
       const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{FILLREF}' }), ctx);
       const td = el.querySelector('td')!;
       // fillRef resolves srgbClr CC8800 = rgb(204,136,0)
@@ -700,13 +987,59 @@ describe('renderTable', () => {
           </gradFill>
         `),
       ];
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
-      }];
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{FILLREF_GRAD}' }), ctx);
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{FILLREF_GRAD}' }),
+        ctx,
+      );
       const td = el.querySelector('td')!;
       expect(td.style.background).toContain('linear-gradient');
+    });
+
+    it('applyStyleFill: resolves fillRef idx through theme pattern fill as stable background longhands', () => {
+      const ctx = makeCtxWithTableStyle(`
+        <tblStyleLst>
+          <tblStyle styleId="{FILLREF_PATTERN}">
+            <wholeTbl>
+              <tcStyle>
+                <fill>
+                  <fillRef idx="1"><schemeClr val="accent1"/></fillRef>
+                </fill>
+              </tcStyle>
+            </wholeTbl>
+          </tblStyle>
+        </tblStyleLst>
+      `);
+      ctx.theme.fillStyles = [
+        parseXml(`
+          <pattFill prst="pct20">
+            <fgClr><srgbClr val="000000"/></fgClr>
+            <bgClr><srgbClr val="FFFFFF"/></bgClr>
+          </pattFill>
+        `),
+      ];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
+
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{FILLREF_PATTERN}' }),
+        ctx,
+      );
+      const td = el.querySelector('td')!;
+
+      expect(td.style.backgroundImage).toContain('radial-gradient');
+      expect(td.style.backgroundSize).toBe('8px 8px');
+      expect(td.style.backgroundRepeat).toBe('repeat');
+      expect(td.style.backgroundColor).toBe('rgb(255, 255, 255)');
     });
 
     it('applyStyleFill: applies fillRef with alpha < 1 as rgba background', () => {
@@ -725,11 +1058,16 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
-      }];
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{FILLREF_ALPHA}' }), ctx);
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{FILLREF_ALPHA}' }),
+        ctx,
+      );
       const td = el.querySelector('td')!;
       // alpha=50000 → 0.5 → rgba
       expect(td.style.backgroundColor).toMatch(/rgba\(255,\s*0,\s*0,\s*0\.5/);
@@ -747,14 +1085,16 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
       const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{NOFILL}' }), ctx);
       const td = el.querySelector('td')!;
-      // noFill returns true but sets no backgroundColor
-      expect(td.style.backgroundColor).toBe('');
+      // noFill returns true and explicitly clears any inherited fill.
+      expect(td.style.backgroundColor).toBe('transparent');
     });
 
     it('applyStyleFill: solidFill with alpha < 1 sets rgba background', () => {
@@ -773,11 +1113,16 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
-      }];
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{SOLID_ALPHA}' }), ctx);
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{SOLID_ALPHA}' }),
+        ctx,
+      );
       const td = el.querySelector('td')!;
       expect(td.style.backgroundColor).toMatch(/rgba\(0,\s*0,\s*255,\s*0\.5/);
     });
@@ -833,15 +1178,20 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [
-          { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false },
-          { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false },
-          { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false },
-        ],
-      }];
-      const el = renderTable(makeTable({ columns: [133, 133, 134], rows, tableStyleId: '{INSIDE_V}' }), ctx);
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [
+            { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false },
+            { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false },
+            { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false },
+          ],
+        },
+      ];
+      const el = renderTable(
+        makeTable({ columns: [133, 133, 134], rows, tableStyleId: '{INSIDE_V}' }),
+        ctx,
+      );
       const tds = el.querySelectorAll('td');
       // Col 0 (not last): gets borderRight, no borderLeft
       expect(tds[0].style.borderRight).not.toBe('');
@@ -872,11 +1222,16 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
-      }];
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{LNREF_ZERO}' }), ctx);
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{LNREF_ZERO}' }),
+        ctx,
+      );
       const td = el.querySelector('td')!;
       expect(td.style.borderTop).toBe('');
     });
@@ -901,7 +1256,11 @@ describe('renderTable', () => {
       const ctx = makeCtx({
         presentation: { width: 960, height: 540, media: new Map(), tableStyles } as any,
         theme: {
-          colorScheme: new Map([['dk1', '000000'], ['lt1', 'FFFFFF'], ['accent1', '4472C4']]),
+          colorScheme: new Map([
+            ['dk1', '000000'],
+            ['lt1', 'FFFFFF'],
+            ['accent1', '4472C4'],
+          ]),
           majorFont: { latin: 'Calibri', ea: '', cs: '' },
           minorFont: { latin: 'Calibri', ea: '', cs: '' },
           fillStyles: [],
@@ -909,17 +1268,22 @@ describe('renderTable', () => {
           effectStyles: [],
         },
         master: {
-          colorMap: new Map([['tx1', 'dk1'], ['bg1', 'lt1']]),
+          colorMap: new Map([
+            ['tx1', 'dk1'],
+            ['bg1', 'lt1'],
+          ]),
           textStyles: {},
           placeholders: [],
           spTree: emptyXml,
           rels: new Map(),
         } as any,
       });
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
       const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{LNREF_ONE}' }), ctx);
       const td = el.querySelector('td')!;
       expect(td.style.borderTop).not.toBe('');
@@ -942,11 +1306,16 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
-      }];
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{LNREF_NOTHEME}' }), ctx);
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{LNREF_NOTHEME}' }),
+        ctx,
+      );
       const td = el.querySelector('td')!;
       // Should still produce a border with default 1px
       expect(td.style.borderTop).not.toBe('');
@@ -971,11 +1340,16 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
-      }];
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{LNREF_ALPHA}' }), ctx);
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{LNREF_ALPHA}' }),
+        ctx,
+      );
       const td = el.querySelector('td')!;
       // Border should contain rgba for the semi-transparent color
       expect(td.style.borderTop).toMatch(/rgba/);
@@ -994,10 +1368,12 @@ describe('renderTable', () => {
           </solidFill>
         </tcPr>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
+        },
+      ];
       const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
       const td = el.querySelector('td')!;
       expect(td.style.backgroundColor).toMatch(/rgba\(255,\s*0,\s*0,\s*0\.5/);
@@ -1009,10 +1385,12 @@ describe('renderTable', () => {
 
     it('applyCellProperties: anchor="t" maps to top vertical alignment', () => {
       const tcPrXml = parseXml('<tcPr anchor="t"/>');
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
+        },
+      ];
       const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
       const td = el.querySelector('td')!;
       expect(td.style.verticalAlign).toBe('top');
@@ -1020,10 +1398,12 @@ describe('renderTable', () => {
 
     it('applyCellProperties: anchor="b" maps to bottom vertical alignment', () => {
       const tcPrXml = parseXml('<tcPr anchor="b"/>');
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
+        },
+      ];
       const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
       const td = el.querySelector('td')!;
       expect(td.style.verticalAlign).toBe('bottom');
@@ -1031,10 +1411,12 @@ describe('renderTable', () => {
 
     it('applyCellProperties: unknown anchor value defaults to top', () => {
       const tcPrXml = parseXml('<tcPr anchor="unknown_value"/>');
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
+        },
+      ];
       const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
       const td = el.querySelector('td')!;
       expect(td.style.verticalAlign).toBe('top');
@@ -1042,10 +1424,12 @@ describe('renderTable', () => {
 
     it('applyCellProperties: missing anchor defaults to top vertical alignment', () => {
       const tcPrXml = parseXml('<tcPr/>');
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
+        },
+      ];
       const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
       const td = el.querySelector('td')!;
       expect(td.style.verticalAlign).toBe('top');
@@ -1072,21 +1456,31 @@ describe('renderTable', () => {
         </tblStyleLst>
       `);
       // First verify: without cell noFill override, the border is set from the table style
-      const rowsWithBorder: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
-      }];
-      const elWithBorder = renderTable(makeTable({ columns: [400], rows: rowsWithBorder, tableStyleId: '{BORDER_CLEAR}' }), ctx);
+      const rowsWithBorder: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
+      const elWithBorder = renderTable(
+        makeTable({ columns: [400], rows: rowsWithBorder, tableStyleId: '{BORDER_CLEAR}' }),
+        ctx,
+      );
       expect(elWithBorder.querySelector('td')!.style.borderTop).not.toBe('');
 
       // Now with cell-level lnT noFill: the noFill branch executes and sets borderTop='none'
       // which jsdom normalizes to '' — clearing the previously set style-border
       const tcPrXml = parseXml('<tcPr><lnT><noFill/></lnT></tcPr>');
-      const rowsWithNoFill: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
-      }];
-      const el = renderTable(makeTable({ columns: [400], rows: rowsWithNoFill, tableStyleId: '{BORDER_CLEAR}' }), ctx);
+      const rowsWithNoFill: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
+        },
+      ];
+      const el = renderTable(
+        makeTable({ columns: [400], rows: rowsWithNoFill, tableStyleId: '{BORDER_CLEAR}' }),
+        ctx,
+      );
       const td = el.querySelector('td')!;
       // jsdom normalizes 'none' to '' — the border is effectively cleared
       expect(td.style.borderTop).toBe('');
@@ -1094,10 +1488,12 @@ describe('renderTable', () => {
 
     it('applyBorder: noFill in lnB executes noFill branch (jsdom normalizes "none" to "")', () => {
       const tcPrXml = parseXml('<tcPr><lnB><noFill/></lnB></tcPr>');
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
+        },
+      ];
       const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
       const td = el.querySelector('td')!;
       // jsdom normalizes 'none' → ''; the code path is executed (returns early without setting a border)
@@ -1106,10 +1502,12 @@ describe('renderTable', () => {
 
     it('applyBorder: noFill in lnL executes noFill branch (jsdom normalizes "none" to "")', () => {
       const tcPrXml = parseXml('<tcPr><lnL><noFill/></lnL></tcPr>');
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
+        },
+      ];
       const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
       const td = el.querySelector('td')!;
       expect(td.style.borderLeft).toBe('');
@@ -1117,10 +1515,12 @@ describe('renderTable', () => {
 
     it('applyBorder: noFill in lnR executes noFill branch (jsdom normalizes "none" to "")', () => {
       const tcPrXml = parseXml('<tcPr><lnR><noFill/></lnR></tcPr>');
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false, properties: tcPrXml }],
+        },
+      ];
       const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
       const td = el.querySelector('td')!;
       expect(td.style.borderRight).toBe('');
@@ -1140,14 +1540,19 @@ describe('renderTable', () => {
         </tblStyleLst>
       `);
       const tblPr = parseXml('<tblPr lastCol="1"/>');
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [
-          { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false },
-          { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false },
-        ],
-      }];
-      const el = renderTable(makeTable({ columns: [200, 200], rows, tableStyleId: '{LASTCOL}', properties: tblPr }), ctx);
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [
+            { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false },
+            { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false },
+          ],
+        },
+      ];
+      const el = renderTable(
+        makeTable({ columns: [200, 200], rows, tableStyleId: '{LASTCOL}', properties: tblPr }),
+        ctx,
+      );
       const tds = el.querySelectorAll('td');
       // Last column (index 1) gets the lastCol fill rgb(128,0,0)
       expect(tds[1].style.backgroundColor).toBe('rgb(128, 0, 0)');
@@ -1175,7 +1580,10 @@ describe('renderTable', () => {
         { height: 50, cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }] },
         { height: 50, cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }] },
       ];
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{BANDROW}', properties: tblPr }), ctx);
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{BANDROW}', properties: tblPr }),
+        ctx,
+      );
       const tds = el.querySelectorAll('td');
       // Row 0 → effectiveRow 0 → even → band1H → rgb(238,238,238)
       expect(tds[0].style.backgroundColor).toBe('rgb(238, 238, 238)');
@@ -1221,16 +1629,26 @@ describe('renderTable', () => {
         </tblStyleLst>
       `);
       const tblPr = parseXml('<tblPr bandCol="1"/>');
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [
-          { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false },
-          { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false },
-          { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false },
-          { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false },
-        ],
-      }];
-      const el = renderTable(makeTable({ columns: [100, 100, 100, 100], rows, tableStyleId: '{BANDCOL}', properties: tblPr }), ctx);
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [
+            { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false },
+            { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false },
+            { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false },
+            { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false },
+          ],
+        },
+      ];
+      const el = renderTable(
+        makeTable({
+          columns: [100, 100, 100, 100],
+          rows,
+          tableStyleId: '{BANDCOL}',
+          properties: tblPr,
+        }),
+        ctx,
+      );
       const tds = el.querySelectorAll('td');
       // Col 0 → even → band1V → rgb(221,221,221)
       expect(tds[0].style.backgroundColor).toBe('rgb(221, 221, 221)');
@@ -1253,13 +1671,15 @@ describe('renderTable', () => {
         </tblStyleLst>
       `);
       const tblPr = parseXml('<tblPr><bandCol val="0"/></tblPr>');
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [
-          { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false },
-          { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false },
-        ],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [
+            { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false },
+            { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false },
+          ],
+        },
+      ];
       const el = renderTable(
         makeTable({
           columns: [200, 200],
@@ -1286,11 +1706,16 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
-      }];
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{TBLBG_FILLREF}' }), ctx);
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{TBLBG_FILLREF}' }),
+        ctx,
+      );
       const table = el.querySelector('table')!;
       // 33=51, 44=68, 55=85
       expect(table.style.backgroundColor).toBe('rgb(51, 68, 85)');
@@ -1316,11 +1741,16 @@ describe('renderTable', () => {
           </gradFill>
         `),
       ];
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
-      }];
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{TBLBG_GRAD}' }), ctx);
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{TBLBG_GRAD}' }),
+        ctx,
+      );
       const table = el.querySelector('table')!;
       expect(table.style.background).toContain('linear-gradient');
     });
@@ -1337,11 +1767,16 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
-      }];
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{TBLBG_ALPHA}' }), ctx);
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{TBLBG_ALPHA}' }),
+        ctx,
+      );
       const table = el.querySelector('table')!;
       expect(table.style.backgroundColor).toMatch(/rgba/);
     });
@@ -1358,11 +1793,16 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
-      }];
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{TBLBG_FILLREF_ALPHA}' }), ctx);
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{TBLBG_FILLREF_ALPHA}' }),
+        ctx,
+      );
       const table = el.querySelector('table')!;
       expect(table.style.backgroundColor).toMatch(/rgba/);
     });
@@ -1373,10 +1813,12 @@ describe('renderTable', () => {
 
     it('handles no tableStyleId gracefully (no tblStyle lookup)', () => {
       // No tableStyleId set — tblStyle is undefined, sections is empty
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
       const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
       const td = el.querySelector('td')!;
       expect(td).not.toBeNull();
@@ -1391,10 +1833,12 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
       // Uses tableStyleId '{NOTFOUND}' which has no match in the style list
       const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{NOTFOUND}' }), ctx);
       const td = el.querySelector('td')!;
@@ -1402,10 +1846,12 @@ describe('renderTable', () => {
     });
 
     it('handles cell with no properties (tcPr is undefined)', () => {
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
       const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
       const td = el.querySelector('td')!;
       // No crash, no border/background set from direct properties
@@ -1420,11 +1866,16 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
-      }];
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{EMPTY_TBLBG}' }), ctx);
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{EMPTY_TBLBG}' }),
+        ctx,
+      );
       const table = el.querySelector('table')!;
       expect(table.style.backgroundColor).toBe('');
     });
@@ -1441,11 +1892,16 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
-      }];
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{NO_FILL_ELEM}' }), ctx);
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{NO_FILL_ELEM}' }),
+        ctx,
+      );
       const td = el.querySelector('td')!;
       expect(td.style.backgroundColor).toBe('');
     });
@@ -1470,7 +1926,10 @@ describe('renderTable', () => {
         { height: 50, cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }] },
         { height: 50, cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }] },
       ];
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{FLAG_CHILD}', properties: tblPr }), ctx);
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{FLAG_CHILD}', properties: tblPr }),
+        ctx,
+      );
       const tds = el.querySelectorAll('td');
       // firstRow child element enables the firstRow style — first cell gets red fill
       expect(tds[0].style.backgroundColor).toBe('rgb(255, 0, 0)');
@@ -1490,7 +1949,10 @@ describe('renderTable', () => {
       const rows: TableRow[] = [
         { height: 50, cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }] },
       ];
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{FLAG_CHILD_ZERO}', properties: tblPr }), ctx);
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{FLAG_CHILD_ZERO}', properties: tblPr }),
+        ctx,
+      );
       const tds = el.querySelectorAll('td');
       // firstRow disabled: uses wholeTbl fill (AABBCC = rgb(170,187,204))
       expect(tds[0].style.backgroundColor).toBe('rgb(170, 187, 204)');
@@ -1509,15 +1971,25 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{
-          gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false,
-          textBody: { paragraphs: [{ runs: [{ text: 'NoColor' }], level: 0 }] },
-        }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [
+            {
+              gridSpan: 1,
+              rowSpan: 1,
+              hMerge: false,
+              vMerge: false,
+              textBody: { paragraphs: [{ runs: [{ text: 'NoColor' }], level: 0 }] },
+            },
+          ],
+        },
+      ];
       // Should render without error; cellTextColor is undefined (no recognized color)
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{TXSTYLE_NOCOLOR}' }), ctx);
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{TXSTYLE_NOCOLOR}' }),
+        ctx,
+      );
       const td = el.querySelector('td')!;
       expect(td.textContent).toContain('NoColor');
     });
@@ -1535,11 +2007,16 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
-      }];
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{FILL_UNKNOWN}' }), ctx);
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }],
+        },
+      ];
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{FILL_UNKNOWN}' }),
+        ctx,
+      );
       const td = el.querySelector('td')!;
       // No backgroundColor set — applyStyleFill returned false
       expect(td.style.backgroundColor).toBe('');
@@ -1560,13 +2037,25 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false,
-          textBody: { paragraphs: [{ runs: [{ text: 'Bold Header' }], level: 0 }] } as any }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [
+            {
+              gridSpan: 1,
+              rowSpan: 1,
+              hMerge: false,
+              vMerge: false,
+              textBody: { paragraphs: [{ runs: [{ text: 'Bold Header' }], level: 0 }] } as any,
+            },
+          ],
+        },
+      ];
       const tblPr = parseXml('<tblPr firstRow="1"/>');
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{BOLD}', properties: tblPr }), ctx);
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{BOLD}', properties: tblPr }),
+        ctx,
+      );
       const span = el.querySelector('span');
       expect(span).not.toBeNull();
       expect(span!.style.fontWeight).toBe('bold');
@@ -1583,13 +2072,25 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false,
-          textBody: { paragraphs: [{ runs: [{ text: 'Italic Header' }], level: 0 }] } as any }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [
+            {
+              gridSpan: 1,
+              rowSpan: 1,
+              hMerge: false,
+              vMerge: false,
+              textBody: { paragraphs: [{ runs: [{ text: 'Italic Header' }], level: 0 }] } as any,
+            },
+          ],
+        },
+      ];
       const tblPr = parseXml('<tblPr firstRow="1"/>');
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{ITALIC}', properties: tblPr }), ctx);
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{ITALIC}', properties: tblPr }),
+        ctx,
+      );
       const span = el.querySelector('span');
       expect(span).not.toBeNull();
       expect(span!.style.fontStyle).toBe('italic');
@@ -1608,13 +2109,27 @@ describe('renderTable', () => {
         </tblStyleLst>
       `);
       const rPr = parseXml('<rPr b="0"/>');
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false,
-          textBody: { paragraphs: [{ runs: [{ text: 'Not Bold', properties: rPr }], level: 0 }] } as any }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [
+            {
+              gridSpan: 1,
+              rowSpan: 1,
+              hMerge: false,
+              vMerge: false,
+              textBody: {
+                paragraphs: [{ runs: [{ text: 'Not Bold', properties: rPr }], level: 0 }],
+              } as any,
+            },
+          ],
+        },
+      ];
       const tblPr = parseXml('<tblPr firstRow="1"/>');
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{BOLD_OVERRIDE}', properties: tblPr }), ctx);
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{BOLD_OVERRIDE}', properties: tblPr }),
+        ctx,
+      );
       const span = el.querySelector('span');
       expect(span).not.toBeNull();
       // Explicit rPr b="0" should win — not bold
@@ -1633,13 +2148,25 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false,
-          textBody: { paragraphs: [{ runs: [{ text: 'White Text' }], level: 0 }] } as any }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [
+            {
+              gridSpan: 1,
+              rowSpan: 1,
+              hMerge: false,
+              vMerge: false,
+              textBody: { paragraphs: [{ runs: [{ text: 'White Text' }], level: 0 }] } as any,
+            },
+          ],
+        },
+      ];
       const tblPr = parseXml('<tblPr firstRow="1"/>');
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{COLOR_PRIO}', properties: tblPr }), ctx);
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{COLOR_PRIO}', properties: tblPr }),
+        ctx,
+      );
       const span = el.querySelector('span');
       expect(span).not.toBeNull();
       // tcTxStyle color FFFFFF should be applied (white), not inherited black
@@ -1661,13 +2188,25 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false,
-          textBody: { paragraphs: [{ runs: [{ text: 'Latin Font' }], level: 0 }] } as any }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [
+            {
+              gridSpan: 1,
+              rowSpan: 1,
+              hMerge: false,
+              vMerge: false,
+              textBody: { paragraphs: [{ runs: [{ text: 'Latin Font' }], level: 0 }] } as any,
+            },
+          ],
+        },
+      ];
       const tblPr = parseXml('<tblPr firstRow="1"/>');
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{FONT_LATIN}', properties: tblPr }), ctx);
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{FONT_LATIN}', properties: tblPr }),
+        ctx,
+      );
       const span = el.querySelector('span');
       expect(span).not.toBeNull();
       expect(span!.style.fontFamily).toContain('Georgia');
@@ -1684,11 +2223,20 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false,
-          textBody: { paragraphs: [{ runs: [{ text: '东亚字体' }], level: 0 }] } as any }],
-      }];
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [
+            {
+              gridSpan: 1,
+              rowSpan: 1,
+              hMerge: false,
+              vMerge: false,
+              textBody: { paragraphs: [{ runs: [{ text: '东亚字体' }], level: 0 }] } as any,
+            },
+          ],
+        },
+      ];
       const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{FONT_EA}' }), ctx);
       const span = el.querySelector('span');
       expect(span).not.toBeNull();
@@ -1709,12 +2257,24 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false,
-          textBody: { paragraphs: [{ runs: [{ text: '混排 Font' }], level: 0 }] } as any }],
-      }];
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{FONT_STACK}' }), ctx);
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [
+            {
+              gridSpan: 1,
+              rowSpan: 1,
+              hMerge: false,
+              vMerge: false,
+              textBody: { paragraphs: [{ runs: [{ text: '混排 Font' }], level: 0 }] } as any,
+            },
+          ],
+        },
+      ];
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{FONT_STACK}' }),
+        ctx,
+      );
       const span = el.querySelector('span');
       expect(span).not.toBeNull();
       expect(span!.style.fontFamily).toContain('Georgia');
@@ -1732,12 +2292,24 @@ describe('renderTable', () => {
           </tblStyle>
         </tblStyleLst>
       `);
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false,
-          textBody: { paragraphs: [{ runs: [{ text: 'Minor Font' }], level: 0 }] } as any }],
-      }];
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{FONTREF_MINOR}' }), ctx);
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [
+            {
+              gridSpan: 1,
+              rowSpan: 1,
+              hMerge: false,
+              vMerge: false,
+              textBody: { paragraphs: [{ runs: [{ text: 'Minor Font' }], level: 0 }] } as any,
+            },
+          ],
+        },
+      ];
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{FONTREF_MINOR}' }),
+        ctx,
+      );
       const span = el.querySelector('span');
       expect(span).not.toBeNull();
       // Theme minor font is 'Calibri' from makeCtx()
@@ -1747,7 +2319,9 @@ describe('renderTable', () => {
     it('tcTxStyle fontRef idx="minor" keeps the theme East Asian font in the stack', () => {
       const ctx = makeCtx({
         presentation: {
-          width: 960, height: 540, media: new Map(),
+          width: 960,
+          height: 540,
+          media: new Map(),
           tableStyles: parseXml(`
             <tblStyleLst>
               <tblStyle styleId="{FONTREF_MINOR_STACK}">
@@ -1760,7 +2334,10 @@ describe('renderTable', () => {
           `),
         } as any,
         theme: {
-          colorScheme: new Map([['dk1', '000000'], ['lt1', 'FFFFFF']]),
+          colorScheme: new Map([
+            ['dk1', '000000'],
+            ['lt1', 'FFFFFF'],
+          ]),
           majorFont: { latin: 'Calibri', ea: '', cs: '' },
           minorFont: { latin: 'Calibri', ea: 'Microsoft YaHei', cs: '' },
           fillStyles: [],
@@ -1768,12 +2345,24 @@ describe('renderTable', () => {
           effectStyles: [],
         },
       });
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false,
-          textBody: { paragraphs: [{ runs: [{ text: '主题表格字体' }], level: 0 }] } as any }],
-      }];
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{FONTREF_MINOR_STACK}' }), ctx);
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [
+            {
+              gridSpan: 1,
+              rowSpan: 1,
+              hMerge: false,
+              vMerge: false,
+              textBody: { paragraphs: [{ runs: [{ text: '主题表格字体' }], level: 0 }] } as any,
+            },
+          ],
+        },
+      ];
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{FONTREF_MINOR_STACK}' }),
+        ctx,
+      );
       const span = el.querySelector('span');
       expect(span).not.toBeNull();
       expect(span!.style.fontFamily).toContain('Calibri');
@@ -1784,7 +2373,9 @@ describe('renderTable', () => {
       // Override theme majorFont to a distinctive name
       const ctx = makeCtx({
         presentation: {
-          width: 960, height: 540, media: new Map(),
+          width: 960,
+          height: 540,
+          media: new Map(),
           tableStyles: parseXml(`
             <tblStyleLst>
               <tblStyle styleId="{FONTREF_MAJOR}">
@@ -1797,7 +2388,10 @@ describe('renderTable', () => {
           `),
         } as any,
         theme: {
-          colorScheme: new Map([['dk1', '000000'], ['lt1', 'FFFFFF']]),
+          colorScheme: new Map([
+            ['dk1', '000000'],
+            ['lt1', 'FFFFFF'],
+          ]),
           majorFont: { latin: 'Impact', ea: '', cs: '' },
           minorFont: { latin: 'Calibri', ea: '', cs: '' },
           fillStyles: [],
@@ -1805,12 +2399,24 @@ describe('renderTable', () => {
           effectStyles: [],
         },
       });
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false,
-          textBody: { paragraphs: [{ runs: [{ text: 'Major Font' }], level: 0 }] } as any }],
-      }];
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{FONTREF_MAJOR}' }), ctx);
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [
+            {
+              gridSpan: 1,
+              rowSpan: 1,
+              hMerge: false,
+              vMerge: false,
+              textBody: { paragraphs: [{ runs: [{ text: 'Major Font' }], level: 0 }] } as any,
+            },
+          ],
+        },
+      ];
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{FONTREF_MAJOR}' }),
+        ctx,
+      );
       const span = el.querySelector('span');
       expect(span).not.toBeNull();
       expect(span!.style.fontFamily).toContain('Impact');
@@ -1828,12 +2434,26 @@ describe('renderTable', () => {
         </tblStyleLst>
       `);
       const rPr = parseXml('<rPr><latin typeface="Arial"/></rPr>');
-      const rows: TableRow[] = [{
-        height: 100,
-        cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false,
-          textBody: { paragraphs: [{ runs: [{ text: 'Arial Text', properties: rPr }], level: 0 }] } as any }],
-      }];
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{FONT_OVERRIDE}' }), ctx);
+      const rows: TableRow[] = [
+        {
+          height: 100,
+          cells: [
+            {
+              gridSpan: 1,
+              rowSpan: 1,
+              hMerge: false,
+              vMerge: false,
+              textBody: {
+                paragraphs: [{ runs: [{ text: 'Arial Text', properties: rPr }], level: 0 }],
+              } as any,
+            },
+          ],
+        },
+      ];
+      const el = renderTable(
+        makeTable({ columns: [400], rows, tableStyleId: '{FONT_OVERRIDE}' }),
+        ctx,
+      );
       const span = el.querySelector('span');
       expect(span).not.toBeNull();
       // Explicit rPr latin="Arial" wins over tcTxStyle latin="Georgia"
@@ -1852,12 +2472,40 @@ describe('renderTable', () => {
       const ctx = makeCtx();
       const tblPr = parseXml('<tblPr firstRow="1" bandRow="1"/>');
       const rows: TableRow[] = [
-        { height: 50, cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false,
-          textBody: { paragraphs: [{ runs: [{ text: 'Header' }], level: 0 }] } as any }] },
-        { height: 50, cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false,
-          textBody: { paragraphs: [{ runs: [{ text: 'Body' }], level: 0 }] } as any }] },
+        {
+          height: 50,
+          cells: [
+            {
+              gridSpan: 1,
+              rowSpan: 1,
+              hMerge: false,
+              vMerge: false,
+              textBody: { paragraphs: [{ runs: [{ text: 'Header' }], level: 0 }] } as any,
+            },
+          ],
+        },
+        {
+          height: 50,
+          cells: [
+            {
+              gridSpan: 1,
+              rowSpan: 1,
+              hMerge: false,
+              vMerge: false,
+              textBody: { paragraphs: [{ runs: [{ text: 'Body' }], level: 0 }] } as any,
+            },
+          ],
+        },
       ];
-      const el = renderTable(makeTable({ columns: [400], rows, tableStyleId: '{93296810-A885-4BE3-A3E7-6D5BEEA58F35}', properties: tblPr }), ctx);
+      const el = renderTable(
+        makeTable({
+          columns: [400],
+          rows,
+          tableStyleId: '{93296810-A885-4BE3-A3E7-6D5BEEA58F35}',
+          properties: tblPr,
+        }),
+        ctx,
+      );
       const tds = el.querySelectorAll('td');
       // firstRow cell should be bold
       const headerSpan = tds[0]?.querySelector('span');
@@ -1873,14 +2521,35 @@ describe('renderTable', () => {
       const ctx = makeCtx();
       const tblPr = parseXml('<tblPr firstCol="1" bandRow="1"/>');
       const rows: TableRow[] = [
-        { height: 50, cells: [
-          { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false,
-            textBody: { paragraphs: [{ runs: [{ text: 'Col1' }], level: 0 }] } as any },
-          { gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false,
-            textBody: { paragraphs: [{ runs: [{ text: 'Col2' }], level: 0 }] } as any },
-        ] },
+        {
+          height: 50,
+          cells: [
+            {
+              gridSpan: 1,
+              rowSpan: 1,
+              hMerge: false,
+              vMerge: false,
+              textBody: { paragraphs: [{ runs: [{ text: 'Col1' }], level: 0 }] } as any,
+            },
+            {
+              gridSpan: 1,
+              rowSpan: 1,
+              hMerge: false,
+              vMerge: false,
+              textBody: { paragraphs: [{ runs: [{ text: 'Col2' }], level: 0 }] } as any,
+            },
+          ],
+        },
       ];
-      const el = renderTable(makeTable({ columns: [200, 200], rows, tableStyleId: '{93296810-A885-4BE3-A3E7-6D5BEEA58F35}', properties: tblPr }), ctx);
+      const el = renderTable(
+        makeTable({
+          columns: [200, 200],
+          rows,
+          tableStyleId: '{93296810-A885-4BE3-A3E7-6D5BEEA58F35}',
+          properties: tblPr,
+        }),
+        ctx,
+      );
       const tds = el.querySelectorAll('td');
       // firstCol cell should be bold
       const col1Span = tds[0]?.querySelector('span');

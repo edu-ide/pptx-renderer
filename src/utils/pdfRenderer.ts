@@ -164,7 +164,11 @@ function getWorker(workerKey: string): Worker | null {
   try {
     const blob = new Blob([WORKER_SRC], { type: 'text/javascript' });
     const url = URL.createObjectURL(blob);
-    state.worker = new Worker(url, { type: 'module' });
+    try {
+      state.worker = new Worker(url, { type: 'module' });
+    } finally {
+      URL.revokeObjectURL(url);
+    }
 
     state.worker.onmessage = (e: MessageEvent) => {
       const { id, blob, error } = e.data;

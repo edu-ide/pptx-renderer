@@ -74,6 +74,40 @@ const templateShape = (id: string, name: string, text: string, placeholder = fal
   </sp>
 `;
 
+const diagramGraphicFrame = (): SafeXmlNode =>
+  parseXml(`
+    <graphicFrame xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+                  xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram"
+                  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+      <nvGraphicFramePr><cNvPr id="71" name="diagram-frame"/><nvPr/></nvGraphicFramePr>
+      <xfrm><off x="0" y="0"/><ext cx="1828800" cy="914400"/></xfrm>
+      <a:graphic>
+        <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/diagram">
+          <dgm:relIds r:dm="rIdData"/>
+        </a:graphicData>
+      </a:graphic>
+    </graphicFrame>
+  `);
+
+const diagramDrawingXml = (): string => `
+  <dsp:drawing xmlns:dsp="http://schemas.microsoft.com/office/drawing/2008/diagram"
+               xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+    <dsp:spTree>
+      <dsp:sp>
+        <dsp:nvSpPr><dsp:cNvPr id="72" name="diagram-label"/><dsp:nvPr/></dsp:nvSpPr>
+        <dsp:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="457200"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+        </dsp:spPr>
+        <dsp:txBody>
+          <a:bodyPr/><a:lstStyle/>
+          <a:p><a:r><a:t>Searchable SmartArt label</a:t></a:r></a:p>
+        </dsp:txBody>
+      </dsp:sp>
+    </dsp:spTree>
+  </dsp:drawing>
+`;
+
 const spTree = (...children: string[]): SafeXmlNode =>
   parseXml(`
     <spTree xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
@@ -239,6 +273,79 @@ describe('buildTextIndex', () => {
     });
   });
 
+  it('indexes inherited placeholder bounds for lazy group children', () => {
+    const child = parseXml(`
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr>
+          <p:cNvPr id="71" name="grouped-placeholder"/>
+          <p:cNvSpPr/>
+          <p:nvPr><p:ph type="body" idx="1"/></p:nvPr>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr/>
+          <a:lstStyle/>
+          <a:p><a:r><a:t>Inherited grouped placeholder</a:t></a:r></a:p>
+        </p:txBody>
+      </p:sp>
+    `);
+    const layoutPlaceholder = parseXml(`
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr>
+          <p:cNvPr id="72" name="layout-placeholder"/>
+          <p:cNvSpPr/>
+          <p:nvPr><p:ph type="body" idx="1"/></p:nvPr>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm>
+            <a:off x="${emu(100)}" y="${emu(60)}"/>
+            <a:ext cx="${emu(40)}" cy="${emu(20)}"/>
+          </a:xfrm>
+        </p:spPr>
+      </p:sp>
+    `);
+    const group: GroupNodeData = {
+      id: 'placeholder-group',
+      name: 'placeholder-group',
+      nodeType: 'group',
+      position: { x: 50, y: 30 },
+      size: { w: 200, h: 100 },
+      rotation: 0,
+      flipH: false,
+      flipV: false,
+      childOffset: { x: 0, y: 0 },
+      childExtent: { w: 400, h: 200 },
+      children: [child],
+      source: emptySource,
+    };
+    const pres = presentation();
+    const layoutPath = 'ppt/slideLayouts/slideLayout1.xml';
+    pres.slides[0].nodes = [group];
+    pres.slideToLayout.set(0, layoutPath);
+    pres.layouts.set(layoutPath, {
+      placeholders: [
+        {
+          node: layoutPlaceholder,
+          absoluteXfrm: { position: { x: 100, y: 60 }, size: { w: 40, h: 20 } },
+        },
+      ],
+      spTree: emptySource,
+      rels: new Map(),
+      showMasterSp: true,
+    });
+
+    const result = buildTextIndex(pres).find(
+      (entry) => entry.text === 'Inherited grouped placeholder',
+    );
+
+    expect(result?.bounds).toEqual({ x: 100, y: 60, w: 40, h: 20 });
+  });
+
   it('matches renderer bounds for quarter-turn rotated group children', () => {
     const child = parseXml(`
       <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
@@ -284,6 +391,44 @@ describe('buildTextIndex', () => {
     expect(result?.bounds.y).toBeCloseTo(-230);
     expect(result?.bounds.w).toBeCloseTo(40);
     expect(result?.bounds.h).toBeCloseTo(500);
+  });
+
+  it('indexes text from SmartArt fallback drawings inside slide groups', () => {
+    const group: GroupNodeData = {
+      id: 'smartart-group',
+      name: 'smartart-group',
+      nodeType: 'group',
+      position: { x: 0, y: 0 },
+      size: { w: 192, h: 96 },
+      rotation: 0,
+      flipH: false,
+      flipV: false,
+      childOffset: { x: 0, y: 0 },
+      childExtent: { w: 192, h: 96 },
+      children: [diagramGraphicFrame()],
+      source: emptySource,
+    };
+    const pres = presentation();
+    pres.slides[0].nodes = [group];
+    pres.slides[0].rels = new Map([
+      [
+        'rIdData',
+        {
+          type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramData',
+          target: '../diagrams/data7.xml',
+        },
+      ],
+      [
+        'rIdDrawing',
+        {
+          type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramDrawing',
+          target: '../diagrams/drawing7.xml',
+        },
+      ],
+    ]);
+    (pres as any).diagramDrawings = new Map([['ppt/diagrams/drawing7.xml', diagramDrawingXml()]]);
+
+    expect(buildTextIndex(pres).map((entry) => entry.text)).toContain('Searchable SmartArt label');
   });
 });
 

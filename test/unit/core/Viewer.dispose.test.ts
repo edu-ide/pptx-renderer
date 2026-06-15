@@ -138,6 +138,43 @@ describe('PptxViewer.destroy()', () => {
     expect(container.querySelectorAll('.mock-slide')).toHaveLength(1);
   });
 
+  it('load() unloads the previous rendered deck before replacing presentation data', async () => {
+    const revokeStub = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const container = document.createElement('div');
+    const viewer = new PptxViewer(container);
+    viewer.load(makeMockPresentation(2));
+    await viewer.renderList();
+
+    const handles = vi.mocked(renderSlide).mock.results.slice(-2).map((result) => result.value);
+    const cache = (viewer as any).mediaUrlCache as Map<string, string>;
+    const chartInstances = (viewer as any).chartInstances as Set<{
+      isDisposed: () => boolean;
+      dispose: () => void;
+    }>;
+    const chart = {
+      isDisposed: vi.fn(() => false),
+      dispose: vi.fn(),
+    };
+    cache.set('img1', 'blob:http://localhost/old-deck');
+    chartInstances.add(chart);
+
+    expect(container.querySelectorAll('.mock-slide')).toHaveLength(2);
+    expect(viewer.getMountedSlides()).toEqual([0, 1]);
+
+    viewer.load(makeMockPresentation(1));
+
+    expect(handles[0].dispose).toHaveBeenCalledOnce();
+    expect(handles[1].dispose).toHaveBeenCalledOnce();
+    expect(chart.dispose).toHaveBeenCalledOnce();
+    expect(revokeStub).toHaveBeenCalledWith('blob:http://localhost/old-deck');
+    expect(container.innerHTML).toBe('');
+    expect(viewer.getMountedSlides()).toEqual([]);
+    expect(viewer.slideCount).toBe(1);
+    expect(viewer.presentationData).not.toBeNull();
+
+    revokeStub.mockRestore();
+  });
+
   it('stops a batched list render when a newer render request supersedes it', async () => {
     const rafCallbacks: FrameRequestCallback[] = [];
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {

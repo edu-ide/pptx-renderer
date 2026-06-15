@@ -48,6 +48,8 @@ function collectModifiers(colorNode: SafeXmlNode): ColorModifier[] {
     const val = child.numAttr('val');
     if (val !== undefined && name) {
       modifiers.push({ name, val });
+    } else if (name === 'inv' || name === 'gray') {
+      modifiers.push({ name, val: 0 });
     }
   }
   return modifiers;
@@ -315,9 +317,9 @@ function resolvePatternFill(pattFill: SafeXmlNode, ctx: RenderContext): string {
   // Helper: returns CSS `background` shorthand with repeating pattern layer(s) over bg color.
   // Format: "<gradient-layer> 0 0/<size>, <bg-color-layer>"
   // This is a valid multi-layer CSS background shorthand.
-  const pat = (gradient: string): string => `${gradient} 0 0/${s}px ${s}px, ${bg}`;
+  const pat = (gradient: string): string => `${gradient} 0 0 / ${s}px ${s}px, ${bg}`;
   const pat2 = (g1: string, g2: string): string =>
-    `${g1} 0 0/${s}px ${s}px, ${g2} 0 0/${s}px ${s}px, ${bg}`;
+    `${g1} 0 0 / ${s}px ${s}px, ${g2} 0 0 / ${s}px ${s}px, ${bg}`;
 
   switch (preset) {
     // Solid fills

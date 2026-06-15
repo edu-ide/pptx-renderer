@@ -127,6 +127,21 @@ export function renderImage(node: PicNodeData, ctx: RenderContext): HTMLElement 
     return wrapper;
   }
 
+  const blipFill = node.source.child('blipFill');
+  const blip = blipFill.child('blip');
+  const blipOpacity = resolveBlipOpacity(blip);
+
+  const tile = blipFill.child('tile');
+  if (tile.exists()) {
+    wrapper.style.backgroundImage = `url("${url}")`;
+    wrapper.style.backgroundRepeat = 'repeat';
+    wrapper.style.backgroundSize = 'auto';
+    if (blipOpacity < 1) {
+      wrapper.style.opacity = `${Number(blipOpacity.toFixed(4))}`;
+    }
+    return wrapper;
+  }
+
   // Create image element
   const img = document.createElement('img');
   img.src = url;
@@ -135,6 +150,12 @@ export function renderImage(node: PicNodeData, ctx: RenderContext): HTMLElement 
   img.style.objectFit = 'fill';
   img.style.display = 'block';
   img.draggable = false;
+
+  const fillRect = node.source.child('blipFill').child('stretch').child('fillRect');
+  const fillRectBox = fillRect.exists() ? getFillRectBox(fillRect) : undefined;
+  if (fillRectBox) {
+    applyImageFillRect(img, fillRectBox);
+  }
 
   // Apply crop if present.
   // OOXML srcRect defines what portion of the source image is cropped away.
@@ -154,8 +175,8 @@ export function renderImage(node: PicNodeData, ctx: RenderContext): HTMLElement 
       // Use pixel values for offset — CSS margin-top/margin-left percentages are
       // both relative to the containing block's WIDTH (not height), which causes
       // incorrect offsets for non-square wrappers with significant crops.
-      const wrapperW = node.size.w;
-      const wrapperH = node.size.h;
+      const wrapperW = node.size.w * ((fillRectBox?.width ?? 100) / 100);
+      const wrapperH = node.size.h * ((fillRectBox?.height ?? 100) / 100);
       img.style.width = `${(scaleX * wrapperW).toFixed(4)}px`;
       img.style.height = `${(scaleY * wrapperH).toFixed(4)}px`;
       img.style.marginLeft = `${(-left * scaleX * wrapperW).toFixed(4)}px`;
@@ -164,8 +185,6 @@ export function renderImage(node: PicNodeData, ctx: RenderContext): HTMLElement 
   }
 
   // --- Blip effects ---
-  const blip = node.source.child('blipFill').child('blip');
-  const blipOpacity = resolveBlipOpacity(blip);
   if (blipOpacity < 1) {
     wrapper.style.opacity = `${Number(blipOpacity.toFixed(4))}`;
   }
@@ -192,6 +211,39 @@ export function renderImage(node: PicNodeData, ctx: RenderContext): HTMLElement 
   return wrapper;
 }
 
+function pctAttr(node: SafeXmlNode, name: string): number {
+  return (node.numAttr(name) ?? 0) / 1000;
+}
+
+interface FillRectBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+function getFillRectBox(fillRect: SafeXmlNode): FillRectBox {
+  const left = pctAttr(fillRect, 'l');
+  const top = pctAttr(fillRect, 't');
+  const right = pctAttr(fillRect, 'r');
+  const bottom = pctAttr(fillRect, 'b');
+
+  return {
+    left,
+    top,
+    width: 100 - left - right,
+    height: 100 - top - bottom,
+  };
+}
+
+function applyImageFillRect(img: HTMLImageElement, fillRect: FillRectBox): void {
+  img.style.position = 'absolute';
+  img.style.left = `${fillRect.left}%`;
+  img.style.top = `${fillRect.top}%`;
+  img.style.width = `${fillRect.width}%`;
+  img.style.height = `${fillRect.height}%`;
+}
+
 function applyPictureShapeProperties(
   wrapper: HTMLElement,
   node: PicNodeData,
@@ -206,16 +258,61 @@ function applyPictureShapeProperties(
 function applyPictureFill(wrapper: HTMLElement, node: PicNodeData, ctx: RenderContext): void {
   const spPr = node.source.child('spPr');
   const fillCss = resolveFill(spPr, ctx);
-  if (fillCss && fillCss !== 'transparent') {
-    wrapper.style.background = fillCss;
+  if (!fillCss) return;
+  applyCssFillBackground(wrapper, fillCss);
+}
+
+function applyCssFillBackground(el: HTMLElement, fillCss: string): void {
+  clearCssFillBackground(el);
+
+  if (fillCss.includes('gradient') && fillCss.includes(' 0 0 / ')) {
+    const bgMatch = fillCss.match(/,\s*(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|[a-zA-Z]+)\s*$/);
+    if (bgMatch && bgMatch.index !== undefined) {
+      const imageLayers = fillCss.slice(0, bgMatch.index).replace(/\s+0 0\s*\/\s*8px 8px/g, '');
+      el.style.backgroundImage = imageLayers;
+      el.style.backgroundSize = '8px 8px';
+      el.style.backgroundRepeat = 'repeat';
+      el.style.backgroundColor = bgMatch[1];
+      return;
+    }
+  }
+
+  if (
+    fillCss.includes('gradient') ||
+    fillCss.startsWith('url(') ||
+    fillCss.includes('repeating-')
+  ) {
+    el.style.background = fillCss;
+  } else {
+    el.style.backgroundColor = fillCss;
   }
 }
 
-function applyPictureOutline(wrapper: HTMLElement, node: PicNodeData, ctx: RenderContext): void {
-  const line = node.line;
-  if (!line?.exists() || line.child('noFill').exists()) return;
+function clearCssFillBackground(el: HTMLElement): void {
+  el.style.background = '';
+  el.style.backgroundColor = '';
+  el.style.backgroundImage = '';
+  el.style.backgroundRepeat = '';
+  el.style.backgroundSize = '';
+}
 
-  const style = resolveLineStyle(line, ctx);
+function applyPictureOutline(wrapper: HTMLElement, node: PicNodeData, ctx: RenderContext): void {
+  const lnRef = node.source.child('style').child('lnRef');
+  const lineIsNoFill = node.line?.child('noFill').exists() ?? false;
+  if (lineIsNoFill) return;
+
+  const hasExplicitLine = node.line?.exists() ?? false;
+  const themeLineFromLnRef =
+    !hasExplicitLine &&
+    lnRef.exists() &&
+    (lnRef.numAttr('idx') ?? 0) > 0 &&
+    (ctx.theme.lineStyles?.length ?? 0) >= (lnRef.numAttr('idx') ?? 0)
+      ? ctx.theme.lineStyles![(lnRef.numAttr('idx') ?? 1) - 1]
+      : undefined;
+  const line = hasExplicitLine ? node.line! : themeLineFromLnRef;
+  if (!line?.exists()) return;
+
+  const style = resolveLineStyle(line, ctx, lnRef);
   if (style.width <= 0 || style.color === 'transparent') return;
 
   wrapper.style.boxSizing = 'border-box';

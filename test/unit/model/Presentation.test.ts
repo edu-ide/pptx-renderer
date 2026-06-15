@@ -150,6 +150,16 @@ describe('buildPresentation', () => {
     expect(pres.slides[0].nodes[0].nodeType).toBe('shape');
   });
 
+  it('preserves diagram fallback drawings for render/export/search contexts', () => {
+    const pres = buildPresentation(
+      makeMinimalFiles({
+        diagramDrawings: new Map([['ppt/diagrams/drawing1.xml', '<dsp:drawing/>']]),
+      }),
+    );
+
+    expect((pres as any).diagramDrawings?.get('ppt/diagrams/drawing1.xml')).toBe('<dsp:drawing/>');
+  });
+
   it('resolves slide → layout → master → theme chain', () => {
     const pres = buildPresentation(makeMinimalFiles());
     const layoutPath = pres.slideToLayout.get(0);

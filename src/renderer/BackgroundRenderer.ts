@@ -8,6 +8,7 @@ import { resolveColor, resolveFill, resolveThemeBackgroundFillReference } from '
 import { hexToRgb } from '../utils/color';
 import { RelEntry } from '../parser/RelParser';
 import { resolveMediaPath, getOrCreateBlobUrl } from '../utils/media';
+import { isAllowedExternalMediaUrl } from '../utils/urlSafety';
 
 /**
  * Composite a semi-transparent color on white so the result is always opaque.
@@ -22,6 +23,18 @@ function compositeOnWhite(r: number, g: number, b: number, a: number): string {
 }
 
 function applyBackgroundFillCss(container: HTMLElement, fillCss: string): void {
+  if (fillCss.includes('gradient') && fillCss.includes(' 0 0 / ')) {
+    const bgMatch = fillCss.match(/,\s*(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|[a-zA-Z]+)\s*$/);
+    if (bgMatch && bgMatch.index !== undefined) {
+      const imageLayers = fillCss.slice(0, bgMatch.index).replace(/\s+0 0\s*\/\s*8px 8px/g, '');
+      container.style.backgroundImage = imageLayers;
+      container.style.backgroundSize = '8px 8px';
+      container.style.backgroundRepeat = 'repeat';
+      container.style.backgroundColor = bgMatch[1];
+      return;
+    }
+  }
+
   if (
     fillCss.includes('gradient') ||
     fillCss.startsWith('url(') ||
@@ -113,6 +126,16 @@ function renderBgPr(
     return;
   }
 
+  // pattFill
+  const pattFill = bgPr.child('pattFill');
+  if (pattFill.exists()) {
+    const css = resolveFill(bgPr, ctx);
+    if (css) {
+      applyBackgroundFillCss(container, css);
+    }
+    return;
+  }
+
   // blipFill (image background)
   const blipFill = bgPr.child('blipFill');
   if (blipFill.exists()) {
@@ -171,35 +194,36 @@ function renderBlipBackground(
 ): void {
   const blip = blipFill.child('blip');
   const embedId = blip.attr('embed') ?? blip.attr('r:embed');
+  const linkId = blip.attr('link') ?? blip.attr('r:link');
+  const relId = embedId ?? linkId;
 
-  if (!embedId) return;
+  if (!relId) return;
 
   // Resolve image from rels + media (use provided rels or fall back to slide rels)
   const relsMap = rels ?? ctx.slide.rels;
-  const rel = relsMap.get(embedId);
+  const rel = relsMap.get(relId);
   if (!rel) return;
 
-  const mediaPath = resolveMediaPath(rel.target);
-  const data = ctx.presentation.media.get(mediaPath);
-  if (!data) return;
-
-  const url = getOrCreateBlobUrl(mediaPath, data, ctx.mediaUrlCache);
+  let url: string | undefined;
+  if (rel.targetMode === 'External') {
+    if (!isAllowedExternalMediaUrl(rel.target)) return;
+    url = rel.target;
+  } else {
+    const mediaPath = resolveMediaPath(rel.target);
+    const data = ctx.presentation.media.get(mediaPath);
+    if (!data) return;
+    url = getOrCreateBlobUrl(mediaPath, data, ctx.mediaUrlCache);
+  }
 
   container.style.backgroundImage = `url("${url}")`;
 
   // Check for stretch or tile mode
   const stretch = blipFill.child('stretch');
   if (stretch.exists()) {
-    container.style.backgroundSize = 'cover';
-    container.style.backgroundPosition = 'center';
+    // OOXML stretch fills the destination rectangle. When fillRect is omitted,
+    // the implicit rectangle is the whole image, not an aspect-preserving cover crop.
+    applyStretchFillRect(container, stretch.child('fillRect'));
     container.style.backgroundRepeat = 'no-repeat';
-
-    // Parse fillRect for non-uniform stretch
-    const fillRect = stretch.child('fillRect');
-    if (fillRect.exists()) {
-      // fillRect specifies insets — if all zero, it's a full stretch
-      container.style.backgroundSize = '100% 100%';
-    }
   }
 
   const tile = blipFill.child('tile');
@@ -207,4 +231,32 @@ function renderBlipBackground(
     container.style.backgroundRepeat = 'repeat';
     container.style.backgroundSize = 'auto';
   }
+}
+
+function pctAttr(node: SafeXmlNode, name: string): number {
+  return (node.numAttr(name) ?? 0) / 1000;
+}
+
+function positionForInset(startPct: number, endPct: number): number {
+  const denominator = startPct + endPct;
+  if (Math.abs(denominator) < 0.0001) return 0;
+  return (startPct / denominator) * 100;
+}
+
+function applyStretchFillRect(container: HTMLElement, fillRect: SafeXmlNode): void {
+  if (!fillRect.exists()) {
+    container.style.backgroundSize = '100% 100%';
+    container.style.backgroundPosition = '';
+    return;
+  }
+
+  const left = pctAttr(fillRect, 'l');
+  const top = pctAttr(fillRect, 't');
+  const right = pctAttr(fillRect, 'r');
+  const bottom = pctAttr(fillRect, 'b');
+  const width = 100 - left - right;
+  const height = 100 - top - bottom;
+
+  container.style.backgroundSize = `${width}% ${height}%`;
+  container.style.backgroundPosition = `${positionForInset(left, right)}% ${positionForInset(top, bottom)}%`;
 }

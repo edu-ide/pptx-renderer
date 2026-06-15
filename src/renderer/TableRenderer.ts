@@ -11,7 +11,12 @@
 
 import { TableNodeData, TableCell } from '../model/nodes/TableNode';
 import { RenderContext } from './RenderContext';
-import { resolveColor, resolveLineStyle, resolveThemeFillReference } from './StyleResolver';
+import {
+  resolveColor,
+  resolveFill,
+  resolveLineStyle,
+  resolveThemeFillReference,
+} from './StyleResolver';
 import { renderTextBody } from './TextRenderer';
 import { emuToPx } from '../parser/units';
 import { hexToRgb } from '../utils/color';
@@ -20,6 +25,20 @@ import { getPredefinedTableStyle } from './predefinedTableStyles';
 import { resolveThemeFontStack } from './fontResolver';
 
 function applyCssFillBackground(el: HTMLElement, fillCss: string): void {
+  clearCssFillBackground(el);
+
+  if (fillCss.includes('gradient') && fillCss.includes(' 0 0 / ')) {
+    const bgMatch = fillCss.match(/,\s*(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|[a-zA-Z]+)\s*$/);
+    if (bgMatch && bgMatch.index !== undefined) {
+      const imageLayers = fillCss.slice(0, bgMatch.index).replace(/\s+0 0\s*\/\s*8px 8px/g, '');
+      el.style.backgroundImage = imageLayers;
+      el.style.backgroundSize = '8px 8px';
+      el.style.backgroundRepeat = 'repeat';
+      el.style.backgroundColor = bgMatch[1];
+      return;
+    }
+  }
+
   if (
     fillCss.includes('gradient') ||
     fillCss.startsWith('url(') ||
@@ -29,6 +48,14 @@ function applyCssFillBackground(el: HTMLElement, fillCss: string): void {
   } else {
     el.style.backgroundColor = fillCss;
   }
+}
+
+function clearCssFillBackground(el: HTMLElement): void {
+  el.style.background = '';
+  el.style.backgroundColor = '';
+  el.style.backgroundImage = '';
+  el.style.backgroundRepeat = '';
+  el.style.backgroundSize = '';
 }
 
 // ---------------------------------------------------------------------------
@@ -240,9 +267,18 @@ function applyStyleFill(td: HTMLElement, tcStyle: SafeXmlNode, ctx: RenderContex
   const fill = tcStyle.child('fill');
   if (!fill.exists()) return false;
 
+  // noFill
+  const noFill = fill.child('noFill');
+  if (noFill.exists()) {
+    clearCssFillBackground(td);
+    td.style.background = 'transparent';
+    return true;
+  }
+
   // solidFill
   const solidFill = fill.child('solidFill');
   if (solidFill.exists()) {
+    clearCssFillBackground(td);
     const { color, alpha } = resolveColor(solidFill, ctx);
     const hex = color.startsWith('#') ? color : `#${color}`;
     if (alpha < 1) {
@@ -254,6 +290,13 @@ function applyStyleFill(td: HTMLElement, tcStyle: SafeXmlNode, ctx: RenderContex
     return true;
   }
 
+  // gradFill / pattFill
+  const directFillCss = resolveFill(fill, ctx);
+  if (directFillCss) {
+    applyCssFillBackground(td, directFillCss);
+    return true;
+  }
+
   // fillRef (theme fill reference)
   const fillRef = fill.child('fillRef');
   if (fillRef.exists()) {
@@ -261,10 +304,6 @@ function applyStyleFill(td: HTMLElement, tcStyle: SafeXmlNode, ctx: RenderContex
     applyCssFillBackground(td, fillCss);
     return true;
   }
-
-  // noFill
-  const noFill = fill.child('noFill');
-  if (noFill.exists()) return true; // explicitly no fill
 
   return false;
 }
@@ -379,6 +418,7 @@ function applyTableBackground(table: HTMLElement, tblStyle: SafeXmlNode, ctx: Re
   // solidFill
   const solidFill = tblBg.child('solidFill');
   if (solidFill.exists()) {
+    clearCssFillBackground(table);
     const { color, alpha } = resolveColor(solidFill, ctx);
     const hex = color.startsWith('#') ? color : `#${color}`;
     if (alpha < 1) {
@@ -387,6 +427,12 @@ function applyTableBackground(table: HTMLElement, tblStyle: SafeXmlNode, ctx: Re
     } else {
       table.style.backgroundColor = hex;
     }
+    return;
+  }
+
+  const directFillCss = resolveFill(tblBg, ctx);
+  if (directFillCss) {
+    applyCssFillBackground(table, directFillCss);
   }
 }
 
@@ -543,39 +589,47 @@ export function renderTable(node: TableNodeData, ctx: RenderContext): HTMLElemen
  */
 function applyCellProperties(td: HTMLElement, cell: TableCell, ctx: RenderContext): void {
   const tcPr = cell.properties;
-  if (!tcPr) return;
 
-  if (tcPr.attr('horzOverflow') === 'overflow') {
+  if (tcPr?.attr('horzOverflow') === 'overflow') {
     td.style.overflow = 'visible';
   }
 
   // Fill (overrides table style fill)
-  const noFill = tcPr.child('noFill');
-  if (noFill.exists()) {
-    td.style.background = 'transparent';
-  } else if (tcPr.child('solidFill').exists()) {
-    const solidFill = tcPr.child('solidFill');
-    const { color, alpha } = resolveColor(solidFill, ctx);
-    const hex = color.startsWith('#') ? color : `#${color}`;
-    if (alpha < 1) {
-      const { r, g, b } = hexToRgb(hex);
-      td.style.backgroundColor = `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
+  if (tcPr) {
+    const noFill = tcPr.child('noFill');
+    if (noFill.exists()) {
+      clearCssFillBackground(td);
+      td.style.background = 'transparent';
+    } else if (tcPr.child('solidFill').exists()) {
+      const solidFill = tcPr.child('solidFill');
+      clearCssFillBackground(td);
+      const { color, alpha } = resolveColor(solidFill, ctx);
+      const hex = color.startsWith('#') ? color : `#${color}`;
+      if (alpha < 1) {
+        const { r, g, b } = hexToRgb(hex);
+        td.style.backgroundColor = `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
+      } else {
+        td.style.backgroundColor = hex;
+      }
     } else {
-      td.style.backgroundColor = hex;
+      const directFillCss = resolveFill(tcPr, ctx);
+      if (directFillCss) {
+        applyCssFillBackground(td, directFillCss);
+      }
     }
+
+    // Borders (override table style borders)
+    applyBorder(td, tcPr, 'lnT', 'borderTop', ctx);
+    applyBorder(td, tcPr, 'lnB', 'borderBottom', ctx);
+    applyBorder(td, tcPr, 'lnL', 'borderLeft', ctx);
+    applyBorder(td, tcPr, 'lnR', 'borderRight', ctx);
   }
 
-  // Borders (override table style borders)
-  applyBorder(td, tcPr, 'lnT', 'borderTop', ctx);
-  applyBorder(td, tcPr, 'lnB', 'borderBottom', ctx);
-  applyBorder(td, tcPr, 'lnL', 'borderLeft', ctx);
-  applyBorder(td, tcPr, 'lnR', 'borderRight', ctx);
-
   // Margins / Padding
-  const marL = tcPr.numAttr('marL');
-  const marR = tcPr.numAttr('marR');
-  const marT = tcPr.numAttr('marT');
-  const marB = tcPr.numAttr('marB');
+  const marL = tcPr?.numAttr('marL');
+  const marR = tcPr?.numAttr('marR');
+  const marT = tcPr?.numAttr('marT');
+  const marB = tcPr?.numAttr('marB');
 
   // Default margin is 91440 EMU (0.1 inch) = ~9.6px
   const defaultMargin = 91440;
@@ -585,7 +639,7 @@ function applyCellProperties(td: HTMLElement, cell: TableCell, ctx: RenderContex
   td.style.paddingBottom = `${emuToPx(marB ?? 45720)}px`;
 
   // Vertical alignment
-  const anchor = tcPr.attr('anchor');
+  const anchor = tcPr?.attr('anchor');
   const alignMap: Record<string, string> = {
     t: 'top',
     ctr: 'middle',

@@ -1,14 +1,14 @@
-import type { PresentationData } from '../model/Presentation';
+import { resolveNodePlaceholderInheritance, type PresentationData } from '../model/Presentation';
 import type { SlideNode } from '../model/Slide';
 import type { BaseNodeData, NodeType, Position, Size } from '../model/nodes/BaseNode';
 import type { GroupNodeData } from '../model/nodes/GroupNode';
 import type { ShapeNodeData, TextBody } from '../model/nodes/ShapeNode';
 import type { TableCell, TableNodeData } from '../model/nodes/TableNode';
-import { parseGroupNode } from '../model/nodes/GroupNode';
-import { parsePicNode } from '../model/nodes/PicNode';
-import { parseShapeNode } from '../model/nodes/ShapeNode';
-import { parseTableNode } from '../model/nodes/TableNode';
+import { isPlaceholderNode, parseRenderableChild } from '../model/RenderableChild';
 import type { SafeXmlNode } from '../parser/XmlParser';
+import type { RelEntry } from '../parser/RelParser';
+import type { LayoutData } from '../model/Layout';
+import type { MasterData } from '../model/Master';
 
 export type SearchTextKind = 'shape' | 'table-cell';
 
@@ -59,6 +59,14 @@ interface CoordinateTransform {
   scaleY: number;
 }
 
+interface TextChildParseContext {
+  rels: Map<string, RelEntry>;
+  partPath?: string;
+  diagramDrawings?: Map<string, string>;
+  layout?: LayoutData;
+  master?: MasterData;
+}
+
 const IDENTITY_TRANSFORM: CoordinateTransform = {
   offsetX: 0,
   offsetY: 0,
@@ -106,37 +114,20 @@ const createSnippet = (text: string, start: number, end: number, radius: number)
   return `${prefix}${text.slice(from, to)}${suffix}`;
 };
 
-const isPlaceholderNode = (node: SafeXmlNode): boolean => {
-  for (const wrapper of ['nvSpPr', 'nvPicPr', 'nvGrpSpPr', 'nvGraphicFramePr', 'nvCxnSpPr']) {
-    const nv = node.child(wrapper);
-    if (nv.exists() && nv.child('nvPr').child('ph').exists()) return true;
-  }
-  return false;
-};
-
 const parseGroupChild = (
   childXml: SafeXmlNode,
+  ctx: TextChildParseContext,
   skipPlaceholders = false,
+  parentGroup?: GroupNodeData,
 ): BaseNodeData | undefined => {
-  if (skipPlaceholders && isPlaceholderNode(childXml)) return undefined;
-
-  switch (childXml.localName) {
-    case 'sp':
-    case 'cxnSp':
-      return parseShapeNode(childXml);
-    case 'pic':
-      return parsePicNode(childXml);
-    case 'grpSp':
-      return parseGroupNode(childXml);
-    case 'graphicFrame': {
-      const graphic = childXml.child('graphic');
-      const graphicData = graphic.child('graphicData');
-      if (graphicData.child('tbl').exists()) return parseTableNode(childXml);
-      return undefined;
-    }
-    default:
-      return undefined;
+  const child = parseRenderableChild(childXml, {
+    ...ctx,
+    skipPlaceholders,
+  });
+  if (child) {
+    resolveNodePlaceholderInheritance(child, ctx.layout, ctx.master, { parentGroup });
   }
+  return child;
 };
 
 const getGroupChildTransform = (
@@ -246,6 +237,7 @@ const addNodeText = (
   node: SlideNode | BaseNodeData,
   nodePath: string,
   options: Required<TextIndexOptions>,
+  parseCtx: TextChildParseContext,
   transform: CoordinateTransform = IDENTITY_TRANSFORM,
   skipPlaceholders = false,
 ): void => {
@@ -268,7 +260,7 @@ const addNodeText = (
         const group = node as GroupNodeData;
         (node as GroupNodeData).children.forEach((childXml, childIndex) => {
           try {
-            const child = parseGroupChild(childXml, skipPlaceholders);
+            const child = parseGroupChild(childXml, parseCtx, skipPlaceholders, group);
             if (!child) return;
             const childTransform = getGroupChildTransform(group, child, transform);
             const childId = child.id || child.name || String(childIndex);
@@ -278,6 +270,7 @@ const addNodeText = (
               child,
               `${nodePath}/children/${childIndex}/${childId}`,
               options,
+              parseCtx,
               childTransform,
               skipPlaceholders,
             );
@@ -296,13 +289,14 @@ const addTemplateText = (
   spTree: SafeXmlNode | undefined,
   scope: 'master' | 'layout',
   options: Required<TextIndexOptions>,
+  parseCtx: TextChildParseContext,
 ): void => {
   if (!spTree?.exists()) return;
 
   spTree.allChildren().forEach((childXml, childIndex) => {
     if (isPlaceholderNode(childXml)) return;
     try {
-      const child = parseGroupChild(childXml, true);
+      const child = parseGroupChild(childXml, parseCtx, true);
       if (!child) return;
       const childId = child.id || child.name || String(childIndex);
       addNodeText(
@@ -311,6 +305,7 @@ const addTemplateText = (
         child,
         `slides/${slideIndex}/${scope}/nodes/${childId}`,
         options,
+        parseCtx,
         IDENTITY_TRANSFORM,
         true,
       );
@@ -328,23 +323,48 @@ export const buildTextIndex = (
   const entries: TextIndexEntry[] = [];
 
   presentation.slides.forEach((slide, slideIndex) => {
-    if (slide.showMasterSp) {
-      const layoutPath = presentation.slideToLayout.get(slide.index) || slide.layoutIndex;
-      const layout = presentation.layouts.get(layoutPath);
-      const masterPath = layoutPath ? presentation.layoutToMaster.get(layoutPath) : '';
-      const master = masterPath ? presentation.masters.get(masterPath) : undefined;
+    const layoutPath = presentation.slideToLayout.get(slide.index) || slide.layoutIndex;
+    const layout = presentation.layouts.get(layoutPath);
+    const masterPath = layoutPath ? presentation.layoutToMaster.get(layoutPath) : '';
+    const master = masterPath ? presentation.masters.get(masterPath) : undefined;
 
+    if (slide.showMasterSp) {
       if (layout?.showMasterSp && master) {
-        addTemplateText(entries, slideIndex, master.spTree, 'master', mergedOptions);
+        addTemplateText(entries, slideIndex, master.spTree, 'master', mergedOptions, {
+          rels: master.rels,
+          partPath: masterPath,
+          diagramDrawings: presentation.diagramDrawings,
+          layout,
+          master,
+        });
       }
       if (layout) {
-        addTemplateText(entries, slideIndex, layout.spTree, 'layout', mergedOptions);
+        addTemplateText(entries, slideIndex, layout.spTree, 'layout', mergedOptions, {
+          rels: layout.rels,
+          partPath: layoutPath,
+          diagramDrawings: presentation.diagramDrawings,
+          layout,
+          master,
+        });
       }
     }
 
     slide.nodes.forEach((node, nodeIndex) => {
       const nodeId = node.id || node.name || String(nodeIndex);
-      addNodeText(entries, slideIndex, node, `slides/${slideIndex}/nodes/${nodeId}`, mergedOptions);
+      addNodeText(
+        entries,
+        slideIndex,
+        node,
+        `slides/${slideIndex}/nodes/${nodeId}`,
+        mergedOptions,
+        {
+          rels: slide.rels,
+          partPath: slide.slidePath,
+          diagramDrawings: presentation.diagramDrawings,
+          layout,
+          master,
+        },
+      );
     });
   });
 

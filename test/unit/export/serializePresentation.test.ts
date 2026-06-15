@@ -60,6 +60,81 @@ function makePres(nodes: any[]): PresentationData {
   } as PresentationData;
 }
 
+function makeDiagramGraphicFrame(): SafeXmlNode {
+  return parseXml(`
+    <graphicFrame xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+                  xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram"
+                  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+      <nvGraphicFramePr><cNvPr id="90" name="diagram-frame"/><nvPr/></nvGraphicFramePr>
+      <xfrm><off x="0" y="0"/><ext cx="1828800" cy="914400"/></xfrm>
+      <a:graphic>
+        <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/diagram">
+          <dgm:relIds r:dm="rIdData"/>
+        </a:graphicData>
+      </a:graphic>
+    </graphicFrame>
+  `);
+}
+
+function diagramDrawingXml(): string {
+  return `
+    <dsp:drawing xmlns:dsp="http://schemas.microsoft.com/office/drawing/2008/diagram"
+                 xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <dsp:spTree>
+        <dsp:sp>
+          <dsp:nvSpPr><dsp:cNvPr id="91" name="diagram-label"/><dsp:nvPr/></dsp:nvSpPr>
+          <dsp:spPr>
+            <a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="457200"/></a:xfrm>
+            <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          </dsp:spPr>
+          <dsp:txBody>
+            <a:bodyPr/><a:lstStyle/>
+            <a:p><a:r><a:t>Serialized SmartArt label</a:t></a:r></a:p>
+          </dsp:txBody>
+        </dsp:sp>
+      </dsp:spTree>
+    </dsp:drawing>
+  `;
+}
+
+function makeGroupedPlaceholderXml(): SafeXmlNode {
+  return parseXml(`
+    <sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+        xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <nvSpPr>
+        <cNvPr id="92" name="grouped-placeholder"/>
+        <cNvSpPr/>
+        <nvPr><ph type="body" idx="1"/></nvPr>
+      </nvSpPr>
+      <spPr>
+        <a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></a:xfrm>
+        <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+      </spPr>
+      <txBody>
+        <a:bodyPr/>
+        <a:lstStyle/>
+        <a:p><a:r><a:t>Serialized inherited placeholder</a:t></a:r></a:p>
+      </txBody>
+    </sp>
+  `);
+}
+
+function makeLayoutPlaceholderXml(): SafeXmlNode {
+  return parseXml(`
+    <sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+        xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <nvSpPr>
+        <cNvPr id="93" name="layout-placeholder"/>
+        <cNvSpPr/>
+        <nvPr><ph type="body" idx="1"/></nvPr>
+      </nvSpPr>
+      <spPr>
+        <a:xfrm><a:off x="952500" y="571500"/><a:ext cx="381000" cy="190500"/></a:xfrm>
+      </spPr>
+    </sp>
+  `);
+}
+
 describe('serializePresentation', () => {
   it('serializes empty presentation', () => {
     const result = serializePresentation(makePres([]));
@@ -317,6 +392,71 @@ describe('serializePresentation', () => {
     const child = result.slides[0].nodes[0].children![0];
     expect(child.nodeType).toBe('picture');
     expect(child.blipEmbed).toBe('rIdPreview');
+  });
+
+  it('serializes group SmartArt fallback children', () => {
+    const group: GroupNodeData = {
+      ...makeBase({ id: '10', name: 'group' }),
+      nodeType: 'group',
+      childOffset: { x: 0, y: 0 },
+      childExtent: { w: 96, h: 96 },
+      children: [makeDiagramGraphicFrame()],
+    };
+    const pres = makePres([group]);
+    pres.slides[0].rels = new Map([
+      [
+        'rIdData',
+        {
+          type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramData',
+          target: '../diagrams/data7.xml',
+        },
+      ],
+      [
+        'rIdDrawing',
+        {
+          type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramDrawing',
+          target: '../diagrams/drawing7.xml',
+        },
+      ],
+    ]);
+    (pres as any).diagramDrawings = new Map([['ppt/diagrams/drawing7.xml', diagramDrawingXml()]]);
+
+    const result = serializePresentation(pres);
+    const child = result.slides[0].nodes[0].children![0];
+    expect(child.nodeType).toBe('group');
+    expect(child.children).toHaveLength(1);
+    expect(child.children![0].textBody?.totalText).toBe('Serialized SmartArt label');
+  });
+
+  it('serializes inherited placeholder geometry for lazy group children', () => {
+    const group: GroupNodeData = {
+      ...makeBase({ id: '10', name: 'group', position: { x: 50, y: 30 }, size: { w: 200, h: 100 } }),
+      nodeType: 'group',
+      childOffset: { x: 0, y: 0 },
+      childExtent: { w: 400, h: 200 },
+      children: [makeGroupedPlaceholderXml()],
+    };
+    const pres = makePres([group]);
+    const layoutPath = 'ppt/slideLayouts/slideLayout1.xml';
+    pres.slideToLayout.set(0, layoutPath);
+    pres.layouts.set(layoutPath, {
+      placeholders: [
+        {
+          node: makeLayoutPlaceholderXml(),
+          absoluteXfrm: { position: { x: 100, y: 60 }, size: { w: 40, h: 20 } },
+        },
+      ],
+      spTree: emptyXml,
+      rels: new Map(),
+      showMasterSp: true,
+    });
+
+    const result = serializePresentation(pres);
+    const child = result.slides[0].nodes[0].children![0];
+
+    expect(child.textBody?.totalText).toBe('Serialized inherited placeholder');
+    expect(child.position).toEqual({ x: 100, y: 60 });
+    expect(child.size).toEqual({ w: 80, h: 40 });
   });
 
   it('serializes group with unparseable children gracefully', () => {

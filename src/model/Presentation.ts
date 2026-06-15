@@ -11,7 +11,8 @@ import { ThemeData, parseTheme } from './Theme';
 import { MasterData, parseMaster } from './Master';
 import { LayoutData, parseLayout, PlaceholderEntry } from './Layout';
 import { SlideData, SlideNode, parseSlide } from './Slide';
-import { PlaceholderInfo, Position, Size } from './nodes/BaseNode';
+import { BaseNodeData, PlaceholderInfo, Position, Size } from './nodes/BaseNode';
+import type { GroupNodeData } from './nodes/GroupNode';
 
 export interface PresentationData {
   width: number;
@@ -28,6 +29,8 @@ export interface PresentationData {
   /** Presentation-wide default text style from ppt/presentation.xml. */
   defaultTextStyle?: SafeXmlNode;
   charts: Map<string, SafeXmlNode>;
+  /** SmartArt fallback drawing parts keyed by part path (ppt/diagrams/drawing*.xml). */
+  diagramDrawings?: Map<string, string>;
   /** Chart-local theme overrides keyed by chart part path. */
   chartThemes?: Map<string, ThemeData>;
   /** Chart style parts keyed by chart part path. */
@@ -326,6 +329,7 @@ export function buildPresentation(files: PptxFiles): PresentationData {
     tableStyles,
     defaultTextStyle: defaultTextStyle.exists() ? defaultTextStyle : undefined,
     charts,
+    diagramDrawings: files.diagramDrawings,
     chartThemes,
     chartStyles,
     chartColorStyles,
@@ -496,6 +500,117 @@ function inheritPlaceholderType(target: PlaceholderInfo, sourceNode: SafeXmlNode
   }
 }
 
+export interface PlaceholderInheritanceOptions {
+  /**
+   * Parent group for lazy-parsed group children. Layout/master placeholders are
+   * stored in slide coordinates, while group children render in the group's
+   * child coordinate space, so inherited xfrm must be inverted before remap.
+   */
+  parentGroup?: GroupNodeData;
+}
+
+function toGroupChildXfrm(
+  xfrm: { position: Position; size: Size },
+  group: GroupNodeData,
+): { position: Position; size: Size } {
+  const scaleX = group.childExtent.w > 0 ? group.size.w / group.childExtent.w : 1;
+  const scaleY = group.childExtent.h > 0 ? group.size.h / group.childExtent.h : 1;
+  if (scaleX === 0 || scaleY === 0) return xfrm;
+
+  return {
+    position: {
+      x: group.childOffset.x + (xfrm.position.x - group.position.x) / scaleX,
+      y: group.childOffset.y + (xfrm.position.y - group.position.y) / scaleY,
+    },
+    size: {
+      w: xfrm.size.w / scaleX,
+      h: xfrm.size.h / scaleY,
+    },
+  };
+}
+
+function resolveInheritedXfrm(
+  xfrm: { position: Position; size: Size },
+  options: PlaceholderInheritanceOptions,
+): { position: Position; size: Size } {
+  return options.parentGroup ? toGroupChildXfrm(xfrm, options.parentGroup) : xfrm;
+}
+
+export function resolveNodePlaceholderInheritance(
+  node: SlideNode | BaseNodeData,
+  layout: LayoutData | undefined,
+  master: MasterData | undefined,
+  options: PlaceholderInheritanceOptions = {},
+): void {
+  if (!node.placeholder) return;
+
+  const { type, idx } = node.placeholder;
+  const findMasterMatch = (): SafeXmlNode | undefined =>
+    master
+      ? findMatchingPlaceholder(master.placeholders, node.placeholder?.type ?? type, idx)
+      : undefined;
+  const sizeIsEmpty = node.size.w === 0 && node.size.h === 0;
+  const positionLooksDefault = node.position.y < 5; // y=0 or near top → use layout position
+
+  if (layout) {
+    const layoutMatch = findMatchingLayoutPlaceholder(layout.placeholders, type, idx);
+    if (layoutMatch) {
+      inheritPlaceholderType(node.placeholder, layoutMatch.node);
+
+      const rawXfrm = layoutMatch.absoluteXfrm ?? getPhXfrm(layoutMatch.node);
+      if (rawXfrm) {
+        const xfrm = resolveInheritedXfrm(rawXfrm, options);
+        if (sizeIsEmpty) {
+          node.position = xfrm.position;
+          node.size = xfrm.size;
+        } else if (positionLooksDefault) {
+          node.position = xfrm.position;
+        }
+      }
+
+      // Inherit bodyPr from layout placeholder for text rendering (anchor, insets, etc.)
+      if ('textBody' in node && node.textBody) {
+        const layoutBodyPr = getPhBodyPr(layoutMatch.node);
+        if (layoutBodyPr) {
+          node.textBody.layoutBodyProperties = layoutBodyPr;
+        }
+      }
+
+      if (rawXfrm) {
+        const masterMatch = findMasterMatch();
+        if (masterMatch) {
+          inheritPlaceholderType(node.placeholder, masterMatch);
+        }
+        return;
+      }
+    }
+  }
+
+  const masterMatch = findMasterMatch();
+  if (masterMatch) {
+    inheritPlaceholderType(node.placeholder, masterMatch);
+
+    const rawXfrm = getPhXfrm(masterMatch);
+    if (rawXfrm) {
+      const xfrm = resolveInheritedXfrm(rawXfrm, options);
+      if (sizeIsEmpty) {
+        node.position = xfrm.position;
+        node.size = xfrm.size;
+      } else if (positionLooksDefault) {
+        node.position = xfrm.position;
+      }
+    }
+
+    // Inherit bodyPr from master placeholder as fallback
+    if ('textBody' in node && node.textBody && !node.textBody.layoutBodyProperties) {
+      const masterBodyPr = getPhBodyPr(masterMatch);
+      if (masterBodyPr) {
+        node.textBody.layoutBodyProperties = masterBodyPr;
+      }
+    }
+  }
+}
+
 function resolveNodesPlaceholders(
   nodes: SlideNode[],
   layout: LayoutData | undefined,
@@ -508,70 +623,6 @@ function resolveNodesPlaceholders(
       // (they get parsed during rendering in GroupRenderer)
     }
 
-    if (!node.placeholder) continue;
-
-    const { type, idx } = node.placeholder;
-    const findMasterMatch = (): SafeXmlNode | undefined =>
-      master
-        ? findMatchingPlaceholder(master.placeholders, node.placeholder?.type ?? type, idx)
-        : undefined;
-    const sizeIsEmpty = node.size.w === 0 && node.size.h === 0;
-    const positionLooksDefault = node.position.y < 5; // y=0 or near top → use layout position
-
-    if (layout) {
-      const layoutMatch = findMatchingLayoutPlaceholder(layout.placeholders, type, idx);
-      if (layoutMatch) {
-        inheritPlaceholderType(node.placeholder, layoutMatch.node);
-
-        const xfrm = layoutMatch.absoluteXfrm ?? getPhXfrm(layoutMatch.node);
-        if (xfrm) {
-          if (sizeIsEmpty) {
-            node.position = xfrm.position;
-            node.size = xfrm.size;
-          } else if (positionLooksDefault) {
-            node.position = xfrm.position;
-          }
-        }
-
-        // Inherit bodyPr from layout placeholder for text rendering (anchor, insets, etc.)
-        if ('textBody' in node && node.textBody) {
-          const layoutBodyPr = getPhBodyPr(layoutMatch.node);
-          if (layoutBodyPr) {
-            node.textBody.layoutBodyProperties = layoutBodyPr;
-          }
-        }
-
-        if (xfrm) {
-          const masterMatch = findMasterMatch();
-          if (masterMatch) {
-            inheritPlaceholderType(node.placeholder, masterMatch);
-          }
-          continue;
-        }
-      }
-    }
-
-    const masterMatch = findMasterMatch();
-    if (masterMatch) {
-      inheritPlaceholderType(node.placeholder, masterMatch);
-
-      const xfrm = getPhXfrm(masterMatch);
-      if (xfrm) {
-        if (sizeIsEmpty) {
-          node.position = xfrm.position;
-          node.size = xfrm.size;
-        } else if (positionLooksDefault) {
-          node.position = xfrm.position;
-        }
-      }
-
-      // Inherit bodyPr from master placeholder as fallback
-      if ('textBody' in node && node.textBody && !node.textBody.layoutBodyProperties) {
-        const masterBodyPr = getPhBodyPr(masterMatch);
-        if (masterBodyPr) {
-          node.textBody.layoutBodyProperties = masterBodyPr;
-        }
-      }
-    }
+    resolveNodePlaceholderInheritance(node, layout, master);
   }
 }

@@ -184,25 +184,19 @@ describe('applyColorModifiers', () => {
   });
 
   it('handles alpha modifier', () => {
-    const result = applyColorModifiers('FF0000', [
-      { name: 'alpha', val: 50000 },
-    ]);
+    const result = applyColorModifiers('FF0000', [{ name: 'alpha', val: 50000 }]);
     expect(result.alpha).toBe(0.5);
     expect(result.color).toBe('FF0000');
   });
 
   it('handles prefixed modifier names', () => {
     // tint=50000 on black in linear RGB → sRGB ≈ 188
-    const result = applyColorModifiers('000000', [
-      { name: 'a:tint', val: 50000 },
-    ]);
+    const result = applyColorModifiers('000000', [{ name: 'a:tint', val: 50000 }]);
     expect(hexToRgb(result.color).r).toBe(188);
   });
 
   it('skips unknown modifiers', () => {
-    const result = applyColorModifiers('FF0000', [
-      { name: 'unknownMod', val: 50000 },
-    ]);
+    const result = applyColorModifiers('FF0000', [{ name: 'unknownMod', val: 50000 }]);
     expect(result.color).toBe('FF0000');
   });
 });
@@ -230,32 +224,28 @@ describe('applySatOff', () => {
     // Start with a partially desaturated color
     const original = rgbToHsl(200, 100, 100);
     const result = applySatOff(rgbToHex(200, 100, 100), 30000);
-    const resultHsl = rgbToHsl(...Object.values(hexToRgb(result)) as [number, number, number]);
+    const resultHsl = rgbToHsl(...(Object.values(hexToRgb(result)) as [number, number, number]));
     expect(resultHsl.s).toBeGreaterThan(original.s);
   });
 
   it('negative offset decreases saturation', () => {
     const original = rgbToHsl(255, 0, 0);
     const result = applySatOff('#FF0000', -50000);
-    const resultHsl = rgbToHsl(...Object.values(hexToRgb(result)) as [number, number, number]);
+    const resultHsl = rgbToHsl(...(Object.values(hexToRgb(result)) as [number, number, number]));
     expect(resultHsl.s).toBeLessThan(original.s);
   });
 });
 
 describe('applyColorModifiers – satOff and alphaOff branches', () => {
   it('handles satOff modifier via applyColorModifiers', () => {
-    const result = applyColorModifiers('FF0000', [
-      { name: 'satOff', val: -50000 },
-    ]);
-    const hsl = rgbToHsl(...Object.values(hexToRgb(result.color)) as [number, number, number]);
+    const result = applyColorModifiers('FF0000', [{ name: 'satOff', val: -50000 }]);
+    const hsl = rgbToHsl(...(Object.values(hexToRgb(result.color)) as [number, number, number]));
     expect(hsl.s).toBeLessThan(1);
   });
 
   it('handles a:satOff prefixed modifier', () => {
-    const result = applyColorModifiers('FF0000', [
-      { name: 'a:satOff', val: -50000 },
-    ]);
-    const hsl = rgbToHsl(...Object.values(hexToRgb(result.color)) as [number, number, number]);
+    const result = applyColorModifiers('FF0000', [{ name: 'a:satOff', val: -50000 }]);
+    const hsl = rgbToHsl(...(Object.values(hexToRgb(result.color)) as [number, number, number]));
     expect(hsl.s).toBeLessThan(1);
   });
 
@@ -293,9 +283,7 @@ describe('applyColorModifiers – satOff and alphaOff branches', () => {
   });
 
   it('handles satMod modifier via applyColorModifiers', () => {
-    const result = applyColorModifiers('FF0000', [
-      { name: 'satMod', val: 0 },
-    ]);
+    const result = applyColorModifiers('FF0000', [{ name: 'satMod', val: 0 }]);
     // Fully desaturated red should be grey
     const { r, g, b } = hexToRgb(result.color);
     expect(Math.abs(r - g)).toBeLessThan(2);
@@ -303,41 +291,126 @@ describe('applyColorModifiers – satOff and alphaOff branches', () => {
   });
 
   it('handles a:satMod prefixed modifier via applyColorModifiers', () => {
-    const result = applyColorModifiers('FF0000', [
-      { name: 'a:satMod', val: 50000 },
-    ]);
-    const hsl = rgbToHsl(...Object.values(hexToRgb(result.color)) as [number, number, number]);
+    const result = applyColorModifiers('FF0000', [{ name: 'a:satMod', val: 50000 }]);
+    const hsl = rgbToHsl(...(Object.values(hexToRgb(result.color)) as [number, number, number]));
     expect(hsl.s).toBeLessThan(1);
   });
 
   it('handles hueMod modifier via applyColorModifiers', () => {
-    const result = applyColorModifiers('FF0000', [
-      { name: 'hueMod', val: 100000 },
-    ]);
+    const result = applyColorModifiers('FF0000', [{ name: 'hueMod', val: 100000 }]);
     expect(result.color).toBe(rgbToHex(255, 0, 0));
   });
 
   it('handles a:hueMod prefixed modifier via applyColorModifiers', () => {
-    const result = applyColorModifiers('FF0000', [
-      { name: 'a:hueMod', val: 100000 },
-    ]);
+    const result = applyColorModifiers('FF0000', [{ name: 'a:hueMod', val: 100000 }]);
     expect(result.color).toBe(rgbToHex(255, 0, 0));
   });
 
   it('handles hueOff modifier via applyColorModifiers', () => {
-    const result = applyColorModifiers('FF0000', [
-      { name: 'hueOff', val: 120 * 60000 },
-    ]);
+    const result = applyColorModifiers('FF0000', [{ name: 'hueOff', val: 120 * 60000 }]);
     const { g } = hexToRgb(result.color);
     expect(g).toBeGreaterThan(200);
   });
 
   it('handles a:hueOff prefixed modifier', () => {
-    const result = applyColorModifiers('FF0000', [
-      { name: 'a:hueOff', val: 120 * 60000 },
-    ]);
+    const result = applyColorModifiers('FF0000', [{ name: 'a:hueOff', val: 120 * 60000 }]);
     const { g } = hexToRgb(result.color);
     expect(g).toBeGreaterThan(200);
+  });
+});
+
+describe('applyColorModifiers - OOXML channel and absolute color transforms', () => {
+  it('handles alphaMod as multiplicative alpha adjustment', () => {
+    const result = applyColorModifiers('FF0000', [
+      { name: 'alpha', val: 80000 },
+      { name: 'alphaMod', val: 50000 },
+    ]);
+
+    expect(result.alpha).toBeCloseTo(0.4, 5);
+  });
+
+  it('handles red absolute channel transform', () => {
+    const result = applyColorModifiers('000000', [{ name: 'red', val: 100000 }]);
+
+    expect(result.color).toBe('#ff0000');
+  });
+
+  it('handles green absolute channel transform', () => {
+    const result = applyColorModifiers('000000', [{ name: 'green', val: 100000 }]);
+
+    expect(result.color).toBe('#00ff00');
+  });
+
+  it('handles blue absolute channel transform', () => {
+    const result = applyColorModifiers('000000', [{ name: 'blue', val: 100000 }]);
+
+    expect(result.color).toBe('#0000ff');
+  });
+
+  it('handles redMod channel transform', () => {
+    const result = applyColorModifiers('808080', [{ name: 'redMod', val: 50000 }]);
+
+    expect(result.color).toBe('#408080');
+  });
+
+  it('handles greenMod channel transform', () => {
+    const result = applyColorModifiers('808080', [{ name: 'greenMod', val: 50000 }]);
+
+    expect(result.color).toBe('#804080');
+  });
+
+  it('handles blueMod channel transform', () => {
+    const result = applyColorModifiers('808080', [{ name: 'blueMod', val: 50000 }]);
+
+    expect(result.color).toBe('#808040');
+  });
+
+  it('handles redOff channel transform', () => {
+    const result = applyColorModifiers('000000', [{ name: 'redOff', val: 50000 }]);
+
+    expect(result.color).toBe('#800000');
+  });
+
+  it('handles greenOff channel transform', () => {
+    const result = applyColorModifiers('000000', [{ name: 'greenOff', val: 50000 }]);
+
+    expect(result.color).toBe('#008000');
+  });
+
+  it('handles blueOff channel transform', () => {
+    const result = applyColorModifiers('000000', [{ name: 'blueOff', val: 50000 }]);
+
+    expect(result.color).toBe('#000080');
+  });
+
+  it('handles lum absolute transform', () => {
+    const result = applyColorModifiers('FF0000', [{ name: 'lum', val: 25000 }]);
+
+    expect(result.color).toBe('#800000');
+  });
+
+  it('handles sat absolute transform', () => {
+    const result = applyColorModifiers('FF0000', [{ name: 'sat', val: 0 }]);
+
+    expect(result.color).toBe('#808080');
+  });
+
+  it('handles hue absolute transform', () => {
+    const result = applyColorModifiers('FF0000', [{ name: 'hue', val: 120 * 60000 }]);
+
+    expect(result.color).toBe('#00ff00');
+  });
+
+  it('handles inv transform', () => {
+    const result = applyColorModifiers('123456', [{ name: 'inv', val: 0 }]);
+
+    expect(result.color).toBe('#edcba9');
+  });
+
+  it('handles gray transform', () => {
+    const result = applyColorModifiers('FF0000', [{ name: 'gray', val: 0 }]);
+
+    expect(result.color).toBe('#363636');
   });
 });
 

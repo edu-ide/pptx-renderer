@@ -79,9 +79,7 @@ describe('renderBackground', () => {
     renderBackground(ctx, container);
 
     // backgroundColor should reflect #CC3311 (204, 51, 17)
-    expect(container.style.backgroundColor).toMatch(
-      /#[Cc][Cc]3311|rgb\(204,\s*51,\s*17\)/i,
-    );
+    expect(container.style.backgroundColor).toMatch(/#[Cc][Cc]3311|rgb\(204,\s*51,\s*17\)/i);
   });
 
   // -------------------------------------------------------------------------
@@ -131,9 +129,7 @@ describe('renderBackground', () => {
 
     renderBackground(ctx, container);
 
-    expect(container.style.backgroundColor).toMatch(
-      /#00[Cc][Cc]44|rgb\(0,\s*204,\s*68\)/i,
-    );
+    expect(container.style.backgroundColor).toMatch(/#00[Cc][Cc]44|rgb\(0,\s*204,\s*68\)/i);
   });
 
   // -------------------------------------------------------------------------
@@ -157,9 +153,7 @@ describe('renderBackground', () => {
 
     renderBackground(ctx, container);
 
-    expect(container.style.backgroundColor).toMatch(
-      /#4422[Aa][Aa]|rgb\(68,\s*34,\s*170\)/i,
-    );
+    expect(container.style.backgroundColor).toMatch(/#4422[Aa][Aa]|rgb\(68,\s*34,\s*170\)/i);
   });
 
   // -------------------------------------------------------------------------
@@ -175,9 +169,7 @@ describe('renderBackground', () => {
     renderBackground(ctx, container);
 
     // accent1 resolves to #4472C4 (68, 114, 196)
-    expect(container.style.backgroundColor).toMatch(
-      /#4472[Cc]4|rgb\(68,\s*114,\s*196\)/i,
-    );
+    expect(container.style.backgroundColor).toMatch(/#4472[Cc]4|rgb\(68,\s*114,\s*196\)/i);
   });
 
   // -------------------------------------------------------------------------
@@ -200,10 +192,28 @@ describe('renderBackground', () => {
     renderBackground(ctx, container);
 
     // resolveFill returns a CSS gradient string which is set on .background
-    const hasBg =
-      container.style.background !== '' || container.style.backgroundColor !== '';
+    const hasBg = container.style.background !== '' || container.style.backgroundColor !== '';
     expect(hasBg).toBe(true);
     expect(container.style.background).toContain('linear-gradient');
+  });
+
+  it('renders pattern fill backgrounds through the shared fill resolver', () => {
+    const bg = bgPrXml(`
+      <a:pattFill prst="pct20">
+        <a:fgClr><a:srgbClr val="000000"/></a:fgClr>
+        <a:bgClr><a:srgbClr val="FFFFFF"/></a:bgClr>
+      </a:pattFill>
+    `);
+    const ctx = createMockRenderContext({
+      slide: { rels: new Map(), background: bg } as any,
+    });
+
+    renderBackground(ctx, container);
+
+    expect(container.style.backgroundImage).toContain('radial-gradient');
+    expect(container.style.backgroundSize).toBe('8px 8px');
+    expect(container.style.backgroundRepeat).toBe('repeat');
+    expect(container.style.backgroundColor).toBe('rgb(255, 255, 255)');
   });
 
   // -------------------------------------------------------------------------
@@ -221,9 +231,7 @@ describe('renderBackground', () => {
       </a:blipFill>
     `);
 
-    const slideRels = new Map([
-      [rId, { type: 'image', target: '../media/bg.png' }],
-    ]);
+    const slideRels = new Map([[rId, { type: 'image', target: '../media/bg.png' }]]);
     const media = new Map([[mediaPath, new Uint8Array([0x89, 0x50, 0x4e, 0x47])]]);
 
     const ctx = createMockRenderContext({
@@ -252,6 +260,44 @@ describe('renderBackground', () => {
     expect(container.style.backgroundSize).toBe('100% 100%');
   });
 
+  it('honors non-zero stretch fillRect insets for blipFill backgrounds', () => {
+    const mediaPath = 'ppt/media/inset-bg.png';
+    const rId = 'rIdInset';
+
+    const bg = bgPrXml(`
+      <a:blipFill>
+        <a:blip r:embed="${rId}"
+                xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>
+        <a:stretch><a:fillRect l="25000" t="10000" r="25000" b="10000"/></a:stretch>
+      </a:blipFill>
+    `);
+    const slideRels = new Map([[rId, { type: 'image', target: '../media/inset-bg.png' }]]);
+    const media = new Map([[mediaPath, new Uint8Array([0x89, 0x50, 0x4e, 0x47])]]);
+    const ctx = createMockRenderContext({
+      slide: { rels: slideRels, background: bg } as any,
+      presentation: {
+        width: 960,
+        height: 540,
+        slides: [],
+        layouts: new Map(),
+        masters: new Map(),
+        themes: new Map(),
+        slideToLayout: new Map(),
+        layoutToMaster: new Map(),
+        masterToTheme: new Map(),
+        media,
+        charts: new Map(),
+        isWps: false,
+      },
+    });
+
+    renderBackground(ctx, container);
+
+    expect(container.style.backgroundSize).toBe('50% 80%');
+    expect(container.style.backgroundPosition).toBe('50% 50%');
+    expect(container.style.backgroundRepeat).toBe('no-repeat');
+  });
+
   // -------------------------------------------------------------------------
   // Case 9: blipFill with tile mode
   // -------------------------------------------------------------------------
@@ -267,9 +313,7 @@ describe('renderBackground', () => {
       </a:blipFill>
     `);
 
-    const slideRels = new Map([
-      [rId, { type: 'image', target: '../media/tile.png' }],
-    ]);
+    const slideRels = new Map([[rId, { type: 'image', target: '../media/tile.png' }]]);
     const media = new Map([[mediaPath, new Uint8Array([0x89, 0x50, 0x4e, 0x47])]]);
 
     const ctx = createMockRenderContext({
@@ -297,6 +341,35 @@ describe('renderBackground', () => {
     expect(container.style.backgroundSize).toBe('auto');
   });
 
+  it('renders safe external linked blipFill backgrounds from r:link relationships', () => {
+    const rId = 'rIdLinkedBg';
+    const bg = bgPrXml(`
+      <a:blipFill>
+        <a:blip r:link="${rId}"
+                xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>
+        <a:stretch><a:fillRect/></a:stretch>
+      </a:blipFill>
+    `);
+    const slideRels = new Map([
+      [
+        rId,
+        {
+          type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image',
+          target: 'https://example.com/background.png',
+          targetMode: 'External',
+        },
+      ],
+    ]);
+    const ctx = createMockRenderContext({
+      slide: { rels: slideRels, background: bg } as any,
+    });
+
+    renderBackground(ctx, container);
+
+    expect(container.style.backgroundImage).toContain('https://example.com/background.png');
+    expect(container.style.backgroundSize).toBe('100% 100%');
+  });
+
   // -------------------------------------------------------------------------
   // Case 10: noFill renders white
   // -------------------------------------------------------------------------
@@ -318,10 +391,7 @@ describe('renderBackground', () => {
   // -------------------------------------------------------------------------
   it('composites bgRef color with alpha onto white when alpha modifier is present', () => {
     // Blue (#0000FF) at 50% alpha on white => rgb(128, 128, 255)
-    const bg = bgRefXml(
-      1001,
-      `<a:srgbClr val="0000FF"><a:alpha val="50000"/></a:srgbClr>`,
-    );
+    const bg = bgRefXml(1001, `<a:srgbClr val="0000FF"><a:alpha val="50000"/></a:srgbClr>`);
     const ctx = createMockRenderContext({
       slide: { rels: new Map(), background: bg } as any,
     });
@@ -336,7 +406,7 @@ describe('renderBackground', () => {
     const [r, g, b] = (container.style.backgroundColor.match(/\d+/g) ?? []).map(Number);
     expect(r).toBeGreaterThan(0); // white bleed-through on red channel
     expect(g).toBeGreaterThan(0); // white bleed-through on green channel
-    expect(b).toBe(255);          // blue channel at full contribution
+    expect(b).toBe(255); // blue channel at full contribution
   });
 
   // -------------------------------------------------------------------------
@@ -360,9 +430,7 @@ describe('renderBackground', () => {
     renderBackground(ctx, container);
 
     // Must match slide color #AABB00 (170, 187, 0), not #FF00FF
-    expect(container.style.backgroundColor).toMatch(
-      /#[Aa][Aa][Bb][Bb]00|rgb\(170,\s*187,\s*0\)/i,
-    );
+    expect(container.style.backgroundColor).toMatch(/#[Aa][Aa][Bb][Bb]00|rgb\(170,\s*187,\s*0\)/i);
     expect(container.style.backgroundColor).not.toMatch(/[Ff][Ff]00[Ff][Ff]/i);
   });
 
@@ -382,7 +450,10 @@ describe('renderBackground', () => {
         background: layoutBg,
       } as any,
       master: {
-        colorMap: new Map([['tx1', 'dk1'], ['bg1', 'lt1']]),
+        colorMap: new Map([
+          ['tx1', 'dk1'],
+          ['bg1', 'lt1'],
+        ]),
         textStyles: {},
         placeholders: [],
         spTree: new SafeXmlNode(null),
@@ -394,9 +465,7 @@ describe('renderBackground', () => {
     renderBackground(ctx, container);
 
     // Must match layout color #11CCEE (17, 204, 238), not #FFAA00
-    expect(container.style.backgroundColor).toMatch(
-      /#11[Cc][Cc][Ee][Ee]|rgb\(17,\s*204,\s*238\)/i,
-    );
+    expect(container.style.backgroundColor).toMatch(/#11[Cc][Cc][Ee][Ee]|rgb\(17,\s*204,\s*238\)/i);
     expect(container.style.backgroundColor).not.toMatch(/[Ff][Ff][Aa][Aa]00/i);
   });
 
@@ -415,9 +484,7 @@ describe('renderBackground', () => {
     renderBackground(ctx, container);
 
     // #223344 = rgb(34, 51, 68)
-    expect(container.style.backgroundColor).toMatch(
-      /#223344|rgb\(34,\s*51,\s*68\)/i,
-    );
+    expect(container.style.backgroundColor).toMatch(/#223344|rgb\(34,\s*51,\s*68\)/i);
   });
 
   it('renders bgRef idx through the theme fill style instead of flattening to color', () => {
@@ -427,7 +494,9 @@ describe('renderBackground', () => {
       theme: {
         ...createMockRenderContext().theme,
         bgFillStyles: [
-          parseXml(`<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:schemeClr val="phClr"/></a:solidFill>`),
+          parseXml(
+            `<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:schemeClr val="phClr"/></a:solidFill>`,
+          ),
           parseXml(`
             <a:gradFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
               <a:gsLst>
@@ -460,9 +529,7 @@ describe('renderBackground', () => {
       </a:blipFill>
     `);
 
-    const slideRels = new Map([
-      [rId, { type: 'image', target: '../media/missing.png' }],
-    ]);
+    const slideRels = new Map([[rId, { type: 'image', target: '../media/missing.png' }]]);
 
     // Media map intentionally empty — ppt/media/missing.png is absent
     const ctx = createMockRenderContext({
@@ -475,9 +542,9 @@ describe('renderBackground', () => {
   });
 
   // -------------------------------------------------------------------------
-  // Additional: blipFill stretch without fillRect uses cover/center/no-repeat
+  // Additional: blipFill stretch without fillRect defaults to full stretch
   // -------------------------------------------------------------------------
-  it('renders blipFill with stretch but no fillRect as cover background', () => {
+  it('renders blipFill with stretch but no fillRect as a full-slide stretch', () => {
     const mediaPath = 'ppt/media/cover.jpg';
     const rId = 'rId12';
 
@@ -489,9 +556,7 @@ describe('renderBackground', () => {
       </a:blipFill>
     `);
 
-    const slideRels = new Map([
-      [rId, { type: 'image', target: '../media/cover.jpg' }],
-    ]);
+    const slideRels = new Map([[rId, { type: 'image', target: '../media/cover.jpg' }]]);
     const media = new Map([[mediaPath, new Uint8Array([0xff, 0xd8, 0xff])]]);
 
     const ctx = createMockRenderContext({
@@ -515,9 +580,9 @@ describe('renderBackground', () => {
     renderBackground(ctx, container);
 
     expect(container.style.backgroundImage).toMatch(/^url\(/);
-    // Without fillRect the renderer sets cover/center/no-repeat
-    expect(container.style.backgroundSize).toBe('cover');
-    expect(container.style.backgroundPosition).toBe('center');
+    // OOXML stretch defaults to a full fillRect when the fillRect element is omitted.
+    expect(container.style.backgroundSize).toBe('100% 100%');
+    expect(container.style.backgroundPosition).toBe('');
     expect(container.style.backgroundRepeat).toBe('no-repeat');
   });
 });

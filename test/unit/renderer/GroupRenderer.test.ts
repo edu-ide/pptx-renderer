@@ -91,6 +91,48 @@ function makeSpXml(id = '1', name = 'Shape'): SafeXmlNode {
   `);
 }
 
+function makePlaceholderSpXml(id = '101', name = 'Grouped Placeholder'): SafeXmlNode {
+  return xml(`
+    <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+          xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <p:nvSpPr>
+        <p:cNvPr id="${id}" name="${name}"/>
+        <p:cNvSpPr/>
+        <p:nvPr><p:ph type="body" idx="1"/></p:nvPr>
+      </p:nvSpPr>
+      <p:spPr>
+        <a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></a:xfrm>
+        <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+      </p:spPr>
+      <p:txBody>
+        <a:bodyPr/>
+        <a:lstStyle/>
+        <a:p><a:r><a:t>Grouped placeholder text</a:t></a:r></a:p>
+      </p:txBody>
+    </p:sp>
+  `);
+}
+
+function makeLayoutPlaceholderXml(): SafeXmlNode {
+  return xml(`
+    <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+          xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <p:nvSpPr>
+        <p:cNvPr id="201" name="Layout Body"/>
+        <p:cNvSpPr/>
+        <p:nvPr><p:ph type="body" idx="1"/></p:nvPr>
+      </p:nvSpPr>
+      <p:spPr>
+        <a:xfrm><a:off x="952500" y="571500"/><a:ext cx="381000" cy="190500"/></a:xfrm>
+      </p:spPr>
+      <p:txBody>
+        <a:bodyPr anchor="ctr"/>
+        <a:p><a:r><a:t/></a:r></a:p>
+      </p:txBody>
+    </p:sp>
+  `);
+}
+
 function makeRotatedSpXml(opts: {
   id?: string;
   name?: string;
@@ -295,6 +337,50 @@ function makeOleFrameXml(rId = 'rId20', id = '7'): SafeXmlNode {
   `);
 }
 
+function makeDiagramFrameXml(id = '8'): SafeXmlNode {
+  return xml(`
+    <p:graphicFrame xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                    xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+                    xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram"
+                    xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+      <p:nvGraphicFramePr>
+        <p:cNvPr id="${id}" name="SmartArt ${id}"/>
+        <p:cNvGraphicFramePr/>
+        <p:nvPr/>
+      </p:nvGraphicFramePr>
+      <p:xfrm>
+        <a:off x="0" y="0"/><a:ext cx="1828800" cy="914400"/>
+      </p:xfrm>
+      <a:graphic>
+        <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/diagram">
+          <dgm:relIds r:dm="rIdData"/>
+        </a:graphicData>
+      </a:graphic>
+    </p:graphicFrame>
+  `);
+}
+
+function diagramDrawingXml(label = 'SmartArt child label'): string {
+  return `
+    <dsp:drawing xmlns:dsp="http://schemas.microsoft.com/office/drawing/2008/diagram"
+                 xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <dsp:spTree>
+        <dsp:sp>
+          <dsp:nvSpPr><dsp:cNvPr id="81" name="Diagram Label"/><dsp:nvPr/></dsp:nvSpPr>
+          <dsp:spPr>
+            <a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="457200"/></a:xfrm>
+            <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          </dsp:spPr>
+          <dsp:txBody>
+            <a:bodyPr/><a:lstStyle/>
+            <a:p><a:r><a:t>${label}</a:t></a:r></a:p>
+          </dsp:txBody>
+        </dsp:sp>
+      </dsp:spTree>
+    </dsp:drawing>
+  `;
+}
+
 /**
  * An unrecognized XML element (e.g. sp:wsp — a WPS word-processing shape).
  * parseGroupChild returns undefined for unknown tags.
@@ -325,6 +411,24 @@ function makeCtxWithChart(rId = 'rId10', chartPath = 'ppt/charts/chart1.xml'): R
   ctx.slide.rels.set(rId, { type: 'chart', target: '../charts/chart1.xml' });
   // slidePath is needed so parseChartNode can resolve relative targets
   (ctx.slide as any).slidePath = 'ppt/slides/slide1.xml';
+  return ctx;
+}
+
+function makeCtxWithDiagram(): RenderContext {
+  const ctx = createMockRenderContext();
+  ctx.slide.slidePath = 'ppt/slides/slide1.xml';
+  ctx.partPath = 'ppt/slides/slide1.xml';
+  ctx.slide.rels.set('rIdData', {
+    type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramData',
+    target: '../diagrams/data7.xml',
+  });
+  ctx.slide.rels.set('rIdDrawing', {
+    type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramDrawing',
+    target: '../diagrams/drawing7.xml',
+  });
+  (ctx.presentation as any).diagramDrawings = new Map([
+    ['ppt/diagrams/drawing7.xml', diagramDrawingXml()],
+  ]);
   return ctx;
 }
 
@@ -468,6 +572,50 @@ describe('renderGroup — parseGroupChild dispatch for sp', () => {
     const el = renderGroup(group, createMockRenderContext(), stubRenderNode);
     const child = el.children[0] as HTMLElement;
     expect(child.getAttribute('data-node-id')).toBe('42');
+  });
+
+  it('resolves layout placeholder inheritance for lazy group children before remapping coordinates', () => {
+    const group = makeGroup([makePlaceholderSpXml()], {
+      x: 50,
+      y: 30,
+      w: 200,
+      h: 100,
+      childOffsetX: 0,
+      childOffsetY: 0,
+      childExtentW: 400,
+      childExtentH: 200,
+    });
+    const layout = createMockRenderContext().layout;
+    layout.placeholders = [
+      {
+        node: makeLayoutPlaceholderXml(),
+        absoluteXfrm: {
+          position: { x: 100, y: 60 },
+          size: { w: 40, h: 20 },
+        },
+      },
+    ];
+    const ctx = createMockRenderContext({ layout });
+    const renderNode = vi.fn((node) => {
+      const el = document.createElement('div');
+      el.style.position = 'absolute';
+      el.style.left = `${node.position.x}px`;
+      el.style.top = `${node.position.y}px`;
+      el.style.width = `${node.size.w}px`;
+      el.style.height = `${node.size.h}px`;
+      el.dataset.anchor = node.textBody?.layoutBodyProperties?.attr('anchor') ?? '';
+      return el;
+    });
+
+    const el = renderGroup(group, ctx, renderNode);
+    const child = el.firstElementChild as HTMLElement;
+
+    expect(renderNode).toHaveBeenCalledOnce();
+    expect(child.style.left).toBe('50px');
+    expect(child.style.top).toBe('30px');
+    expect(child.style.width).toBe('40px');
+    expect(child.style.height).toBe('20px');
+    expect(child.dataset.anchor).toBe('ctr');
   });
 });
 
@@ -918,6 +1066,21 @@ describe('renderGroup — mixed child types', () => {
     expect(types).toContain('shape');
     expect(types).toContain('picture');
     expect(types).toContain('group');
+  });
+
+  it('renders SmartArt diagram graphicFrame children from fallback drawing XML', () => {
+    const group = makeGroup([makeDiagramFrameXml()]);
+    let capturedNode: any;
+
+    const el = renderGroup(group, makeCtxWithDiagram(), (childNode, ctx) => {
+      capturedNode = childNode;
+      return stubRenderNode(childNode, ctx);
+    });
+
+    expect(el.children.length).toBe(1);
+    expect(capturedNode?.nodeType).toBe('group');
+    expect(capturedNode?.children).toHaveLength(1);
+    expect(capturedNode?.children[0].localName).toBe('sp');
   });
 
   it('skips unknown children while rendering known ones in the same group', () => {

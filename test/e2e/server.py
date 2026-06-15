@@ -142,6 +142,31 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def _ensure_relative_to(path: Path, root: Path) -> None:
+    try:
+        path.relative_to(root)
+    except ValueError as exc:
+        raise HTTPException(400, "Path escapes the allowed testdata directory") from exc
+
+
+def _safe_child_path(root: Path, child_path: str) -> Path:
+    if "\x00" in child_path:
+        raise HTTPException(400, "Invalid path")
+    resolved_root = root.resolve()
+    resolved_path = (root / child_path).resolve()
+    _ensure_relative_to(resolved_path, resolved_root)
+    return resolved_path
+
+
+def _validate_case_stem(test_file: str) -> str:
+    stem = test_file.strip()
+    if not stem or stem in {".", ".."} or "\x00" in stem:
+        raise HTTPException(400, "Invalid test file")
+    if "/" in stem or "\\" in stem:
+        raise HTTPException(400, "Invalid test file")
+    return stem
+
+
 def _load_manual_review_store() -> dict:
     if MANUAL_REVIEW_PATH.exists():
         try:
@@ -218,6 +243,7 @@ def png_slide_to_image(png_path: Path) -> np.ndarray:
 
 
 async def screenshot_slide(browser, test_file: str, slide_idx: int, source: str | None = None) -> np.ndarray:
+    test_file = _validate_case_stem(test_file)
     ctx = await browser.new_context(viewport={"width": 1920, "height": 1080})
     page = await ctx.new_page()
     page.set_default_timeout(PAGE_TIMEOUT_MS)
@@ -382,6 +408,7 @@ async def vite_proxy_middleware(request, call_next):
 
 @app.post("/api/evaluate/{test_file}")
 async def evaluate_file(test_file: str, source: str | None = Query(None)):
+    test_file = _validate_case_stem(test_file)
     pptx_path = tdp.source_pptx(test_file, source)
     pdf_path = tdp.ground_truth_pdf(test_file, source)
 
@@ -566,6 +593,7 @@ async def evaluate_all(source: str | None = Query(None)):
 
 @app.get("/api/screenshot/html/{test_file}/{slide_idx}")
 async def screenshot_html(test_file: str, slide_idx: int, source: str | None = Query(None)):
+    test_file = _validate_case_stem(test_file)
     prefix = _report_prefix(test_file, source)
     path = REPORTS_DIR / f"{prefix}_slide{slide_idx}_html.png"
     if not path.exists():
@@ -581,6 +609,7 @@ async def screenshot_html(test_file: str, slide_idx: int, source: str | None = Q
 
 @app.get("/api/screenshot/pdf/{test_file}/{slide_idx}")
 async def screenshot_pdf(test_file: str, slide_idx: int, source: str | None = Query(None)):
+    test_file = _validate_case_stem(test_file)
     prefix = _report_prefix(test_file, source)
     path = REPORTS_DIR / f"{prefix}_slide{slide_idx}_pdf.png"
     if not path.exists():
@@ -604,6 +633,7 @@ async def screenshot_pdf(test_file: str, slide_idx: int, source: str | None = Qu
 
 @app.get("/api/diff/{test_file}/{slide_idx}")
 async def diff_image(test_file: str, slide_idx: int, source: str | None = Query(None)):
+    test_file = _validate_case_stem(test_file)
     prefix = _report_prefix(test_file, source)
     path = REPORTS_DIR / f"{prefix}_slide{slide_idx}_diff.png"
     if not path.exists():
@@ -670,12 +700,14 @@ async def list_testdata_files(source: str | None = Query(None)):
 async def list_manual_review(test_file: str | None = None):
     store = _load_manual_review_store()
     if test_file:
+        test_file = _validate_case_stem(test_file)
         return {"test_file": test_file, "entries": _manual_entries_for_test_file(store, test_file)}
     return {"entries": list((store.get("entries", {}) or {}).values())}
 
 
 @app.get("/api/manual-review/{test_file}")
 async def list_manual_review_for_file(test_file: str):
+    test_file = _validate_case_stem(test_file)
     store = _load_manual_review_store()
     return {"test_file": test_file, "entries": _manual_entries_for_test_file(store, test_file)}
 
@@ -687,7 +719,7 @@ async def upsert_manual_review(payload: ManualReviewPayload):
         if verdict not in MANUAL_REVIEW_ALLOWED_VERDICTS:
             raise HTTPException(400, f"invalid verdict: {payload.verdict}")
 
-        test_file = payload.test_file.strip()
+        test_file = _validate_case_stem(payload.test_file)
         key = f"{test_file}#{payload.slide_idx}"
         note = payload.note.strip()
 
@@ -719,7 +751,7 @@ async def upsert_manual_review(payload: ManualReviewPayload):
 # Serve testdata files
 @app.get("/testdata/{file_path:path}")
 async def serve_testdata(file_path: str):
-    full_path = TESTDATA_DIR / file_path
+    full_path = _safe_child_path(TESTDATA_DIR, file_path)
     if not full_path.exists():
         raise HTTPException(404, f"Not found: {file_path}")
     return FileResponse(full_path)

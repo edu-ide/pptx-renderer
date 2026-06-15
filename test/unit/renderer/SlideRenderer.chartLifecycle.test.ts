@@ -46,7 +46,9 @@ function makePresentation(): PresentationData {
     masterToTheme: new Map(),
     media: new Map(),
     charts: new Map([
-      ['ppt/charts/chart1.xml', parseXml(`
+      [
+        'ppt/charts/chart1.xml',
+        parseXml(`
         <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
           <c:chart>
             <c:autoTitleDeleted val="1"/>
@@ -67,7 +69,8 @@ function makePresentation(): PresentationData {
             </c:plotArea>
           </c:chart>
         </c:chartSpace>
-      `)],
+      `),
+      ],
     ]),
     isWps: false,
   };
@@ -134,6 +137,73 @@ describe('renderSlide standalone chart lifecycle', () => {
     handle.dispose();
 
     expect(mockChartInstance.dispose).toHaveBeenCalled();
+  });
+
+  it('keeps SlideHandle.ready pending until chart RAF initialization runs', async () => {
+    const pres = makePresentation();
+    const slide = pres.slides[0];
+    slide.nodes = [makeChartNode()];
+
+    const handle = renderSlide(pres, slide);
+    const chartWrapper = handle.element.firstElementChild as HTMLElement;
+    const chartDiv = chartWrapper.firstElementChild as HTMLElement;
+    mockChartInstance.getDom.mockReturnValue(chartDiv);
+    Object.defineProperty(chartDiv, 'offsetWidth', { value: 400, configurable: true });
+    Object.defineProperty(chartDiv, 'offsetHeight', { value: 300, configurable: true });
+    document.body.appendChild(handle.element);
+
+    let readyResolved = false;
+    void handle.ready.then(() => {
+      readyResolved = true;
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(readyResolved).toBe(false);
+    expect(mockChartInstance.setOption).not.toHaveBeenCalled();
+
+    for (const cb of rafCallbacks) cb();
+    await handle.ready;
+
+    expect(mockChartInstance.setOption).toHaveBeenCalled();
+    expect(readyResolved).toBe(true);
+  });
+
+  it('resolves SlideHandle.ready after deferring zero-size chart initialization', async () => {
+    const pres = makePresentation();
+    const slide = pres.slides[0];
+    slide.nodes = [makeChartNode()];
+    const observeSpy = vi.fn();
+    let observedElement: Element | undefined;
+
+    (window as any).ResizeObserver = class {
+      observe = vi.fn((element: Element) => {
+        observedElement = element;
+        observeSpy(element);
+      });
+      disconnect = vi.fn();
+    };
+
+    const handle = renderSlide(pres, slide);
+    const chartWrapper = handle.element.firstElementChild as HTMLElement;
+    const chartDiv = chartWrapper.firstElementChild as HTMLElement;
+    mockChartInstance.getDom.mockReturnValue(chartDiv);
+    Object.defineProperty(chartDiv, 'offsetWidth', { value: 0, configurable: true });
+    Object.defineProperty(chartDiv, 'offsetHeight', { value: 0, configurable: true });
+    document.body.appendChild(handle.element);
+
+    let readyResolved = false;
+    void handle.ready.then(() => {
+      readyResolved = true;
+    });
+
+    for (const cb of rafCallbacks) cb();
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+
+    expect(observeSpy).toHaveBeenCalledWith(chartDiv);
+    expect(observedElement).toBe(chartDiv);
+    expect(mockChartInstance.setOption).not.toHaveBeenCalled();
+    expect(readyResolved).toBe(true);
   });
 
   it('does not dispose caller-owned chart instances outside the slide', () => {

@@ -362,6 +362,8 @@
       const renderWidth = 960;
       let renderHeight = 540; // updated during evaluate()
       let latestEvaluationId = 0;
+      let activeCompareViewer = null;
+      const activePngObjectUrls = new Set();
 
       // URL params
       const params = new URLSearchParams(location.search);
@@ -381,6 +383,27 @@
       function testdataSubdir() {
         return currentSource === 'windows' ? 'windows-cases' : 'cases';
       }
+
+      function trackPngObjectUrl(url) {
+        activePngObjectUrls.add(url);
+        return url;
+      }
+
+      function cleanupRenderedEvaluation() {
+        for (const url of activePngObjectUrls) {
+          URL.revokeObjectURL(url);
+        }
+        activePngObjectUrls.clear();
+
+        if (activeCompareViewer) {
+          activeCompareViewer.destroy();
+          activeCompareViewer = null;
+        }
+
+        document.getElementById('__pptx-render-temp')?.remove();
+      }
+
+      window.addEventListener('beforeunload', cleanupRenderedEvaluation);
 
       function parseRequestedSlideNumber(value) {
         if (value === null || value === '' || value === 'all') return null;
@@ -541,7 +564,12 @@
         const icons = { pass: '\u2713', fail: '\u2717', warn: '\u26A0', info: '\u2139' };
         const div = document.createElement('div');
         div.className = `log-line log-${type}`;
-        div.innerHTML = `<span class="icon">${icons[type] || ''}</span><span>${msg}</span>`;
+        const icon = document.createElement('span');
+        icon.className = 'icon';
+        icon.textContent = icons[type] || '';
+        const message = document.createElement('span');
+        message.textContent = String(msg);
+        div.append(icon, message);
         logPanel.appendChild(div);
         logPanel.scrollTop = logPanel.scrollHeight;
         logLineCount++;
@@ -841,7 +869,12 @@
       async function fetchServerSSIM(testFile) {
         if (!serverAvailable) return null;
         try {
-          const resp = await fetch(`/api/evaluate/${testFile}${sourceQuery()}`, { method: 'POST' });
+          const resp = await fetch(
+            `/api/evaluate/${encodeURIComponent(testFile)}${sourceQuery()}`,
+            {
+              method: 'POST',
+            },
+          );
           if (!resp.ok) return null;
           return await resp.json();
         } catch {
@@ -853,6 +886,7 @@
       // Main Evaluate
       // -----------------------------------------------------------------------
       async function evaluate(pdfBuffer, pptxBuffer, label) {
+        cleanupRenderedEvaluation();
         clearLog();
         // log section auto-shows via has-content class when log() is called
         main.innerHTML = '<div class="loading"><div class="spinner"></div><p>Evaluating…</p></div>';
@@ -912,13 +946,17 @@
 
           const pdfTextsBySlide = [];
           const pdfCanvases = [];
-          for (let i = 0; i < pdfNumPages; i++) {
-            const page = await pdfDoc.getPage(i + 1);
-            const tc = await page.getTextContent();
-            pdfTextsBySlide.push(tc.items);
-            if (i < comparableSlideCount) {
-              pdfCanvases.push(await renderPdfToCanvas(page, renderWidth));
+          try {
+            for (let i = 0; i < pdfNumPages; i++) {
+              const page = await pdfDoc.getPage(i + 1);
+              const tc = await page.getTextContent();
+              pdfTextsBySlide.push(tc.items);
+              if (i < comparableSlideCount) {
+                pdfCanvases.push(await renderPdfToCanvas(page, renderWidth));
+              }
             }
+          } finally {
+            await pdfDoc.destroy();
           }
 
           // Await PNG ground truth (started in parallel with PDF processing)
@@ -1034,9 +1072,10 @@
 
           // Keep tempContainer in DOM (hidden) — slide elements reference blob URLs
           // and styles that break if detached. Will be removed on next evaluate.
-          tempContainer.id = '__pptx-render-temp';
           const oldTemp = document.getElementById('__pptx-render-temp');
           if (oldTemp && oldTemp !== tempContainer) oldTemp.remove();
+          tempContainer.id = '__pptx-render-temp';
+          activeCompareViewer = viewer;
 
           // Compute averages
           const comparableSlides = slideResults.filter((r) => r.hasComparablePdf);
@@ -1139,10 +1178,22 @@
           };
         } catch (e) {
           log('fail', `Error: ${e.message || e}`);
-          main.innerHTML = `<div class="loading" style="color:#e94560"><p>${e.message}</p></div>`;
+          renderMainError(e);
           console.error(e);
           return null;
         }
+      }
+
+      function renderMainError(e) {
+        const message = e && typeof e === 'object' && 'message' in e ? e.message : String(e);
+        main.innerHTML = '';
+        const box = document.createElement('div');
+        box.className = 'loading';
+        box.style.color = '#e94560';
+        const text = document.createElement('p');
+        text.textContent = message || 'Evaluation failed';
+        box.appendChild(text);
+        main.appendChild(box);
       }
 
       // -----------------------------------------------------------------------
@@ -1212,8 +1263,9 @@
               : '<span class="score-badge bad">N/A</span>';
           const hdr = document.createElement('div');
           hdr.className = 'slide-card-header';
+          const encodedTestFile = r.testFile ? encodeURIComponent(r.testFile) : '';
           const renderLink = r.testFile
-            ? `/test/pages/render-slide.html?file=testdata/${testdataSubdir()}/${r.testFile}/source.pptx&slide=${r.index}`
+            ? `/test/pages/render-slide.html?file=testdata/${testdataSubdir()}/${encodedTestFile}/source.pptx&slide=${r.index}`
             : '';
           const openBtn = renderLink
             ? `<a href="${renderLink}" target="_blank" style="color:#8ab4f8;font-size:11px;text-decoration:none;margin-left:8px;opacity:0.7" title="Open in Single Slide view">↗ Open</a>`
@@ -1336,7 +1388,7 @@
           diffPanel.innerHTML = '<div class="panel-label">Diff Heatmap</div>';
           if (r.hasDiff && r.testFile) {
             const img = document.createElement('img');
-            img.src = `/api/diff/${r.testFile}/${r.index}${sourceQuery()}`;
+            img.src = `/api/diff/${encodeURIComponent(r.testFile)}/${r.index}${sourceQuery()}`;
             img.style.width = '100%';
             img.alt = `Diff slide ${r.index + 1}`;
             img.loading = 'lazy';
@@ -1494,13 +1546,29 @@
         buildSlideCards(slideResults);
       }
 
+      function appendTextCell(row, text) {
+        const td = document.createElement('td');
+        td.textContent = text === null || text === undefined ? '' : String(text);
+        row.appendChild(td);
+        return td;
+      }
+
+      function appendHtmlCell(row, html, style) {
+        const td = document.createElement('td');
+        if (style) td.style.cssText = style;
+        td.innerHTML = html;
+        row.appendChild(td);
+        return td;
+      }
+
       // -----------------------------------------------------------------------
       // Load helpers
       // -----------------------------------------------------------------------
       async function fetchPngSlides(name, slideCount) {
         const promises = [];
+        const encodedName = encodeURIComponent(name);
         for (let i = 1; i <= slideCount; i++) {
-          const url = `/testdata/${testdataSubdir()}/${name}/slides/slide${i}.png`;
+          const url = `/testdata/${testdataSubdir()}/${encodedName}/slides/slide${i}.png`;
           promises.push(
             fetch(url)
               .then((r) => {
@@ -1508,7 +1576,7 @@
                 // Vite SPA fallback returns text/html for non-existent files
                 const ct = (r.headers.get('content-type') || '').toLowerCase();
                 if (ct.includes('text/html')) return null;
-                return r.blob().then((b) => URL.createObjectURL(b));
+                return r.blob().then((b) => trackPngObjectUrl(URL.createObjectURL(b)));
               })
               .catch(() => null),
           );
@@ -1517,9 +1585,10 @@
       }
 
       async function fetchPair(name) {
+        const encodedName = encodeURIComponent(name);
         const [pdfResp, pptxResp] = await Promise.all([
-          fetch(`/testdata/${testdataSubdir()}/${name}/ground-truth.pdf`),
-          fetch(`/testdata/${testdataSubdir()}/${name}/source.pptx`),
+          fetch(`/testdata/${testdataSubdir()}/${encodedName}/ground-truth.pdf`),
+          fetch(`/testdata/${testdataSubdir()}/${encodedName}/source.pptx`),
         ]);
         if (!pdfResp.ok)
           throw new Error(
@@ -1624,7 +1693,12 @@
           verdictUnsupported = 0;
         for (const r of allResults) {
           if (r.error) {
-            tbody.innerHTML += `<tr><td>${r.label}</td><td colspan="10" style="color:#e94560">${r.error}</td></tr>`;
+            const errorRow = document.createElement('tr');
+            appendTextCell(errorRow, r.label);
+            const errorCell = appendTextCell(errorRow, r.error);
+            errorCell.colSpan = 10;
+            errorCell.style.color = '#e94560';
+            tbody.appendChild(errorRow);
             continue;
           }
           totalText += r.avgTextCov;
@@ -1682,19 +1756,19 @@
             }
           }
           const verdictDisplay = `<span class="score-badge ${verdictCls}">${verdictLabel}</span>`;
-          tbody.innerHTML += `<tr>
-          <td>${r.label}</td>
-          <td>${r.slideCount}</td>
-          <td style="background:#0d1a2a">${ssimDisplay}</td>
-          <td style="background:#0d1a2a">${colorHistDisplay}</td>
-          <td style="background:#0d1a2a">${scoreBadge(r.avgTextCov)}</td>
-          <td>${fgIouTolerantDisplay}</td>
-          <td>${chamferDisplay}</td>
-          <td>${fgIouRawDisplay}</td>
-          <td>${maeDisplay}</td>
-          <td>${verdictDisplay}</td>
-          <td>${r.renderMs.toFixed(0)}</td>
-        </tr>`;
+          const row = document.createElement('tr');
+          appendTextCell(row, r.label);
+          appendTextCell(row, r.slideCount);
+          appendHtmlCell(row, ssimDisplay, 'background:#0d1a2a');
+          appendHtmlCell(row, colorHistDisplay, 'background:#0d1a2a');
+          appendHtmlCell(row, scoreBadge(r.avgTextCov), 'background:#0d1a2a');
+          appendHtmlCell(row, fgIouTolerantDisplay);
+          appendHtmlCell(row, chamferDisplay);
+          appendHtmlCell(row, fgIouRawDisplay);
+          appendHtmlCell(row, maeDisplay);
+          appendHtmlCell(row, verdictDisplay);
+          appendTextCell(row, r.renderMs.toFixed(0));
+          tbody.appendChild(row);
         }
         if (count > 0) {
           const avgSsimDisplay =

@@ -2,7 +2,7 @@
  * Slide renderer — orchestrates rendering of a complete slide with all its nodes.
  */
 
-import { SlideData, parseOleFrameAsPicture } from '../model/Slide';
+import { SlideData } from '../model/Slide';
 import { PresentationData } from '../model/Presentation';
 import { RenderContext, createRenderContext } from './RenderContext';
 import { renderBackground } from './BackgroundRenderer';
@@ -11,14 +11,15 @@ import { renderImage } from './ImageRenderer';
 import { renderTable } from './TableRenderer';
 import { renderGroup } from './GroupRenderer';
 import { renderChart } from './ChartRenderer';
-import { ShapeNodeData, parseShapeNode } from '../model/nodes/ShapeNode';
-import { PicNodeData, parsePicNode } from '../model/nodes/PicNode';
-import { TableNodeData, parseTableNode } from '../model/nodes/TableNode';
-import { GroupNodeData, parseGroupNode } from '../model/nodes/GroupNode';
-import { ChartNodeData, parseChartNode } from '../model/nodes/ChartNode';
+import { ShapeNodeData } from '../model/nodes/ShapeNode';
+import { PicNodeData } from '../model/nodes/PicNode';
+import { TableNodeData } from '../model/nodes/TableNode';
+import { GroupNodeData } from '../model/nodes/GroupNode';
+import { ChartNodeData } from '../model/nodes/ChartNode';
 import { BaseNodeData } from '../model/nodes/BaseNode';
 import { SafeXmlNode } from '../parser/XmlParser';
 import type { RelEntry } from '../parser/RelParser';
+import { isPlaceholderNode, parseRenderableChild } from '../model/RenderableChild';
 import type { ECharts } from 'echarts';
 import type { PdfjsConfig } from '../utils/pdfRenderer';
 
@@ -127,20 +128,6 @@ function createErrorPlaceholder(node: BaseNodeData): HTMLElement {
 // ---------------------------------------------------------------------------
 
 /**
- * Check whether a shape node is a placeholder (has p:ph in nvPr).
- */
-function isPlaceholderNode(node: SafeXmlNode): boolean {
-  for (const wrapper of ['nvSpPr', 'nvPicPr', 'nvGrpSpPr', 'nvGraphicFramePr', 'nvCxnSpPr']) {
-    const nv = node.child(wrapper);
-    if (nv.exists()) {
-      const nvPr = nv.child('nvPr');
-      if (nvPr.child('ph').exists()) return true;
-    }
-  }
-  return false;
-}
-
-/**
  * Parse and collect renderable shapes from a master or layout spTree.
  * Only includes NON-placeholder shapes (decorative elements, logos, footers).
  * Placeholder shapes are never rendered from master/layout — they only serve
@@ -151,42 +138,21 @@ function parseTemplateShapes(
   _slideNodes: BaseNodeData[],
   rels?: Map<string, RelEntry>,
   partPath?: string,
+  diagramDrawings?: Map<string, string>,
 ): BaseNodeData[] {
   const nodes: BaseNodeData[] = [];
   if (!spTree || !spTree.exists || !spTree.exists()) return nodes;
 
   for (const child of spTree.allChildren()) {
-    const tag = child.localName;
-
     // Skip ALL placeholder shapes — they're templates, not renderable content
     if (isPlaceholderNode(child)) continue;
 
     try {
-      let node: BaseNodeData | undefined;
-      switch (tag) {
-        case 'sp':
-        case 'cxnSp':
-          node = parseShapeNode(child);
-          break;
-        case 'pic':
-          node = parsePicNode(child);
-          break;
-        case 'grpSp':
-          node = parseGroupNode(child);
-          break;
-        case 'graphicFrame': {
-          const graphic = child.child('graphic');
-          const graphicData = graphic.child('graphicData');
-          if (graphicData.child('tbl').exists()) {
-            node = parseTableNode(child);
-          } else if ((graphicData.attr('uri') || '').includes('chart') && rels && partPath) {
-            node = parseChartNode(child, rels, partPath);
-          } else {
-            node = parseOleFrameAsPicture(child);
-          }
-          break;
-        }
-      }
+      const node = parseRenderableChild(child, {
+        rels: rels ?? new Map(),
+        partPath,
+        diagramDrawings,
+      });
       // Skip empty/invisible nodes (0x0 size and no text)
       if (node && (node.size.w > 0 || node.size.h > 0)) {
         nodes.push(node);
@@ -264,6 +230,7 @@ export function renderSlide(
       slide.nodes,
       ctx.master.rels,
       ctx.masterPath,
+      presentation.diagramDrawings,
     );
     for (const node of masterShapes) {
       try {
@@ -288,6 +255,7 @@ export function renderSlide(
       slide.nodes,
       ctx.layout.rels,
       ctx.layoutPath,
+      presentation.diagramDrawings,
     );
     for (const node of layoutShapes) {
       try {
