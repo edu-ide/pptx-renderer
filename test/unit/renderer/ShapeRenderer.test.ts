@@ -164,8 +164,9 @@ describe('ShapeRenderer', () => {
     expect(Number.parseFloat(marker!.getAttribute('markerHeight') || '0')).toBeGreaterThanOrEqual(
       5,
     );
-    // Arrow tip should anchor to line endpoint (avoid entering target shape interior).
-    expect(marker?.getAttribute('refX')).toBe('10');
+    // Tail arrows anchor the marker base to the shortened path endpoint, so the
+    // connector stroke does not paint through the arrow head.
+    expect(marker?.getAttribute('refX')).toBe('0');
   });
 
   it('keeps headEnd triangle arrow shape while insetting the connector start (xcloud-solution slide 45)', () => {
@@ -251,6 +252,41 @@ describe('ShapeRenderer', () => {
     expect(path?.getAttribute('marker-end')).toContain('arrow-marker-');
     expect(markerPolygon?.getAttribute('fill')).not.toMatch(/rgba\([^)]*,0(?:\.000)?\)/);
     expect(path?.getAttribute('stroke-linecap')).toBe('butt');
+  });
+
+  it('anchors tailEnd triangle at its base so the connector stroke does not fill the arrow head (xcloud-solution slide 45)', () => {
+    const xml = `
+      <p:cxnSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+               xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvCxnSpPr>
+          <p:cNvPr id="165" name="直接箭头连接符 942"/>
+          <p:cNvCxnSpPr/>
+          <p:nvPr/>
+        </p:nvCxnSpPr>
+        <p:spPr>
+          <a:xfrm>
+            <a:off x="11344710" y="5136329"/>
+            <a:ext cx="0" cy="379362"/>
+          </a:xfrm>
+          <a:prstGeom prst="straightConnector1"><a:avLst/></a:prstGeom>
+          <a:noFill/>
+          <a:ln w="50800" cap="rnd">
+            <a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>
+            <a:tailEnd type="triangle"/>
+          </a:ln>
+        </p:spPr>
+      </p:cxnSp>
+    `;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const path = el.querySelector('path');
+    const marker = el.querySelector('marker');
+    const pathNumbers = extractPathNumbers(path?.getAttribute('d') ?? '');
+
+    expect(path?.getAttribute('marker-end')).toContain('arrow-marker-');
+    expect(marker?.getAttribute('refX')).toBe('0');
+    expect(Number.parseFloat(marker!.getAttribute('markerWidth') ?? '0')).toBeCloseTo(16, 3);
+    expect(pathNumbers[3]).toBeCloseTo(39.828 - 16, 1);
   });
 
   it('insets curved connector headEnd start so the arrow tip stays anchored (xcloud-intro slide 10)', () => {
@@ -1403,7 +1439,7 @@ describe('ShapeRenderer', () => {
     }
   });
 
-  it('does not collapse wrapped spAutoFit body text to nowrap width (xcloud-solution slide 38)', () => {
+  it('does not collapse or clip wrapped spAutoFit body text metric overhang (xcloud-solution slide 38)', () => {
     const isFitContainer = (el: HTMLElement) =>
       el.style.display === 'flex' && el.style.flexDirection === 'column';
     const clientWidthSpy = vi
@@ -1478,6 +1514,7 @@ describe('ShapeRenderer', () => {
       expect(textContainer!.style.transform).not.toContain('scale(');
       expect(textContainer!.style.width).toBe('100%');
       expect(textContainer!.style.height).toBe('100%');
+      expect(textContainer!.style.overflowY).toBe('visible');
     } finally {
       clientWidthSpy.mockRestore();
       clientHeightSpy.mockRestore();

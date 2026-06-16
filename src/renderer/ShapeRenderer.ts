@@ -644,6 +644,11 @@ function getHeadEndStartInset(info: LineEndInfo, strokeWidth: number): number {
   return getMarkerDimensions(info, strokeWidth).markerW;
 }
 
+function getTailEndEndInset(info: LineEndInfo, strokeWidth: number): number {
+  if (info.type !== 'triangle' && info.type !== 'arrow' && info.type !== 'stealth') return 0;
+  return getMarkerDimensions(info, strokeWidth).markerW;
+}
+
 function isFullyTransparentCssColor(color: string | undefined): boolean {
   if (!color) return true;
   const normalized = color.trim().toLowerCase();
@@ -760,6 +765,29 @@ function insetPathStart(pathD: string, inset: number): string {
   return `M${nextX},${nextY} L${x2},${y2}`;
 }
 
+function insetPathEnd(pathD: string, inset: number): string {
+  if (!(inset > 0)) return pathD;
+
+  const match = pathD.match(
+    /^M(-?\d*\.?\d+(?:e[-+]?\d+)?),(-?\d*\.?\d+(?:e[-+]?\d+)?) L(-?\d*\.?\d+(?:e[-+]?\d+)?),(-?\d*\.?\d+(?:e[-+]?\d+)?)$/i,
+  );
+  if (!match) return pathD;
+
+  const x1 = Number(match[1]);
+  const y1 = Number(match[2]);
+  const x2 = Number(match[3]);
+  const y2 = Number(match[4]);
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const length = Math.hypot(dx, dy);
+  if (!(length > 0)) return pathD;
+
+  const clampedInset = Math.min(inset, length * 0.95);
+  const nextX = x2 - (dx / length) * clampedInset;
+  const nextY = y2 - (dy / length) * clampedInset;
+  return `M${x1},${y1} L${nextX},${nextY}`;
+}
+
 /**
  * Create an SVG marker element for a line end (arrowhead).
  */
@@ -785,7 +813,7 @@ function createArrowMarker(
     case 'triangle':
     case 'arrow': {
       marker.setAttribute('viewBox', '0 0 10 10');
-      marker.setAttribute('refX', '10');
+      marker.setAttribute('refX', isHead ? '10' : '0');
       marker.setAttribute('refY', '5');
       marker.setAttribute('markerWidth', String(markerW));
       marker.setAttribute('markerHeight', String(markerH));
@@ -804,7 +832,7 @@ function createArrowMarker(
     }
     case 'stealth': {
       marker.setAttribute('viewBox', '0 0 10 10');
-      marker.setAttribute('refX', '10');
+      marker.setAttribute('refX', isHead ? '10' : '0');
       marker.setAttribute('refY', '5');
       marker.setAttribute('markerWidth', String(markerW));
       marker.setAttribute('markerHeight', String(markerH));
@@ -1435,6 +1463,13 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
         const headInset = getHeadEndStartInset(effectiveHeadEnd, effectiveStrokeWidth);
         if (headInset > 0) {
           pathD = insetPathStart(pathD, headInset);
+          path.setAttribute('d', pathD);
+        }
+      }
+      if (isLineLike && effectiveTailEnd && effectiveStrokeWidth > 0) {
+        const tailInset = getTailEndEndInset(effectiveTailEnd, effectiveStrokeWidth);
+        if (tailInset > 0) {
+          pathD = insetPathEnd(pathD, tailInset);
           path.setAttribute('d', pathD);
         }
       }
@@ -2091,12 +2126,14 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
         const baseWidth = textContainer.style.width;
         const baseHeight = textContainer.style.height;
         const baseWhiteSpace = textContainer.style.whiteSpace;
+        const baseOverflowY = textContainer.style.overflowY;
         const applyDynamicAutofit = () => {
           textContainer.style.transform = baseTransform;
           textContainer.style.transformOrigin = baseTransformOrigin;
           textContainer.style.width = baseWidth;
           textContainer.style.height = baseHeight;
           textContainer.style.whiteSpace = baseWhiteSpace;
+          textContainer.style.overflowY = baseOverflowY;
 
           // The wrapper is not always in the DOM yet, so temporarily attach it offscreen to measure.
           const wasConnected = wrapper.isConnected;
@@ -2130,6 +2167,14 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
                 wrappedContentH <= containerH * wrappedHeightTolerance));
           const wrappedFits =
             containerW > 0 && containerH > 0 && wrappedWidthFits && wrappedHeightFits;
+          const hasToleratedVerticalMetricOverhang =
+            hasSpAutoFit &&
+            !hasNormAutofit &&
+            !spAutoFitAllowsVerticalOverflow &&
+            wrappedWidthFits &&
+            wrappedHeightFits &&
+            wrappedContentH > containerH &&
+            containerH > 0;
           const shouldMeasureUnwrappedWidth =
             !isVerticalText &&
             !spAutoFitAllowsHorizontalOverflow &&
@@ -2232,6 +2277,8 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
             appendTransform(textContainer, `scale(${scale})`);
             textContainer.style.width = expandCssLengthForScale(baseWidth, scale);
             textContainer.style.height = expandCssLengthForScale(baseHeight, scale);
+          } else if (hasToleratedVerticalMetricOverhang) {
+            textContainer.style.overflowY = 'visible';
           }
         };
 
