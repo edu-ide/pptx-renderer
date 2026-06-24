@@ -71,9 +71,9 @@ export default defineConfig({
       fileName: (format) => format === 'es' ? 'aiden0z-pptx-renderer.es.js' : 'aiden0z-pptx-renderer.cjs',
     },
     rollupOptions: {
-      external: ['jszip', 'pdfjs-dist'],
+      external: ['pdfjs-dist'],
       output: {
-        globals: { jszip: 'JSZip', 'pdfjs-dist': 'pdfjsLib' },
+        globals: { 'pdfjs-dist': 'pdfjsLib' },
       },
     },
   },
