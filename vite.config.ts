@@ -3,6 +3,9 @@ import { resolve } from 'path';
 import fs from 'fs';
 
 export default defineConfig({
+  define: {
+    'process.env.NODE_ENV': JSON.stringify('production'),
+  },
   resolve: {
     alias: {
       'pptxjs-reference': resolve(__dirname, 'references/pptxjs/src/index.ts'),
