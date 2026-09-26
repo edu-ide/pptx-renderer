@@ -1,0 +1,63 @@
+{
+  "name": "oracle-pypptx-shape3d-0013-camera-projection-matrix",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "p:sp.prstGeom=rect",
+      "geometry.aspect=square|wide|tall",
+      "container=standalone|nonIdentityGroup",
+      "paint=explicitSolid|themeStyleReference",
+      "a:scene3d.camera=orthographicFront|perspectiveRelaxedModerately",
+      "a:scene3d.camera.rot=absent|20deg,30deg,0deg|18590633,0,0",
+      "a:scene3d.camera.fov=absent|7200000",
+      "a:scene3d.lightRig=threePt:t",
+      "a:sp3d.extrusionH=0",
+      "a:sp3d.bevel=absent"
+    ]
+  }
+}

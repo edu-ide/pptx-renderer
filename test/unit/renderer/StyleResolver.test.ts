@@ -8,6 +8,8 @@ import {
   resolveGradientStroke,
   resolveThemeBackgroundFillReference,
   resolveThemeFillReference,
+  getFocusedGradientStops,
+  getGradientFocusOffset,
 } from '../../../src/renderer/StyleResolver';
 import { createMockRenderContext } from '../helpers/mockContext';
 import { xmlNode } from '../helpers/xmlNode';
@@ -708,6 +710,86 @@ describe('resolveColor — layout colorMapOverride', () => {
     // accent1 = 4472C4
     expect(result.color).toMatch(/4472[Cc]4/i);
   });
+
+  it('keeps a layout identity override instead of applying the master remap', () => {
+    const baseCtx = createMockRenderContext();
+    const ctx = createMockRenderContext({
+      theme: {
+        ...baseCtx.theme,
+        colorScheme: new Map([
+          ['accent1', '#FF0000'],
+          ['accent2', '#0000FF'],
+        ]),
+      },
+      master: {
+        ...baseCtx.master,
+        colorMap: new Map([['accent1', 'accent2']]),
+      },
+      layout: {
+        ...baseCtx.layout,
+        colorMapOverrideMode: 'override',
+        colorMapOverride: new Map([['accent1', 'accent1']]),
+      },
+    });
+
+    expect(
+      resolveColor(xmlNode('<solidFill><schemeClr val="accent1"/></solidFill>'), ctx).color,
+    ).toBe('#FF0000');
+  });
+
+  it('gives a slide override precedence over layout and master mappings', () => {
+    const baseCtx = createMockRenderContext();
+    const ctx = createMockRenderContext({
+      theme: {
+        ...baseCtx.theme,
+        colorScheme: new Map([
+          ['accent1', '#FF0000'],
+          ['accent2', '#0000FF'],
+          ['accent3', '#00FF00'],
+        ]),
+      },
+      master: { ...baseCtx.master, colorMap: new Map([['accent1', 'accent3']]) },
+      layout: {
+        ...baseCtx.layout,
+        colorMapOverrideMode: 'override',
+        colorMapOverride: new Map([['accent1', 'accent1']]),
+      },
+      slide: {
+        ...baseCtx.slide,
+        colorMapOverrideMode: 'override',
+        colorMapOverride: new Map([['accent1', 'accent2']]),
+      },
+    });
+
+    expect(
+      resolveColor(xmlNode('<solidFill><schemeClr val="accent1"/></solidFill>'), ctx).color,
+    ).toBe('#0000FF');
+  });
+
+  it('lets slide masterClrMapping reset a layout override', () => {
+    const baseCtx = createMockRenderContext();
+    const ctx = createMockRenderContext({
+      theme: {
+        ...baseCtx.theme,
+        colorScheme: new Map([
+          ['accent1', '#FF0000'],
+          ['accent2', '#0000FF'],
+          ['accent3', '#00FF00'],
+        ]),
+      },
+      master: { ...baseCtx.master, colorMap: new Map([['accent1', 'accent3']]) },
+      layout: {
+        ...baseCtx.layout,
+        colorMapOverrideMode: 'override',
+        colorMapOverride: new Map([['accent1', 'accent2']]),
+      },
+      slide: { ...baseCtx.slide, colorMapOverrideMode: 'master' },
+    });
+
+    expect(
+      resolveColor(xmlNode('<solidFill><schemeClr val="accent1"/></solidFill>'), ctx).color,
+    ).toBe('#00FF00');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1152,7 +1234,9 @@ describe('resolveThemeBackgroundFillReference', () => {
 
   it('uses regular fillStyles for background refs below idx 1001', () => {
     const ctx = createMockRenderContext();
-    ctx.theme.fillStyles = [xmlNode('<pattFill prst="solid"><fgClr><srgbClr val="00AA00"/></fgClr></pattFill>')];
+    ctx.theme.fillStyles = [
+      xmlNode('<pattFill prst="solid"><fgClr><srgbClr val="00AA00"/></fgClr></pattFill>'),
+    ];
     const bgRef = xmlNode('<bgRef idx="1"><srgbClr val="FF0000"/></bgRef>');
 
     const result = resolveThemeBackgroundFillReference(bgRef, ctx);
@@ -1322,6 +1406,29 @@ describe('resolveGradientFill', () => {
     // l=0.5, r=0.5 => cx=(0.5 + (1-0.5))/2 = 0.5
     expect(result!.cx).toBeCloseTo(0.5, 3);
     expect(result!.cy).toBeCloseTo(0.5, 3);
+    expect(result!.fillToRect).toEqual({ l: 0.5, t: 0.5, r: 0.5, b: 0.5 });
+  });
+
+  it('remaps gradient stops so fillToRect defines a center shade rectangle', () => {
+    const ctx = createMockRenderContext();
+    const node = xmlNode(`<spPr>
+      <gradFill>
+        <gsLst>
+          <gs pos="0"><srgbClr val="FF0000"/></gs>
+          <gs pos="100000"><srgbClr val="0000FF"/></gs>
+        </gsLst>
+        <path path="circle">
+          <fillToRect l="25000" t="25000" r="25000" b="25000"/>
+        </path>
+      </gradFill>
+    </spPr>`);
+    const result = resolveGradientFill(node, ctx);
+    expect(result).not.toBeNull();
+
+    expect(getGradientFocusOffset(result!, { width: 200, height: 100 })).toBeCloseTo(0.5, 3);
+    expect(
+      getFocusedGradientStops(result!, { width: 200, height: 100 }).map((s) => s.position),
+    ).toEqual([50, 100]);
   });
 
   it('resolves radial gradient with off-center fillToRect', () => {

@@ -1,0 +1,20 @@
+{
+  "name": "oracle-pypptx-table-0006-cell-margins-vertical-anchors",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "a:tcPr.anchor=t|ctr|b",
+      "a:tcPr.marL=91440|182880|274320"
+    ]
+  }
+}

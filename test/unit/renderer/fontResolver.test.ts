@@ -84,11 +84,35 @@ describe('fontResolver', () => {
     ]);
   });
 
+  it('keeps the original family as fallback when an embedded face cannot load', () => {
+    const ctx = createMockRenderContext();
+    ctx.presentation.embeddedFontFamilies = new Map([['example sans', '__pptx_embedded_1_0']]);
+    ctx.usedEmbeddedFontFamilies = new Set();
+
+    expect(resolveThemeFontStack(['Example Sans'], ctx)).toEqual([
+      '__pptx_embedded_1_0',
+      'Example Sans',
+    ]);
+    expect(ctx.usedEmbeddedFontFamilies).toEqual(new Set(['__pptx_embedded_1_0']));
+  });
+
   it('serializes CSS font family stacks with aliases, CJK fallbacks, generics, and escaping', () => {
-    expect(cssFontFamilyStack(['Calibri', 'sans-serif'])).toBe(
-      '"Calibri", "Aptos", "Arial", "Helvetica", sans-serif',
+    expect(cssFontFamilyStack('Calibri')).toBe(
+      '"Calibri", "Aptos", "Carlito", system-ui, "Arial", "Helvetica", sans-serif',
     );
-    expect(cssFontFamilyStack('微软雅黑')).toContain('"PingFang SC"');
+    expect(cssFontFamilyStack(['Calibri', 'sans-serif'])).toBe(
+      '"Calibri", "Aptos", "Carlito", system-ui, "Arial", "Helvetica", sans-serif',
+    );
+    expect(cssFontFamilyStack('Calibri Light')).toBe(
+      '"Calibri Light", "Aptos Display", "Aptos", "Carlito", system-ui, "Arial", "Helvetica", sans-serif',
+    );
+    expect(cssFontFamilyStack('Aptos')).toBe(
+      '"Aptos", system-ui, "Arial", "Helvetica", sans-serif',
+    );
+    const cjkStack = cssFontFamilyStack('微软雅黑');
+    expect(cjkStack).toContain('"PingFang SC"');
+    expect(cjkStack).toContain('"Malgun Gothic"');
+    expect(cjkStack.indexOf('"AppleGothic"')).toBeLessThan(cjkStack.indexOf('"Arial Unicode MS"'));
     expect(cssFontFamilyStack('A "Quoted" \\ Font')).toBe('"A \\"Quoted\\" \\\\ Font"');
   });
 });

@@ -9,7 +9,8 @@ Prerequisites:
 Modes (can combine):
   1) Shape ID range: scan cases dir for oracle-full-shapeid-{id:04d}*.json, POST /api/evaluate/{stem} for each.
   2) SmartArt from cases dir: scan dir for oracle-full-smartart-*.json, POST /api/evaluate/{stem} for each.
-  3) All testdata: POST /api/evaluate-all (default when neither --shape-id-min nor --smartart-cases-dir).
+  3) All testdata: discover /api/testdata-files, then POST /api/evaluate/{stem} with retries
+     (default when neither --shape-id-min nor --smartart-cases-dir).
 
 Usage:
   cd test/e2e
@@ -19,7 +20,7 @@ Usage:
   .venv/bin/python scripts/run_all_shapes_eval.py --shape-id-min 1 --shape-id-max 500
   # SmartArt only (all oracle-full-smartart-*.json in dir)
   .venv/bin/python scripts/run_all_shapes_eval.py --smartart-cases-dir oracle/cases-full
-  # Everything in testdata (one evaluate-all call)
+  # Everything in testdata (retry-aware per-case evaluation)
   .venv/bin/python scripts/run_all_shapes_eval.py
 
 Output:
@@ -49,6 +50,7 @@ ORACLE_REPORTS_DIR = REPORTS_DIR / "oracle-failures"
 DEFAULT_OUT_JSON = ORACLE_REPORTS_DIR / "all-shapes-eval.json"
 
 DEFAULT_CONCURRENCY = 8
+DEFAULT_RETRIES = 1
 
 
 def _utc_now_iso() -> str:
@@ -81,7 +83,29 @@ def _result_from_evaluate_response(name: str, data: dict) -> dict:
         "summary": summary,
         "reasons": quality.get("reasons") or [],
         "warnings": quality.get("warnings") or [],
+        "provenance": data.get("provenance"),
     }
+
+
+def _evaluation_errors_from_response(data: dict) -> list[dict]:
+    reported = data.get("evaluationErrors")
+    if isinstance(reported, list):
+        return [
+            {
+                **row,
+                "error": str(row.get("error", "")).strip() or "Unknown slide evaluation error",
+            }
+            for row in reported
+            if isinstance(row, dict) and "error" in row
+        ]
+    return [
+        {
+            "slideIdx": row.get("slideIdx"),
+            "error": str(row["error"]).strip() or "Unknown slide evaluation error",
+        }
+        for row in data.get("perSlide") or []
+        if isinstance(row, dict) and "error" in row
+    ]
 
 
 async def _eval_one(
@@ -90,23 +114,41 @@ async def _eval_one(
     api_base: str,
     case: str,
     source: str | None = None,
+    retries: int = DEFAULT_RETRIES,
 ) -> tuple[dict | None, dict | None]:
     """Evaluate a single case. Returns (result, error) — exactly one is non-None."""
     async with sem:
-        try:
-            url = f"{api_base}/api/evaluate/{case}"
-            if source:
-                url += f"?source={source}"
-            r = await client.post(url)
-            if r.status_code == 404:
-                return None, {"case": case, "error": "not found (no .pptx+.pdf in testdata)"}
-            r.raise_for_status()
-            data = r.json()
-        except Exception as e:
-            return None, {"case": case, "error": str(e)}
-        if "error" in data:
-            return None, {"case": case, "error": data["error"]}
-        return _result_from_evaluate_response(case, data), None
+        attempts = max(0, retries) + 1
+        last_error: dict | None = None
+        for attempt in range(1, attempts + 1):
+            try:
+                url = f"{api_base}/api/evaluate/{case}"
+                if source:
+                    url += f"?source={source}"
+                r = await client.post(url)
+                if r.status_code == 404:
+                    return None, {"case": case, "error": "not found (no .pptx+.pdf in testdata)"}
+                r.raise_for_status()
+                data = r.json()
+                if "error" in data:
+                    message = str(data["error"]).strip() or "Unknown evaluation error"
+                    last_error = {"case": case, "error": message, "attempts": attempt}
+                elif evaluation_errors := _evaluation_errors_from_response(data):
+                    last_error = {
+                        "case": case,
+                        "error": "slide evaluation runtime error",
+                        "attempts": attempt,
+                        "evaluation_errors": evaluation_errors,
+                    }
+                else:
+                    return _result_from_evaluate_response(case, data), None
+            except Exception as e:
+                last_error = {"case": case, "error": str(e), "attempts": attempt}
+
+            if attempt < attempts:
+                await asyncio.sleep(0.1 * attempt)
+
+        return None, last_error
 
 
 async def _eval_batch(
@@ -116,12 +158,15 @@ async def _eval_batch(
     cases: list[str],
     label: str,
     source: str | None = None,
+    retries: int = DEFAULT_RETRIES,
 ) -> tuple[list[dict], list[dict]]:
     """Evaluate a batch of cases concurrently. Returns (results, errors)."""
     if not cases:
         return [], []
     print(f"{label}: evaluating {len(cases)} cases (concurrency={sem._value})...", file=sys.stderr)
-    tasks = [_eval_one(client, sem, api_base, c, source=source) for c in cases]
+    tasks = [
+        _eval_one(client, sem, api_base, c, source=source, retries=retries) for c in cases
+    ]
     outcomes = await asyncio.gather(*tasks)
     results = []
     errors = []
@@ -220,12 +265,18 @@ async def async_main(args: argparse.Namespace) -> int:
                   f"smartart={len(smartart_cases_to_eval)}, other={len(extra_cases_to_eval)}), "
                   f"concurrency={concurrency}", file=sys.stderr)
             batch_results, batch_errors = await _eval_batch(
-                client, sem, api_base, all_cases, "All cases", source=source,
+                client,
+                sem,
+                api_base,
+                all_cases,
+                "All cases",
+                source=source,
+                retries=args.retries,
             )
             results.extend(batch_results)
             errors.extend(batch_errors)
 
-        # --- Fallback: evaluate-all endpoint ---
+        # --- Fallback: discover all cases, then use the same retry-aware per-case path ---
         if not all_cases:
             try:
                 src_qs = f"?source={source}" if source else ""
@@ -240,21 +291,17 @@ async def async_main(args: argparse.Namespace) -> int:
             if not test_files:
                 print("No test files (no .pptx+.pdf pairs in testdata).", file=sys.stderr)
             else:
-                print(f"Evaluating {len(test_files)} cases via POST /api/evaluate-all...", file=sys.stderr)
-                try:
-                    r = await client.post(f"{api_base}/api/evaluate-all{src_qs}")
-                    r.raise_for_status()
-                    body = r.json()
-                except Exception as e:
-                    print(f"evaluate-all failed: {e}", file=sys.stderr)
-                    return 1
-                files_result = body.get("files") or []
-                for data in files_result:
-                    if "error" in data:
-                        errors.append({"case": data.get("testFile", "?"), "error": data["error"]})
-                        continue
-                    name = data.get("testFile", "?")
-                    results.append(_result_from_evaluate_response(name, data))
+                batch_results, batch_errors = await _eval_batch(
+                    client,
+                    sem,
+                    api_base,
+                    test_files,
+                    "Discovered cases",
+                    source=source,
+                    retries=args.retries,
+                )
+                results.extend(batch_results)
+                errors.extend(batch_errors)
 
     shape_results = [r for r in results if "shapeid" in r["case"].lower() or ("oracle-shape-" in r["case"] and "smartart" not in r["case"])]
     smartart_results = [r for r in results if "smartart" in r["case"].lower()]
@@ -274,6 +321,7 @@ async def async_main(args: argparse.Namespace) -> int:
         "generated_at": _utc_now_iso(),
         "api_base": api_base,
         "concurrency": concurrency,
+        "retries": args.retries,
         "total_cases": len(results),
         "shape_cases": len(shape_results),
         "smartart_cases": len(smartart_results),
@@ -382,6 +430,13 @@ def main() -> int:
         help=f"Max parallel requests (default: {DEFAULT_CONCURRENCY})",
     )
     parser.add_argument(
+        "--retries",
+        type=int,
+        default=DEFAULT_RETRIES,
+        metavar="N",
+        help=f"Retries for transient HTTP or per-slide runtime errors (default: {DEFAULT_RETRIES})",
+    )
+    parser.add_argument(
         "--csv",
         action="store_true",
         default=True,
@@ -394,6 +449,10 @@ def main() -> int:
         help="Do not write CSV",
     )
     args = parser.parse_args()
+    if args.concurrency < 1:
+        parser.error("--concurrency must be at least 1")
+    if args.retries < 0:
+        parser.error("--retries must be non-negative")
     return asyncio.run(async_main(args))
 
 

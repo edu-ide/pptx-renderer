@@ -9,6 +9,7 @@
  */
 
 import { shapeArc } from './shapeArc';
+import { getOoxmlPresetShapePaths } from './ooxmlGeometryRuntime';
 
 type PresetShapeGenerator = (w: number, h: number, adjustments?: Map<string, number>) => string;
 
@@ -2335,7 +2336,7 @@ presetShapes.set('flowChartInputOutput', (w, h) => {
 });
 
 presetShapes.set('flowChartPredefinedProcess', (w, h) => {
-  const inset = w * 0.1;
+  const inset = w / 8;
   return [
     // Outer rectangle
     `M0,0 L${w},0 L${w},${h} L0,${h} Z`,
@@ -2385,11 +2386,12 @@ presetShapes.set('flowChartData', (w, h) => {
 });
 
 presetShapes.set('flowChartInternalStorage', (w, h) => {
-  const inset = Math.min(w, h) * 0.12;
+  const xInset = w / 8;
+  const yInset = h / 8;
   return [
     `M0,0 L${w},0 L${w},${h} L0,${h} Z`,
-    `M${inset},0 L${inset},${h}`,
-    `M0,${inset} L${w},${inset}`,
+    `M${xInset},0 L${xInset},${h}`,
+    `M0,${yInset} L${w},${yInset}`,
   ].join(' ');
 });
 
@@ -6566,6 +6568,12 @@ export function getMultiPathPreset(
   h: number,
   adjustments?: Map<string, number>,
 ): PresetSubPath[] | null {
+  if (w > 0 && h > 0) {
+    const ooxmlPaths = getOoxmlPresetShapePaths(shapeType, w, h, adjustments);
+    if (ooxmlPaths && ooxmlPaths.length > 1) {
+      return ooxmlPaths.map(({ d, fill, stroke }) => ({ d, fill, stroke }));
+    }
+  }
   const key = shapeType.toLowerCase();
   const gen = multiPathPresets.get(key) ?? multiPathPresets.get(shapeType);
   return gen ? gen(w, h, adjustments) : null;
@@ -6579,6 +6587,14 @@ export function getPresetShapePath(
 ): string {
   // <a:prstGeom prst="textNoShape"> means text-only shape without geometry.
   if (shapeType === 'textNoShape' || shapeType.toLowerCase() === 'textnoshape') return '';
+  // The compiled runtime evaluates positive extents only. Preserve the established
+  // degenerate-extent behavior through the handwritten compatibility registry.
+  if (w > 0 && h > 0) {
+    const ooxmlPaths = getOoxmlPresetShapePaths(shapeType, w, h, adjustments);
+    // The legacy API returns one combined path string for handwritten multi-path presets.
+    // Keep that behavior while the renderer consumes ordered generated paths separately.
+    if (ooxmlPaths?.length === 1) return ooxmlPaths[0]?.d ?? '';
+  }
   // OOXML preset names are often camelCase; normalize to lowercase for lookup
   const key = shapeType.toLowerCase();
   const generator = presetShapes.get(key) ?? presetShapes.get(shapeType);
@@ -6588,4 +6604,19 @@ export function getPresetShapePath(
   // Fallback: simple rectangle
   console.warn(`Unknown preset shape: "${shapeType}", falling back to rectangle`);
   return `M0,0 L${w},0 L${w},${h} L0,${h} Z`;
+}
+
+/** Return the fill-bearing silhouette used to clip a picture with preset geometry. */
+export function getPresetShapeClipPath(
+  shapeType: string,
+  w: number,
+  h: number,
+  adjustments?: Map<string, number>,
+): string {
+  if (w > 0 && h > 0) {
+    const ooxmlPaths = getOoxmlPresetShapePaths(shapeType, w, h, adjustments);
+    const silhouette = ooxmlPaths?.find(({ fill }) => fill !== 'none');
+    if (silhouette) return silhouette.d;
+  }
+  return getPresetShapePath(shapeType, w, h, adjustments);
 }

@@ -3,6 +3,12 @@
  * with full 7-level style inheritance.
  */
 
+import {
+  findMatchingLayoutPlaceholder,
+  findMatchingMasterPlaceholder,
+  getPlaceholderInfo,
+  masterPlaceholderType,
+} from '../model/placeholderMatching';
 import { SafeXmlNode } from '../parser/XmlParser';
 import { RenderContext } from './RenderContext';
 import type { TextBody, TextParagraph, TextRun } from '../model/nodes/ShapeNode';
@@ -11,14 +17,94 @@ import { resolveColor, resolveColorToCss, resolveFill } from './StyleResolver';
 import { emuToPx, pctToDecimal, angleToDeg } from '../parser/units';
 import { parseOoxmlBool } from '../parser/booleans';
 import { isExternalTargetMode } from '../parser/RelParser';
-import { isAllowedExternalUrl } from '../utils/urlSafety';
-import { getEffectiveBodyPrChild } from './TextBodyProperties';
-import { cssFontFamilyStack, resolveThemeFont } from './fontResolver';
+import { isAllowedExternalMediaUrl, isAllowedExternalUrl } from '../utils/urlSafety';
+import { findMediaByTarget, findMediaByTargetAsync, getOrCreateBlobUrl } from '../utils/media';
+import { getEffectiveBodyPrChild, parseTextPercentage } from './TextBodyProperties';
+import { cssFontFamilyStack, resolveThemeFontStack } from './fontResolver';
 import { resolveSlideNavigationIndex, slideJumpTitle } from './navigation';
+import { renderMathFormula } from './MathRenderer';
 
 // ---------------------------------------------------------------------------
 // Style Inheritance Helpers
 // ---------------------------------------------------------------------------
+
+function compactNumericTokenText(text: string | undefined): string | undefined {
+  if (!text) return undefined;
+  const token = text.trim();
+  if (token.length === 0 || token.length > 32) return undefined;
+  return /^[+-]?(?:\d+(?:[.,]\d+)?|\d{1,3}(?:,\d{3})+(?:\.\d+)?)\s*(?:%|[A-Za-z]{1,4})?$/.test(
+    token,
+  )
+    ? token
+    : undefined;
+}
+
+function isCompactNumericToken(text: string | undefined): boolean {
+  return compactNumericTokenText(text) !== undefined;
+}
+
+function appendWhitespacePreservingText(parent: HTMLElement, text: string): void {
+  if (!text) return;
+  parent.appendChild(document.createTextNode(text.replace(/ {2}/g, ' \u00a0')));
+}
+
+const TERMINAL_HANGING_PUNCTUATION = /^(.*?)(\S)([)\]}〉》」』】〕〗〙〛）］｝”’]+)(\s*)$/su;
+
+function appendTerminalHangingPunctuation(parent: HTMLElement, text: string): boolean {
+  const match = TERMINAL_HANGING_PUNCTUATION.exec(text);
+  if (!match) return false;
+
+  const [, prefix, anchorGlyph, punctuation, trailingWhitespace] = match;
+  appendWhitespacePreservingText(parent, prefix);
+
+  const cluster = document.createElement('span');
+  cluster.dataset.pptxHangingPunctuationCluster = 'true';
+  cluster.style.display = 'inline-block';
+  cluster.style.whiteSpace = 'nowrap';
+  cluster.appendChild(document.createTextNode(anchorGlyph));
+
+  const hanging = document.createElement('span');
+  hanging.dataset.pptxHangingPunctuation = 'true';
+  hanging.style.display = 'inline-block';
+  hanging.style.width = '0px';
+  hanging.style.overflow = 'visible';
+  hanging.style.whiteSpace = 'nowrap';
+  hanging.textContent = punctuation;
+  cluster.appendChild(hanging);
+  parent.appendChild(cluster);
+
+  appendWhitespacePreservingText(parent, trailingWhitespace);
+  return true;
+}
+
+function findCompactNumericRunGroups(runs: TextRun[]): Map<number, number> {
+  const groups = new Map<number, number>();
+  let nextGroupId = 1;
+
+  for (let i = 0; i < runs.length; i++) {
+    if (groups.has(i)) continue;
+
+    let text = '';
+    let bestEnd = -1;
+    for (let j = i; j < runs.length && j < i + 4; j++) {
+      const part = runs[j].text;
+      if (runs[j].math || part === undefined || part === '\n' || part.includes('\t')) break;
+      text += part;
+      if (text.trim().length > 32) break;
+      if (j > i && isCompactNumericToken(text)) bestEnd = j;
+    }
+
+    if (bestEnd > i) {
+      const groupId = nextGroupId++;
+      for (let k = i; k <= bestEnd; k++) {
+        groups.set(k, groupId);
+      }
+      i = bestEnd;
+    }
+  }
+
+  return groups;
+}
 
 /**
  * Find paragraph properties at a specific indent level from a list style node.
@@ -59,38 +145,6 @@ function getPlaceholderCategory(
 }
 
 /**
- * Find a placeholder node in a list by matching type and/or idx.
- */
-function findPlaceholderNode(
-  placeholders: SafeXmlNode[],
-  info: PlaceholderInfo,
-): SafeXmlNode | undefined {
-  for (const ph of placeholders) {
-    // Navigate to the ph element to read its attributes
-    let phEl: SafeXmlNode | undefined;
-    const nvSpPr = ph.child('nvSpPr');
-    if (nvSpPr.exists()) {
-      phEl = nvSpPr.child('nvPr').child('ph');
-    }
-    if (!phEl || !phEl.exists()) {
-      const nvPicPr = ph.child('nvPicPr');
-      if (nvPicPr.exists()) {
-        phEl = nvPicPr.child('nvPr').child('ph');
-      }
-    }
-    if (!phEl || !phEl.exists()) continue;
-
-    const phType = phEl.attr('type');
-    const phIdx = phEl.numAttr('idx');
-
-    // Match by idx first (most specific), then by type
-    if (info.idx !== undefined && phIdx === info.idx) return ph;
-    if (info.type && phType === info.type) return ph;
-  }
-  return undefined;
-}
-
-/**
  * Extract lstStyle from a placeholder shape node.
  */
 function getPlaceholderLstStyle(phNode: SafeXmlNode): SafeXmlNode | undefined {
@@ -107,9 +161,17 @@ function getPlaceholderLstStyle(phNode: SafeXmlNode): SafeXmlNode | undefined {
 interface MergedParagraphStyle {
   align?: string;
   rtl?: boolean;
+  /** Whether Office East Asian typography and line-breaking rules are enabled. */
+  eastAsianLineBreak?: boolean;
+  /** Whether terminal punctuation may hang outside the authored text bounds. */
+  hangingPunctuation?: boolean;
   marginLeft?: number;
   textIndent?: number;
+  defaultTabSize?: number;
+  tabStops?: { position: number; align: string }[];
   lineHeight?: string;
+  /** OOXML spcPct as a 0-1 ratio. One Office line is approximately 1.19 CSS em. */
+  lineHeightPercent?: number;
   /** True when lineHeight comes from spcPts (absolute pt value). For CJK fonts, CSS line-height
    *  with absolute values may not produce exact spacing because the font's content area can exceed
    *  the line-height. When true, we use block-level line wrappers instead of <br> for line breaks. */
@@ -132,6 +194,12 @@ interface MergedParagraphStyle {
   defRPrs?: SafeXmlNode[];
 }
 
+const OFFICE_LINE_HEIGHT_EM = 1.19;
+
+function officeLinePoints(ratio: number, fontSizePt: number): number {
+  return Number((ratio * fontSizePt * OFFICE_LINE_HEIGHT_EM).toFixed(3));
+}
+
 function mergeParagraphProps(target: MergedParagraphStyle, pPr: SafeXmlNode): void {
   if (!pPr.exists()) return;
 
@@ -141,14 +209,38 @@ function mergeParagraphProps(target: MergedParagraphStyle, pPr: SafeXmlNode): vo
   const rtl = pPr.attr('rtl');
   if (rtl !== undefined) target.rtl = parseOoxmlBool(rtl);
 
+  const eaLnBrk = pPr.attr('eaLnBrk');
+  if (eaLnBrk !== undefined) target.eastAsianLineBreak = parseOoxmlBool(eaLnBrk);
+
+  const hangingPunct = pPr.attr('hangingPunct');
+  if (hangingPunct !== undefined) target.hangingPunctuation = parseOoxmlBool(hangingPunct);
+
   const marL = pPr.numAttr('marL');
   if (marL !== undefined) target.marginLeft = emuToPx(marL);
 
   const indent = pPr.numAttr('indent');
   if (indent !== undefined) target.textIndent = emuToPx(indent);
 
+  const defTabSz = pPr.numAttr('defTabSz');
+  if (defTabSz !== undefined) target.defaultTabSize = emuToPx(defTabSz);
+
+  const tabLst = pPr.child('tabLst');
+  if (tabLst.exists()) {
+    target.tabStops = tabLst
+      .children('tab')
+      .flatMap((tab) => {
+        const position = tab.numAttr('pos');
+        return position === undefined
+          ? []
+          : [{ position: emuToPx(position), align: tab.attr('algn') ?? 'l' }];
+      })
+      .sort((a, b) => a.position - b.position);
+  }
+
   // Line spacing
-  // OOXML spcPct: 100000 = "single spacing" = 1.0× the font's line height.
+  // OOXML spcPct: 100000 = one Office line. PowerPoint's native baseline distance is
+  // approximately 1.19× the font size in the native oracle, while CSS unitless
+  // line-height 1 is only 1em. Keep the Office line unit explicit before mapping to CSS.
   // IMPORTANT: We must use UNITLESS CSS line-height values (e.g., 1.0, 1.2)
   // instead of percentages (e.g., 100%, 120%). CSS percentage line-height is
   // computed once against the element's own font-size and inherited as a FIXED
@@ -160,10 +252,11 @@ function mergeParagraphProps(target: MergedParagraphStyle, pPr: SafeXmlNode): vo
   if (lnSpc.exists()) {
     const spcPct = lnSpc.child('spcPct');
     if (spcPct.exists()) {
-      const val = spcPct.numAttr('val');
+      const val = parseTextPercentage(spcPct.attr('val'));
       if (val !== undefined) {
-        // OOXML 100000 → CSS unitless 1.0; OOXML 120000 → CSS 1.2
-        target.lineHeight = `${(val / 100000).toFixed(3)}`;
+        target.lineHeightPercent = val;
+        target.lineHeight = `${(val * OFFICE_LINE_HEIGHT_EM).toFixed(3)}`;
+        target.lineHeightAbsolute = false;
       }
     }
     const spcPts = lnSpc.child('spcPts');
@@ -171,6 +264,7 @@ function mergeParagraphProps(target: MergedParagraphStyle, pPr: SafeXmlNode): vo
       const val = spcPts.numAttr('val');
       if (val !== undefined) {
         target.lineHeight = `${val / 100}pt`;
+        target.lineHeightPercent = undefined;
         target.lineHeightAbsolute = true;
       }
     }
@@ -182,12 +276,18 @@ function mergeParagraphProps(target: MergedParagraphStyle, pPr: SafeXmlNode): vo
     const spcPts = spcBef.child('spcPts');
     if (spcPts.exists()) {
       const val = spcPts.numAttr('val');
-      if (val !== undefined) target.spaceBefore = val / 100;
+      if (val !== undefined) {
+        target.spaceBefore = val / 100;
+        target.spaceBeforePct = undefined;
+      }
     }
     const spcPct = spcBef.child('spcPct');
     if (spcPct.exists()) {
-      const val = spcPct.numAttr('val');
-      if (val !== undefined) target.spaceBeforePct = val / 100000; // store as ratio
+      const val = parseTextPercentage(spcPct.attr('val'));
+      if (val !== undefined) {
+        target.spaceBeforePct = val;
+        target.spaceBefore = undefined;
+      }
     }
   }
 
@@ -197,23 +297,33 @@ function mergeParagraphProps(target: MergedParagraphStyle, pPr: SafeXmlNode): vo
     const spcPts = spcAft.child('spcPts');
     if (spcPts.exists()) {
       const val = spcPts.numAttr('val');
-      if (val !== undefined) target.spaceAfter = val / 100;
+      if (val !== undefined) {
+        target.spaceAfter = val / 100;
+        target.spaceAfterPct = undefined;
+      }
     }
     const spcPct = spcAft.child('spcPct');
     if (spcPct.exists()) {
-      const val = spcPct.numAttr('val');
-      if (val !== undefined) target.spaceAfterPct = val / 100000; // store as ratio
+      const val = parseTextPercentage(spcPct.attr('val'));
+      if (val !== undefined) {
+        target.spaceAfterPct = val;
+        target.spaceAfter = undefined;
+      }
     }
   }
 
   // Bullets
   const buChar = pPr.child('buChar');
   if (buChar.exists()) {
+    target.bulletAutoNum = undefined;
+    target.bulletAutoNumStartAt = undefined;
     target.bulletChar = buChar.attr('char') || '';
     target.bulletNone = false;
   }
   const buAutoNum = pPr.child('buAutoNum');
   if (buAutoNum.exists()) {
+    target.bulletChar = undefined;
+    target.bulletAutoNumStartAt = undefined;
     target.bulletAutoNum = buAutoNum.attr('type') || 'arabicPeriod';
     const startAt = buAutoNum.numAttr('startAt');
     if (startAt !== undefined) target.bulletAutoNumStartAt = startAt;
@@ -231,9 +341,9 @@ function mergeParagraphProps(target: MergedParagraphStyle, pPr: SafeXmlNode): vo
   }
   const buSzPct = pPr.child('buSzPct');
   if (buSzPct.exists()) {
-    const val = buSzPct.numAttr('val');
+    const val = parseTextPercentage(buSzPct.attr('val'));
     if (val !== undefined) {
-      target.bulletSizePct = val / 100000;
+      target.bulletSizePct = val;
       target.bulletSizePt = undefined;
     }
   }
@@ -300,6 +410,8 @@ interface MergedRunStyle {
   textGradientCss?: string;
   /** CSS background for text fill (from rPr > pattFill). */
   textPatternCss?: string;
+  /** Picture fill node clipped to the run glyphs (from rPr > blipFill). */
+  textPictureFill?: SafeXmlNode;
   /** CSS background color for a:highlight. */
   highlightColor?: string;
   /** Explicit underline CSS color from a:uFill. */
@@ -320,7 +432,14 @@ interface MergedRunStyle {
 
 function getRunColorKind(rPr: SafeXmlNode | undefined): 'none' | 'defaultTextScheme' | 'explicit' {
   if (!rPr?.exists()) return 'none';
-  if (rPr.child('gradFill').exists()) return 'explicit';
+  if (
+    rPr.child('gradFill').exists() ||
+    rPr.child('pattFill').exists() ||
+    rPr.child('blipFill').exists() ||
+    rPr.child('noFill').exists()
+  ) {
+    return 'explicit';
+  }
   const solidFill = rPr.child('solidFill');
   if (!solidFill.exists()) return 'none';
   const scheme = solidFill.child('schemeClr').attr('val');
@@ -371,6 +490,7 @@ function mergeRunProps(target: MergedRunStyle, rPr: SafeXmlNode, ctx: RenderCont
   if (solidFill.exists()) {
     delete target.textGradientCss;
     delete target.textPatternCss;
+    delete target.textPictureFill;
     delete target.textNoFill;
     const { color, alpha } = resolveColor(solidFill, ctx);
     const hex = color.startsWith('#') ? color : `#${color}`;
@@ -385,6 +505,7 @@ function mergeRunProps(target: MergedRunStyle, rPr: SafeXmlNode, ctx: RenderCont
   if (gradFill.exists()) {
     delete target.color;
     delete target.textPatternCss;
+    delete target.textPictureFill;
     delete target.textNoFill;
     const css = resolveGradientForText(gradFill, ctx);
     if (css) target.textGradientCss = css;
@@ -393,9 +514,18 @@ function mergeRunProps(target: MergedRunStyle, rPr: SafeXmlNode, ctx: RenderCont
   if (pattFill.exists()) {
     delete target.color;
     delete target.textGradientCss;
+    delete target.textPictureFill;
     delete target.textNoFill;
     const css = resolveFill(rPr, ctx);
     if (css) target.textPatternCss = css;
+  }
+  const blipFill = rPr.child('blipFill');
+  if (blipFill.exists()) {
+    delete target.color;
+    delete target.textGradientCss;
+    delete target.textPatternCss;
+    delete target.textNoFill;
+    target.textPictureFill = blipFill;
   }
 
   // Font family. Office often writes separate Latin/East Asian typefaces in the
@@ -407,7 +537,7 @@ function mergeRunProps(target: MergedRunStyle, rPr: SafeXmlNode, ctx: RenderCont
     if (!fontNode.exists()) continue;
     const typeface = fontNode.attr('typeface');
     if (!typeface) continue;
-    fontFamilyStack.push(resolveThemeFont(typeface, ctx, languageHints));
+    fontFamilyStack.push(...resolveThemeFontStack([typeface], ctx, languageHints));
   }
   if (fontFamilyStack.length > 0) {
     target.fontFamily = fontFamilyStack[0];
@@ -466,6 +596,7 @@ function mergeRunProps(target: MergedRunStyle, rPr: SafeXmlNode, ctx: RenderCont
     delete target.color;
     delete target.textGradientCss;
     delete target.textPatternCss;
+    delete target.textPictureFill;
     target.textNoFill = true;
   }
 
@@ -677,6 +808,367 @@ function applyClippedTextBackground(element: HTMLElement, css: string): void {
   element.style.color = 'transparent';
 }
 
+function resolveTextPictureUrl(blipFill: SafeXmlNode, ctx: RenderContext): string | undefined {
+  const blip = blipFill.child('blip');
+  const relId =
+    blip.attr('embed') ?? blip.attr('r:embed') ?? blip.attr('link') ?? blip.attr('r:link');
+  if (!relId) return undefined;
+  const rel = ctx.slide.rels.get(relId);
+  if (!rel) return undefined;
+  if (isExternalTargetMode(rel.targetMode)) {
+    return isAllowedExternalMediaUrl(rel.target) ? rel.target : undefined;
+  }
+  const resolved = findMediaByTarget(rel.target, ctx.presentation.media);
+  if (!resolved) return undefined;
+  return getOrCreateBlobUrl(resolved.mediaPath, resolved.data, ctx.mediaUrlCache);
+}
+
+async function resolveTextPictureUrlAsync(
+  blipFill: SafeXmlNode,
+  ctx: RenderContext,
+): Promise<string | undefined> {
+  const blip = blipFill.child('blip');
+  const relId =
+    blip.attr('embed') ?? blip.attr('r:embed') ?? blip.attr('link') ?? blip.attr('r:link');
+  if (!relId) return undefined;
+  const rel = ctx.slide.rels.get(relId);
+  if (!rel) return undefined;
+  if (isExternalTargetMode(rel.targetMode)) {
+    return isAllowedExternalMediaUrl(rel.target) ? rel.target : undefined;
+  }
+  const resolved = await findMediaByTargetAsync(
+    rel.target,
+    ctx.presentation.media,
+    ctx.presentation.mediaResolver,
+  );
+  if (!resolved) return undefined;
+  return getOrCreateBlobUrl(resolved.mediaPath, resolved.data, ctx.mediaUrlCache);
+}
+
+function applyClippedTextPicture(element: HTMLElement, blipFill: SafeXmlNode, url: string): void {
+  const escapedUrl = url.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  element.style.backgroundImage = `url("${escapedUrl}")`;
+  if (blipFill.child('tile').exists()) {
+    element.style.backgroundRepeat = 'repeat';
+  } else {
+    element.style.backgroundSize = '100% 100%';
+    element.style.backgroundPosition = 'center';
+    element.style.backgroundRepeat = 'no-repeat';
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (element.style as any).webkitBackgroundClip = 'text';
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (element.style as any).backgroundClip = 'text';
+  element.style.color = 'transparent';
+}
+
+function applyTextPictureFill(
+  element: HTMLElement,
+  blipFill: SafeXmlNode,
+  ctx: RenderContext,
+): void {
+  const immediateUrl = resolveTextPictureUrl(blipFill, ctx);
+  if (immediateUrl) {
+    applyClippedTextPicture(element, blipFill, immediateUrl);
+    return;
+  }
+  if (!ctx.presentation.mediaResolver) return;
+
+  const task = resolveTextPictureUrlAsync(blipFill, ctx)
+    .then((url) => {
+      if (!url || ctx.signal?.aborted) return;
+      applyClippedTextPicture(element, blipFill, url);
+    })
+    .catch(() => {
+      // Preserve the normal text fallback when lazy package media cannot be loaded.
+    });
+  ctx.asyncTasks?.push(task);
+  if (!ctx.asyncTasks) void task;
+}
+
+type ExplicitTabAxis = 'horizontal' | 'vertical';
+
+function appendExplicitTabText(
+  element: HTMLElement,
+  text: string,
+  markers: HTMLElement[],
+  axis: ExplicitTabAxis,
+): void {
+  const parts = text.split('\t');
+  for (const [index, part] of parts.entries()) {
+    appendWhitespacePreservingText(element, part);
+    if (index === parts.length - 1) continue;
+    const marker = document.createElement('span');
+    marker.dataset.pptxTabStop = 'explicit';
+    marker.setAttribute('aria-hidden', 'true');
+    marker.style.display = 'inline-block';
+    marker.style.width = axis === 'vertical' ? '1px' : '0px';
+    marker.style.height = axis === 'vertical' ? '0px' : '1px';
+    marker.style.overflow = 'hidden';
+    element.appendChild(marker);
+    markers.push(marker);
+  }
+}
+
+function rangeInlineSize(range: Range, axis: ExplicitTabAxis, scale: number): number {
+  const rects = Array.from(range.getClientRects()).filter((rect) =>
+    axis === 'vertical' ? rect.height > 0 : rect.width > 0,
+  );
+  if (rects.length === 0) return 0;
+  if (axis === 'vertical') {
+    const firstColumnRight = rects[0].right;
+    const firstColumnRects = rects.filter((rect) => Math.abs(rect.right - firstColumnRight) < 1);
+    const top = Math.min(...firstColumnRects.map((rect) => rect.top));
+    const bottom = Math.max(...firstColumnRects.map((rect) => rect.bottom));
+    return (bottom - top) / scale;
+  }
+  const firstLineTop = rects[0].top;
+  const firstLineRects = rects.filter((rect) => Math.abs(rect.top - firstLineTop) < 1);
+  const left = Math.min(...firstLineRects.map((rect) => rect.left));
+  const right = Math.max(...firstLineRects.map((rect) => rect.right));
+  return (right - left) / scale;
+}
+
+function decimalFieldOffset(
+  paragraph: HTMLElement,
+  marker: HTMLElement,
+  nextMarker: HTMLElement | undefined,
+  axis: ExplicitTabAxis,
+  scale: number,
+  fallbackSize: number,
+): number {
+  const fieldRange = document.createRange();
+  fieldRange.setStartAfter(marker);
+  if (nextMarker) fieldRange.setEndBefore(nextMarker);
+  else fieldRange.setEnd(paragraph, paragraph.childNodes.length);
+
+  const walker = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    const node = walker.currentNode as Text;
+    if (!fieldRange.intersectsNode(node)) continue;
+    const decimalIndex = node.data.search(/[.,\u066b\u066c]/);
+    if (decimalIndex < 0) continue;
+
+    const beforeDecimal = document.createRange();
+    beforeDecimal.setStartAfter(marker);
+    beforeDecimal.setEnd(node, decimalIndex);
+    const decimalGlyph = document.createRange();
+    decimalGlyph.setStart(node, decimalIndex);
+    decimalGlyph.setEnd(node, decimalIndex + 1);
+    return (
+      rangeInlineSize(beforeDecimal, axis, scale) + rangeInlineSize(decimalGlyph, axis, scale) / 2
+    );
+  }
+  return fallbackSize;
+}
+
+function nextTabCandidate(
+  cursor: number,
+  tabStops: NonNullable<MergedParagraphStyle['tabStops']>,
+  defaultTabSize: number,
+): { position: number; align: string } {
+  const explicit = tabStops.find((candidate) => candidate.position > cursor + 0.01);
+  if (explicit) return explicit;
+  return {
+    position: (Math.floor(cursor / defaultTabSize) + 1) * defaultTabSize,
+    align: 'l',
+  };
+}
+
+function applyExplicitTabLayout(
+  paragraph: HTMLElement,
+  markers: HTMLElement[],
+  tabStops: NonNullable<MergedParagraphStyle['tabStops']>,
+  defaultTabSize: number,
+  axis: ExplicitTabAxis,
+): void {
+  const offsetSize = axis === 'vertical' ? paragraph.offsetHeight : paragraph.offsetWidth;
+  if (!paragraph.isConnected || offsetSize <= 0) return;
+  const paragraphRect = paragraph.getBoundingClientRect();
+  const renderedSize = axis === 'vertical' ? paragraphRect.height : paragraphRect.width;
+  const scale = renderedSize / offsetSize;
+  if (!Number.isFinite(scale) || scale <= 0) return;
+
+  for (const [index, marker] of markers.entries()) {
+    if (axis === 'vertical') marker.style.height = '0px';
+    else marker.style.width = '0px';
+    const markerRect = marker.getBoundingClientRect();
+    const cursor =
+      axis === 'vertical'
+        ? (markerRect.top - paragraphRect.top) / scale
+        : (markerRect.left - paragraphRect.left) / scale;
+    const nextMarker = markers[index + 1];
+    const fieldRange = document.createRange();
+    fieldRange.setStartAfter(marker);
+    if (nextMarker) fieldRange.setEndBefore(nextMarker);
+    else fieldRange.setEnd(paragraph, paragraph.childNodes.length);
+    const fieldSize = rangeInlineSize(fieldRange, axis, scale);
+
+    let candidate = nextTabCandidate(cursor, tabStops, defaultTabSize);
+    const fieldOffset =
+      candidate.align === 'ctr'
+        ? fieldSize / 2
+        : candidate.align === 'r'
+          ? fieldSize
+          : candidate.align === 'dec'
+            ? decimalFieldOffset(paragraph, marker, nextMarker, axis, scale, fieldSize)
+            : 0;
+    let spacerSize = candidate.position - cursor - fieldOffset;
+
+    // If an aligned field would overlap the preceding content, advance to the
+    // next default interval rather than emitting a negative spacer.
+    if (spacerSize < 0) {
+      candidate = {
+        position: (Math.floor((cursor + fieldOffset) / defaultTabSize) + 1) * defaultTabSize,
+        align: candidate.align,
+      };
+      spacerSize = candidate.position - cursor - fieldOffset;
+    }
+
+    marker.dataset.pptxTabAlign = candidate.align;
+    marker.dataset.pptxTabPosition = String(candidate.position);
+    if (axis === 'vertical') marker.style.height = `${Math.max(0, spacerSize)}px`;
+    else marker.style.width = `${Math.max(0, spacerSize)}px`;
+  }
+}
+
+function withConnectedTextMeasurement(
+  paragraph: HTMLElement,
+  ctx: RenderContext,
+  measure: () => void,
+): void {
+  if (paragraph.isConnected) {
+    measure();
+    return;
+  }
+
+  const root = ctx.measurementRoot;
+  if (!root || root.isConnected || !root.contains(paragraph) || !document.body) return;
+  const originalParent = root.parentNode;
+  const originalNextSibling = root.nextSibling;
+  const previous = {
+    position: root.style.position,
+    left: root.style.left,
+    top: root.style.top,
+    visibility: root.style.visibility,
+    pointerEvents: root.style.pointerEvents,
+    contain: root.style.contain,
+  };
+  root.style.position = 'fixed';
+  root.style.left = '-100000px';
+  root.style.top = '0';
+  root.style.visibility = 'hidden';
+  root.style.pointerEvents = 'none';
+  root.style.contain = 'layout style paint';
+  document.body.appendChild(root);
+  try {
+    measure();
+  } finally {
+    if (originalParent) originalParent.insertBefore(root, originalNextSibling);
+    else root.remove();
+    root.style.position = previous.position;
+    root.style.left = previous.left;
+    root.style.top = previous.top;
+    root.style.visibility = previous.visibility;
+    root.style.pointerEvents = previous.pointerEvents;
+    root.style.contain = previous.contain;
+  }
+}
+
+function scheduleTerminalHangingPunctuation(
+  paragraph: HTMLElement,
+  element: HTMLElement,
+  text: string,
+  ctx: RenderContext,
+): void {
+  const match = TERMINAL_HANGING_PUNCTUATION.exec(text);
+  if (!match) return;
+  const [, prefix, anchorGlyph, punctuation] = match;
+  const anchorStart = prefix.length;
+  const punctuationStart = anchorStart + anchorGlyph.length;
+  const punctuationEnd = punctuationStart + punctuation.length;
+
+  const nextFrame = () =>
+    new Promise<void>((resolve) => {
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(() => resolve());
+      } else {
+        setTimeout(resolve, 0);
+      }
+    });
+  const measure = () => {
+    if (ctx.signal?.aborted) return;
+    withConnectedTextMeasurement(paragraph, ctx, () => {
+      element.replaceChildren(document.createTextNode(text));
+      const textNode = element.firstChild;
+      if (!(textNode instanceof Text)) return;
+
+      const anchorRange = document.createRange();
+      anchorRange.setStart(textNode, anchorStart);
+      anchorRange.setEnd(textNode, punctuationStart);
+      const punctuationRange = document.createRange();
+      punctuationRange.setStart(textNode, punctuationStart);
+      punctuationRange.setEnd(textNode, punctuationEnd);
+      const anchorRect = anchorRange.getBoundingClientRect();
+      const punctuationRects = Array.from(punctuationRange.getClientRects());
+      const isOrphaned = punctuationRects.some(
+        (rect) => rect.width > 0 && Math.abs(rect.top - anchorRect.top) > 1,
+      );
+      if (!isOrphaned) return;
+
+      element.replaceChildren();
+      appendTerminalHangingPunctuation(element, text);
+    });
+  };
+  const task = nextFrame()
+    .then(() => {
+      measure();
+      return document.fonts?.ready;
+    })
+    .then(() => nextFrame())
+    .then(() => {
+      if (ctx.signal?.aborted) return;
+      measure();
+    });
+  ctx.asyncTasks?.push(task);
+  if (!ctx.asyncTasks) void task;
+}
+
+function scheduleExplicitTabLayout(
+  paragraph: HTMLElement,
+  markers: HTMLElement[],
+  tabStops: NonNullable<MergedParagraphStyle['tabStops']>,
+  defaultTabSize: number,
+  ctx: RenderContext,
+  axis: ExplicitTabAxis,
+): void {
+  const nextFrame = () =>
+    new Promise<void>((resolve) => {
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(() => resolve());
+      } else {
+        setTimeout(resolve, 0);
+      }
+    });
+  const measure = () => {
+    if (ctx.signal?.aborted) return;
+    withConnectedTextMeasurement(paragraph, ctx, () =>
+      applyExplicitTabLayout(paragraph, markers, tabStops, defaultTabSize, axis),
+    );
+  };
+  const task = nextFrame()
+    .then(() => {
+      measure();
+      return document.fonts?.ready;
+    })
+    .then(() => {
+      if (ctx.signal?.aborted) return;
+      measure();
+    });
+  ctx.asyncTasks?.push(task);
+  if (!ctx.asyncTasks) void task;
+}
+
 // ---------------------------------------------------------------------------
 // Bullet Generation
 // ---------------------------------------------------------------------------
@@ -740,6 +1232,14 @@ function toRoman(num: number): string {
  * 8. run rPr
  */
 /** Optional overrides when rendering text (e.g. table cell style text properties from tcTxStyle). */
+export type DrawingMLVerticalTextMode =
+  | 'eaVert'
+  | 'mongolianVert'
+  | 'vert'
+  | 'vert270'
+  | 'wordArtVert'
+  | 'wordArtVertRtl';
+
 interface RenderTextBodyOptions {
   /** When set, used as text color when the run has no explicit color (e.g. table style tcTxStyle). */
   cellTextColor?: string;
@@ -749,10 +1249,12 @@ interface RenderTextBodyOptions {
   cellTextItalic?: boolean;
   /** When set, applies font family from table style tcTxStyle (overrides inherited, yields to explicit run rPr). */
   cellTextFontFamily?: string | string[];
-  /** fontRef color from shape style (e.g. SmartArt). Overrides inherited styles but yields to explicit run rPr color. */
+  /** fontRef color from shape style (e.g. SmartArt). Overrides template styles but yields to explicit paragraph/run fills. */
   fontRefColor?: string;
   /** True when the text container uses vertical writing mode. */
   isVerticalText?: boolean;
+  /** Effective DrawingML bodyPr@vert mode for mode-specific layout semantics. */
+  verticalTextMode?: DrawingMLVerticalTextMode;
   /** Fallback CSS line-height when OOXML inheritance does not specify one. */
   defaultLineHeight?: string;
   /** Collapse paragraph spacing outside the first/last visible paragraph. */
@@ -761,24 +1263,60 @@ interface RenderTextBodyOptions {
   compactSingleLineSpacing?: boolean;
 }
 
+export function resolveTextFields(textBody: TextBody, ctx: RenderContext): TextBody {
+  let changed = false;
+  const slideNumber = String((ctx.presentation.firstSlideNum ?? 1) + ctx.slide.index);
+  const paragraphs = textBody.paragraphs.map((paragraph) => {
+    let paragraphChanged = false;
+    const runs = paragraph.runs.map((run) => {
+      if (run.fieldType?.toLowerCase() !== 'slidenum') return run;
+      changed = true;
+      paragraphChanged = true;
+      return { ...run, text: slideNumber };
+    });
+    return paragraphChanged ? { ...paragraph, runs } : paragraph;
+  });
+  return changed ? { ...textBody, paragraphs } : textBody;
+}
+
 export function renderTextBody(
-  textBody: TextBody,
+  sourceTextBody: TextBody,
   placeholder: PlaceholderInfo | undefined,
   ctx: RenderContext,
   container: HTMLElement,
   options?: RenderTextBodyOptions,
 ): void {
-  const category = getPlaceholderCategory(placeholder);
+  const textBody = resolveTextFields(sourceTextBody, ctx);
+  const layoutPh = placeholder
+    ? findMatchingLayoutPlaceholder(
+        ctx.layout.placeholders.map((entry) => entry.node),
+        placeholder,
+        getPlaceholderInfo,
+      )
+    : undefined;
+  const layoutPhType = layoutPh ? getPlaceholderInfo(layoutPh).type : undefined;
+  // Follow the parent's parent: a local slide type does not rewire layout -> master.
+  const masterInfo = layoutPh ? { type: layoutPhType } : placeholder;
+  const category = getPlaceholderCategory(
+    masterInfo ? { type: masterPlaceholderType(masterInfo.type) } : undefined,
+  );
+  // ShapeRenderer may already configure fitting/vertical flow. Other callers (tables)
+  // need a local whitespace boundary so host pre/nowrap does not leak into paragraphs.
+  if (!container.style.whiteSpace) {
+    const wrap =
+      textBody.bodyProperties?.attr('wrap') ?? textBody.layoutBodyProperties?.attr('wrap');
+    container.style.whiteSpace = wrap === 'none' ? 'nowrap' : 'normal';
+  }
 
   // Parse normAutofit from bodyPr (font scaling + line spacing reduction)
   let fontScale = 1;
   let lnSpcReduction = 0;
   const normAutofit = getEffectiveBodyPrChild(textBody, 'normAutofit');
   if (normAutofit?.exists()) {
-    const fs = normAutofit.numAttr('fontScale');
-    if (fs !== undefined) fontScale = fs / 100000; // 100000 = 100%
-    const lsr = normAutofit.numAttr('lnSpcReduction');
-    if (lsr !== undefined) lnSpcReduction = lsr / 100000; // e.g., 20000 = 20%
+    const fs = parseTextPercentage(normAutofit.attr('fontScale'));
+    if (fs !== undefined) fontScale = fs; // 100000 = 100%
+    const lsr = parseTextPercentage(normAutofit.attr('lnSpcReduction'));
+    if (lsr !== undefined) lnSpcReduction = lsr; // e.g., 20000 = 20%
   }
 
   const bulletCounters = new Map<string, number>();
@@ -802,7 +1340,10 @@ export function renderTextBody(
     paraDiv.style.boxSizing = 'border-box';
     paraDiv.style.overflowWrap = 'anywhere';
     const level = paragraph.level;
-    if (options?.isVerticalText) {
+    if (
+      options?.verticalTextMode === 'wordArtVert' ||
+      options?.verticalTextMode === 'wordArtVertRtl'
+    ) {
       paraDiv.style.wordBreak = 'keep-all';
     }
     const hasLineBreaks = paragraph.runs.some((r) => r.text === '\n');
@@ -830,8 +1371,12 @@ export function renderTextBody(
     mergeParagraphProps(merged, findStyleAtLevel(masterTextStyle, level));
 
     // Level 4: master placeholder lstStyle
-    if (placeholder) {
-      const masterPh = findPlaceholderNode(ctx.master.placeholders, placeholder);
+    if (masterInfo) {
+      const masterPh = findMatchingMasterPlaceholder(
+        ctx.master.placeholders,
+        masterInfo.type,
+        getPlaceholderInfo,
+      );
       if (masterPh) {
         const lstStyle = getPlaceholderLstStyle(masterPh);
         mergeParagraphProps(merged, findStyleAtLevel(lstStyle, level));
@@ -839,15 +1384,9 @@ export function renderTextBody(
     }
 
     // Level 5: layout placeholder lstStyle
-    if (placeholder) {
-      const layoutPh = findPlaceholderNode(
-        ctx.layout.placeholders.map((e) => e.node),
-        placeholder,
-      );
-      if (layoutPh) {
-        const lstStyle = getPlaceholderLstStyle(layoutPh);
-        mergeParagraphProps(merged, findStyleAtLevel(lstStyle, level));
-      }
+    if (layoutPh) {
+      const lstStyle = getPlaceholderLstStyle(layoutPh);
+      mergeParagraphProps(merged, findStyleAtLevel(lstStyle, level));
     }
 
     // Level 6: shape lstStyle
@@ -874,6 +1413,10 @@ export function renderTextBody(
     if (merged.rtl !== undefined) {
       paraDiv.style.direction = merged.rtl ? 'rtl' : 'ltr';
     }
+    // DrawingML defaults eaLnBrk to true. CSS line-break is inherited, so set an
+    // explicit paragraph boundary: `auto` keeps East Asian typographic rules,
+    // while `anywhere` models Office's behavior when those rules are disabled.
+    paraDiv.style.lineBreak = merged.eastAsianLineBreak === false ? 'anywhere' : 'auto';
     if (merged.marginLeft !== undefined) {
       paraDiv.style.paddingLeft = `${merged.marginLeft}px`;
     }
@@ -883,14 +1426,17 @@ export function renderTextBody(
     // Compute effective line-height (with optional lnSpcReduction from normAutofit)
     let effectiveLineHeight = merged.lineHeight ?? options?.defaultLineHeight;
     if (effectiveLineHeight) {
-      if (lnSpcReduction > 0) {
+      if (lnSpcReduction > 0 && merged.lineHeightPercent !== undefined) {
+        effectiveLineHeight = `${(
+          Math.max(0, merged.lineHeightPercent - lnSpcReduction) * OFFICE_LINE_HEIGHT_EM
+        ).toFixed(3)}`;
+      } else if (lnSpcReduction > 0 && !effectiveLineHeight.includes('pt')) {
         const parsed = parseFloat(effectiveLineHeight);
         if (!isNaN(parsed)) {
-          if (effectiveLineHeight.includes('pt')) {
-            effectiveLineHeight = `${(parsed * (1 - lnSpcReduction)).toFixed(2)}pt`;
-          } else {
-            effectiveLineHeight = `${(parsed * (1 - lnSpcReduction)).toFixed(3)}`;
-          }
+          effectiveLineHeight = `${Math.max(
+            0,
+            parsed - lnSpcReduction * OFFICE_LINE_HEIGHT_EM,
+          ).toFixed(3)}`;
         }
       }
       if (options?.isVerticalText && !merged.lineHeightAbsolute) {
@@ -900,22 +1446,32 @@ export function renderTextBody(
       }
       paraDiv.style.lineHeight = effectiveLineHeight!;
     }
-    // Determine effective font size for percentage-based spacing
-    // Use defRPr or first run's font size, fallback to 12pt
-    let effectiveFontSize = 12; // default 12pt
+    const firstVisibleTextRun = paragraph.runs.find(
+      (run) => run.text != null && run.text.length > 0 && run.text !== '\n' && run.text !== '\t',
+    );
+    const hasVisibleRuns = firstVisibleTextRun !== undefined;
+
+    // Keep the paragraph strut aligned with visible text. A leading soft break
+    // owns its own run properties and is styled separately in the run loop.
     const defaultRunStyle = getParagraphDefaultRunStyle(merged, ctx);
-    if (defaultRunStyle.fontSize !== undefined) effectiveFontSize = defaultRunStyle.fontSize;
-    if (paragraph.runs.length > 0 && paragraph.runs[0].properties) {
-      const sz = paragraph.runs[0].properties.numAttr('sz');
-      if (sz !== undefined) effectiveFontSize = sz / 100;
-    } else if (paragraph.runs.length === 0 && paragraph.endParaRPr) {
-      const sz = paragraph.endParaRPr.numAttr('sz');
-      if (sz !== undefined) effectiveFontSize = sz / 100;
+    const paragraphRunStyle = { ...defaultRunStyle };
+    const paragraphRunProperties = firstVisibleTextRun
+      ? firstVisibleTextRun.properties
+      : (paragraph.runs.find((run) => run.text === '\n' && run.properties)?.properties ??
+        paragraph.endParaRPr ??
+        paragraph.runs[0]?.properties);
+    if (paragraphRunProperties) {
+      mergeRunProps(paragraphRunStyle, paragraphRunProperties, ctx);
     }
+    const effectiveFontSize = paragraphRunStyle.fontSize ?? 12;
     // Browser line boxes include a "strut" based on the block element's own font size.
     // Keep the paragraph block in sync with Office's effective run size so tiny
     // multi-paragraph labels do not inherit a 13px page font and overflow their boxes.
     paraDiv.style.fontSize = `${effectiveFontSize * fontScale}pt`;
+    if (!firstVisibleTextRun) {
+      const paragraphFont = paragraphRunStyle.fontFamilyStack ?? paragraphRunStyle.fontFamily;
+      if (paragraphFont) paraDiv.style.fontFamily = cssFontFamilyStack(paragraphFont);
+    }
 
     const trimSpaceBefore =
       options?.trimOuterParagraphSpacing && paragraphIndex === firstVisibleParagraphIndex;
@@ -927,20 +1483,19 @@ export function renderTextBody(
     } else if (merged.spaceBefore !== undefined) {
       paraDiv.style.marginTop = `${merged.spaceBefore}pt`;
     } else if (merged.spaceBeforePct !== undefined) {
-      paraDiv.style.marginTop = `${merged.spaceBeforePct * effectiveFontSize}pt`;
+      paraDiv.style.marginTop = `${officeLinePoints(merged.spaceBeforePct, effectiveFontSize)}pt`;
     }
     if (trimSpaceAfter) {
       paraDiv.style.marginBottom = '0px';
     } else if (merged.spaceAfter !== undefined) {
       paraDiv.style.marginBottom = `${merged.spaceAfter}pt`;
     } else if (merged.spaceAfterPct !== undefined) {
-      paraDiv.style.marginBottom = `${merged.spaceAfterPct * effectiveFontSize}pt`;
+      paraDiv.style.marginBottom = `${officeLinePoints(merged.spaceAfterPct, effectiveFontSize)}pt`;
     }
 
     // ---- Bullets ----
     // Suppress bullets for metadata placeholders (slide number, date, footer)
     // Also suppress for empty paragraphs (no visible runs) — PowerPoint never shows bullets for them
-    const hasVisibleRuns = paragraph.runs.some((r) => r.text != null && r.text.length > 0);
     const suppressBullet =
       !hasVisibleRuns ||
       placeholder?.type === 'sldNum' ||
@@ -987,20 +1542,19 @@ export function renderTextBody(
         }
       }
       if (merged.bulletFont) {
-        bulletSpan.style.fontFamily = cssFontFamilyStack(resolveThemeFont(merged.bulletFont, ctx));
+        bulletSpan.style.fontFamily = cssFontFamilyStack(
+          resolveThemeFontStack([merged.bulletFont], ctx),
+        );
       }
       const bulletFontSize = merged.bulletSizePt ?? effectiveFontSize * (merged.bulletSizePct ?? 1);
       bulletSpan.style.fontSize = `${bulletFontSize * fontScale}pt`;
       // Bullet color: explicit buClr > first visible run text color > inherited defaults > fallback.
       let bulletColor: string | undefined;
       const firstVisibleRunTextColor = (): string | undefined => {
-        const firstVisibleRun = paragraph.runs.find(
-          (run) => run.text != null && run.text.length > 0,
-        );
-        if (!firstVisibleRun) return undefined;
+        if (!firstVisibleTextRun) return undefined;
         const runStyle = getParagraphDefaultRunStyle(merged, ctx);
-        if (firstVisibleRun.properties) {
-          mergeRunProps(runStyle, firstVisibleRun.properties, ctx);
+        if (firstVisibleTextRun.properties) {
+          mergeRunProps(runStyle, firstVisibleTextRun.properties, ctx);
         }
         return (
           runStyle.color ??
@@ -1035,7 +1589,37 @@ export function renderTextBody(
     }
 
     // ---- Render runs ----
-    if (paragraph.runs.length === 0) {
+    const compactNumericRunGroups = findCompactNumericRunGroups(paragraph.runs);
+    const compactNumericGroupElements = new Map<number, HTMLElement>();
+    const terminalHangingCandidates: { element: HTMLElement; text: string }[] = [];
+    let lastContentRunIndex = -1;
+    for (let index = paragraph.runs.length - 1; index >= 0; index--) {
+      const run = paragraph.runs[index];
+      if (run.math || (run.text !== undefined && run.text.length > 0)) {
+        lastContentRunIndex = index;
+        break;
+      }
+    }
+    const explicitTabMarkers: HTMLElement[] = [];
+    const hasSupportedVerticalTabAlignment =
+      !options?.isVerticalText || merged.tabStops?.every((tab) => tab.align === 'l');
+    const canResolveExplicitTabs =
+      !!merged.tabStops?.length &&
+      merged.rtl !== true &&
+      hasSupportedVerticalTabAlignment &&
+      (merged.align === undefined || merged.align === 'l');
+    const explicitTabAxis: ExplicitTabAxis = options?.isVerticalText ? 'vertical' : 'horizontal';
+    if (options?.isVerticalText) {
+      // Vertical DrawingML advances on the physical Y axis. Give each paragraph
+      // the text-frame height for wrapping and let its column shrink to content
+      // so the parent flex container can place the column horizontally.
+      paraDiv.style.width = 'auto';
+      paraDiv.style.maxWidth = 'none';
+      paraDiv.style.height = '100%';
+      paraDiv.style.minHeight = '0px';
+      paraDiv.style.maxHeight = '100%';
+    }
+    if (!hasVisibleRuns) {
       // Empty paragraph — still need to maintain spacing
       paraDiv.appendChild(document.createElement('br'));
     }
@@ -1047,7 +1631,7 @@ export function renderTextBody(
     // overridden by the font's natural spacing).
     // Set tab-size when paragraph contains tab characters (default OOXML tab spacing = 914400 EMU = 96px)
     if (paragraph.runs.some((r) => r.text?.includes('\t'))) {
-      const defaultTabPx = 96; // 914400 EMU at 96 dpi
+      const defaultTabPx = merged.defaultTabSize ?? 96; // 914400 EMU at 96 dpi
       paraDiv.style.tabSize = `${defaultTabPx}px`;
     }
     const useLineWrappers = merged.lineHeightAbsolute && hasLineBreaks && effectiveLineHeight;
@@ -1059,17 +1643,13 @@ export function renderTextBody(
       paraDiv.appendChild(currentLineDiv);
     }
 
-    for (const run of paragraph.runs) {
-      if (run.text === '\n') {
-        if (useLineWrappers) {
-          // Close current line div and start a new one
-          currentLineDiv = document.createElement('div');
-          currentLineDiv.style.height = effectiveLineHeight!;
-          currentLineDiv.style.overflow = 'visible';
-          paraDiv.appendChild(currentLineDiv);
-        } else {
-          paraDiv.appendChild(document.createElement('br'));
-        }
+    for (const [runIndex, run] of paragraph.runs.entries()) {
+      if (run.text === '\n' && useLineWrappers) {
+        // Absolute line spacing owns the line height, so start the next fixed-height line.
+        currentLineDiv = document.createElement('div');
+        currentLineDiv.style.height = effectiveLineHeight!;
+        currentLineDiv.style.overflow = 'visible';
+        paraDiv.appendChild(currentLineDiv);
         continue;
       }
 
@@ -1103,7 +1683,11 @@ export function renderTextBody(
 
       // Determine if this should be a link
       let element: HTMLElement;
-      if (runStyle.hlinkSlideIndex !== undefined) {
+      if (run.text === '\n') {
+        element = document.createElement('span');
+      } else if (run.math) {
+        element = renderMathFormula(run.math);
+      } else if (runStyle.hlinkSlideIndex !== undefined) {
         const span = document.createElement('span');
         const slideIndex = runStyle.hlinkSlideIndex;
         span.setAttribute('role', 'link');
@@ -1134,9 +1718,50 @@ export function renderTextBody(
       // Preserve consecutive spaces by alternating with &nbsp; so they survive
       // HTML whitespace collapse without being stretched by text-align:justify.
       // Tabs still need white-space:pre for tab-stop rendering.
-      if (run.text && run.text.includes('\t')) {
+      const compactNumericToken = run.math ? undefined : compactNumericTokenText(run.text);
+      const usesElementLevelTextPaint =
+        !!runStyle.textGradientCss ||
+        !!runStyle.textPatternCss ||
+        !!runStyle.textPictureFill ||
+        !!runStyle.textNoFill ||
+        runStyle.textOutlineWidth !== undefined ||
+        !!runStyle.textOutlineColor ||
+        !!runStyle.textOutlineGradientCss;
+      const shouldSplitCompactNumericToken =
+        !!run.text &&
+        !!compactNumericToken &&
+        run.text !== compactNumericToken &&
+        !usesElementLevelTextPaint;
+      if (run.text === '\n') {
+        element.appendChild(document.createElement('br'));
+      } else if (run.math) {
+        // The MathML subtree already carries the formula text and topology.
+      } else if (canResolveExplicitTabs && run.text?.includes('\t')) {
+        appendExplicitTabText(element, run.text, explicitTabMarkers, explicitTabAxis);
+      } else if (run.text && run.text.includes('\t')) {
         element.textContent = run.text;
         element.style.whiteSpace = 'pre';
+      } else if (
+        merged.hangingPunctuation === true &&
+        runIndex === lastContentRunIndex &&
+        run.text &&
+        !run.text.includes('  ') &&
+        TERMINAL_HANGING_PUNCTUATION.test(run.text)
+      ) {
+        // Preserve normal layout unless the browser actually strands the final
+        // punctuation on another line. The post-layout pass applies the fallback
+        // only for that unsupported CSS hanging-punctuation case.
+        element.textContent = run.text;
+        terminalHangingCandidates.push({ element, text: run.text });
+      } else if (shouldSplitCompactNumericToken) {
+        const tokenStart = run.text.indexOf(compactNumericToken);
+        const tokenEnd = tokenStart + compactNumericToken.length;
+        appendWhitespacePreservingText(element, run.text.slice(0, tokenStart));
+        const tokenSpan = document.createElement('span');
+        tokenSpan.textContent = compactNumericToken;
+        tokenSpan.style.whiteSpace = 'nowrap';
+        element.appendChild(tokenSpan);
+        appendWhitespacePreservingText(element, run.text.slice(tokenEnd));
       } else if (run.text && / {2}/.test(run.text)) {
         // Replace pairs of spaces with " &nbsp;" so browsers cannot collapse them,
         // while normal spaces between words remain stretchable for justify.
@@ -1148,6 +1773,14 @@ export function renderTextBody(
         element.innerHTML = escaped;
       } else {
         element.textContent = run.text;
+      }
+      if (
+        compactNumericToken &&
+        (run.text === compactNumericToken ||
+          (!!run.text && run.text !== compactNumericToken && usesElementLevelTextPaint))
+      ) {
+        // Office keeps compact number/unit tokens together, e.g. "80%" or "15 %".
+        element.style.whiteSpace = 'nowrap';
       }
 
       // Apply run styles (with normAutofit fontScale)
@@ -1175,16 +1808,18 @@ export function renderTextBody(
         element.style.backgroundColor = runStyle.highlightColor;
       }
 
-      // Color priority: explicit run rPr > hlink theme color > cellTextColor (table style tcTxStyle) > fontRef (shape style) > inherited styles > black default
-      // cellTextColor from table style overrides inherited cascade colors but yields to explicit run/paragraph solidFill/gradFill.
-      // fontRefColor overrides inherited styles but yields to explicit run solidFill/gradFill.
+      // Local run/paragraph fills override style references; inherited template fills do not.
+      // Hyperlink theme rules are resolved independently below.
       const runColorKind = getRunColorKind(run.properties);
       const hasExplicitRunColor = runColorKind !== 'none';
       let effectiveColor: string | undefined;
-      if (options?.fontRefColor) {
-        effectiveColor = hasExplicitRunColor ? runStyle.color : options.fontRefColor;
-      } else if (options?.cellTextColor && !hasExplicitRunColor) {
+      const hasParagraphColor = getRunColorKind(paragraph.properties?.child('defRPr')) !== 'none';
+      if (hasExplicitRunColor || hasParagraphColor) {
+        effectiveColor = runStyle.color;
+      } else if (options?.cellTextColor) {
         effectiveColor = options.cellTextColor;
+      } else if (options?.fontRefColor) {
+        effectiveColor = options.fontRefColor;
       } else {
         effectiveColor = runStyle.color;
       }
@@ -1230,6 +1865,9 @@ export function renderTextBody(
       }
       if (runStyle.textPatternCss) {
         applyClippedTextBackground(element, runStyle.textPatternCss);
+      }
+      if (runStyle.textPictureFill) {
+        applyTextPictureFill(element, runStyle.textPictureFill, ctx);
       }
 
       // Text outline (a:ln on rPr) and noFill handling
@@ -1282,9 +1920,10 @@ export function renderTextBody(
         ? (runStyle.fontFamilyStack ?? runStyle.fontFamily)
         : (options?.cellTextFontFamily ?? runStyle.fontFamilyStack ?? runStyle.fontFamily);
       if (effectiveFont) {
-        const resolvedFont = Array.isArray(effectiveFont)
-          ? effectiveFont.map((font) => resolveThemeFont(font, ctx))
-          : resolveThemeFont(effectiveFont, ctx);
+        const resolvedFont = resolveThemeFontStack(
+          Array.isArray(effectiveFont) ? effectiveFont : [effectiveFont],
+          ctx,
+        );
         element.style.fontFamily = cssFontFamilyStack(resolvedFont);
       } else {
         // Fallback to theme minor font
@@ -1295,8 +1934,17 @@ export function renderTextBody(
       }
 
       // Character spacing (a:spc) — compact/tracking in points
+      const usesWordArtVerticalAdvance =
+        options?.verticalTextMode === 'wordArtVert' ||
+        options?.verticalTextMode === 'wordArtVertRtl';
       if (runStyle.letterSpacingPt !== undefined) {
-        element.style.letterSpacing = `${runStyle.letterSpacingPt}pt`;
+        element.style.letterSpacing = usesWordArtVerticalAdvance
+          ? `calc(0.2em + ${runStyle.letterSpacingPt}pt)`
+          : `${runStyle.letterSpacingPt}pt`;
+      } else if (usesWordArtVerticalAdvance) {
+        // PowerPoint's stacked WordArt advances glyphs at 1.3x the font size.
+        // Chromium's upright glyph box supplies the remaining ~1.1em.
+        element.style.letterSpacing = '0.2em';
       }
       // Kerning (a:kern): val = min font size (pt) to kern; 0 = always kern
       if (runStyle.kern !== undefined) {
@@ -1325,7 +1973,19 @@ export function renderTextBody(
       // Append to the current line wrapper (when using absolute line spacing)
       // or directly to the paragraph div
       const appendTarget = currentLineDiv ?? paraDiv;
-      appendTarget.appendChild(element);
+      const compactGroupId = compactNumericRunGroups.get(runIndex);
+      if (compactGroupId !== undefined) {
+        let group = compactNumericGroupElements.get(compactGroupId);
+        if (!group) {
+          group = document.createElement('span');
+          group.style.whiteSpace = 'nowrap';
+          compactNumericGroupElements.set(compactGroupId, group);
+          appendTarget.appendChild(group);
+        }
+        group.appendChild(element);
+      } else {
+        appendTarget.appendChild(element);
+      }
     }
 
     // endParaRPr: when the paragraph ends with a line break (trailing \n),
@@ -1347,5 +2007,18 @@ export function renderTextBody(
     }
 
     container.appendChild(paraDiv);
+    for (const candidate of terminalHangingCandidates) {
+      scheduleTerminalHangingPunctuation(paraDiv, candidate.element, candidate.text, ctx);
+    }
+    if (canResolveExplicitTabs && explicitTabMarkers.length > 0 && merged.tabStops) {
+      scheduleExplicitTabLayout(
+        paraDiv,
+        explicitTabMarkers,
+        merged.tabStops,
+        merged.defaultTabSize ?? 96,
+        ctx,
+        explicitTabAxis,
+      );
+    }
   }
 }

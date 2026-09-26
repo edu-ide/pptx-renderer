@@ -1,0 +1,22 @@
+{
+  "name": "oracle-pypptx-shape3d-0005-tall-bevel",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "p:sp.prstGeom=rect",
+      "geometry.aspect=tall",
+      "a:scene3d.camera=orthographicFront",
+      "a:sp3d.bevelT=circle"
+    ]
+  }
+}

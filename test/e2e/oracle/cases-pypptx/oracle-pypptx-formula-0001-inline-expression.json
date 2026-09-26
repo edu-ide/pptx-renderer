@@ -1,0 +1,25 @@
+{
+  "name": "oracle-pypptx-formula-0001-inline-expression",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "mc:AlternateContent",
+      "a14:m",
+      "m:oMathPara",
+      "m:r"
+    ],
+    "requiredFonts": [
+      "Cambria Math"
+    ]
+  }
+}

@@ -7,6 +7,132 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- `serializePresentation()` now reports slide layout and slide master template shapes as typed
+  nodes in `layouts` and `masters`, with each slide naming its own through `layoutPath`,
+  `masterPath` and `showMasterSp`. Consumers that need the structure of a deck rather than its
+  pixels can now reach layout and master decoration, which was previously renderer-only.
+
+### Fixed
+
+- Fixed explicit text tabs, terminal hanging punctuation, all DrawingML vertical text flows,
+  stacked WordArt spacing, CJK/Korean font fallback, stretched picture-filled runs including lazy
+  package media, and placeholder style inheritance when layouts reuse an unlinked placeholder
+  index.
+
+## [1.3.0] - 2026-09-14
+
+### Added
+
+- Added a pinned ECMA-376 geometry runtime for all zero-adjustment flowcharts and bounded `donut`
+  adjustments, plus browser-native rendering for a bounded OMML equation subset.
+- Added bounded static DrawingML 3D, ordinary-shape outer shadows and reflections, and embedded
+  EOT/MTX font loading without adding a 3D runtime dependency.
+
+### Changed
+
+- Expanded native-validated fidelity for CJK text and autofit, common tables, 2D charts, shape
+  effects, groups, compatible content, SVG/OLE previews, and generated geometry.
+- Made visual regression evidence reproducible across renderer revision, PowerPoint source,
+  ground truth, browser, and optional font profile.
+
+### Fixed
+
+- Fixed text wrapping, overflow, spacing, color inheritance, autofit, and styled soft-break behavior
+  across browser containers and Office-authored CJK content.
+- Fixed chart literal/sparse data handling and layout defaults, conditional and merged table borders,
+  bounded 3D lighting/projection, clipped media effects, and asynchronous fallback cleanup.
+
+## [1.2.4] - 2026-07-10
+
+### Added
+
+- Added a standalone `./browser` ESM entry and real Chromium package tests covering PPTX
+  rendering, all supported ECharts series, text overflow combinations, and PDF.js 5/6
+  Worker compatibility.
+
+### Changed
+
+- ECharts now uses modular `echarts/core` registration, reducing the standalone browser
+  bundle while preserving the renderer's chart support matrix and existing behavior.
+- Production builds now use a cross-platform Node build script.
+- PDF.js remains optional and external; no-bundler integrations should use pinned module
+  and worker URLs and allow blob Workers in their CSP.
+
+### Fixed
+
+- Fixed compact no-wrap text runs creating horizontal scrollbars when their rendered
+  width exceeded narrow PowerPoint text boxes.
+- Fixed mixed horizontal/vertical overflow settings being converted by browsers into an
+  unintended scroll container.
+- Fixed isolated PDF.js cleanup on loading failure and guaranteed Worker termination on
+  success, error, timeout, or cancellation.
+- Fixed late EMF-PDF results mutating disposed slide DOM or repopulating shared blob URL
+  caches after `SlideHandle.dispose()` or `PptxViewer.destroy()`.
+- Replaced unsafe backtracking parsers for untrusted CSS and SVG path values with bounded
+  parsing paths.
+
+### Migration Notes
+
+- No API migration is required. Applications with a restrictive CSP that enable
+  EMF-PDF fallback must allow the configured PDF.js module source and `blob:` Workers.
+
+## [1.2.3] - 2026-07-01
+
+### Fixed
+
+- Fixed connector arrowhead direction, sizing, and placement for flipped or transformed
+  connector paths so arrow markers better match PowerPoint output.
+- Fixed compact numeric text such as `80%` and adjacent numeric/unit runs so browser
+  wrapping no longer splits the number from its percent or unit marker.
+
+### Migration Notes
+
+- No migration is required.
+
+## [1.2.2] - 2026-06-28
+
+### Added
+
+- Improved the E2E comparison review UI so manual PDF-vs-HTML inspection has clearer
+  metrics and review state handling.
+
+### Fixed
+
+- Improved chart fidelity across plot-area extents, zero-crossing label space, axis density,
+  tick visibility, label sizing, legend order and margins, marker defaults, blank data points,
+  data table semantics, rich chart titles, text shadows, plot-area backgrounds, and radar manual
+  layout.
+- Improved pie, doughnut, radar, scatter, bubble, horizontal bar, stacked, stock, and
+  dense line chart defaults so compact and Office-authored charts render closer to
+  PowerPoint.
+- Fixed gradient rendering for path and background fills, including themed path
+  gradients, focus rectangles, pixel-space radial radii, and subpixel gradient strokes.
+- Fixed picture and shape effects including clipped picture fills, grayscale picture
+  effects, inner shadows, soft edges, and scaled-down shape shadows.
+- Fixed table and text edge cases for outer paragraph spacing, paragraph tab defaults,
+  vertical WordArt, and Office-like font fallback behavior.
+- Fixed shape and SmartArt edge cases including fillable brace presets, flowchart
+  storage guide alignment, and SmartArt cycle pie offsets.
+
+### Migration Notes
+
+- No migration is required.
+
+## [1.2.1] - 2026-06-25
+
+### Fixed
+
+- Fixed grouped content with horizontal and vertical flips so child geometry, readable
+  text behavior, and connector arrow directions better match PowerPoint output.
+- Fixed flipped picture rendering when shape clipping and image crop metadata are both
+  present, preserving the image orientation inside the flipped clip shape.
+- Fixed table and chart frames inside flipped groups so their positions mirror with the
+  group while their table/chart content remains correctly oriented.
+- Improved compact column chart rendering by reducing over-dense default value-axis
+  ticks for small chart frames.
+
 ## [1.2.0] - 2026-06-16
 
 ### Added

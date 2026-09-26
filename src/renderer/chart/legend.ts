@@ -11,6 +11,16 @@ import {
   type LegendInfo,
 } from './types';
 
+type LegendDataItem =
+  | string
+  | {
+      name: string;
+      icon?: string;
+      marker?: string;
+      itemStyle?: Record<string, unknown>;
+      lineStyle?: Record<string, unknown>;
+    };
+
 export function extractLegendInfo(
   chartNode: SafeXmlNode,
   ctx: RenderContext,
@@ -63,6 +73,10 @@ export function extractLegendInfo(
         ...(s.fontSize !== undefined ? { fontSize: s.fontSize } : {}),
         ...(s.bold === true ? { fontWeight: 'bold' } : {}),
         ...(s.fontFamily ? { fontFamily: s.fontFamily } : {}),
+        ...(s.textShadowColor ? { textShadowColor: s.textShadowColor } : {}),
+        ...(s.textShadowBlur !== undefined ? { textShadowBlur: s.textShadowBlur } : {}),
+        ...(s.textShadowOffsetX !== undefined ? { textShadowOffsetX: s.textShadowOffsetX } : {}),
+        ...(s.textShadowOffsetY !== undefined ? { textShadowOffsetY: s.textShadowOffsetY } : {}),
       };
       if (hasExplicitFontSize(s)) textStyle[EXPLICIT_FONT_SIZE] = true;
       return textStyle;
@@ -92,11 +106,15 @@ export function legendIsAtTop(legendInfo: LegendInfo | undefined): boolean {
   return legendInfo?.position === 't' || legendInfo?.position === 'tr';
 }
 
-export function getGridTopPx(hasTitle: boolean, legendInfo: LegendInfo | undefined): number {
+export function getGridTopPx(
+  hasTitle: boolean,
+  legendInfo: LegendInfo | undefined,
+  compact = false,
+): number {
   const atTop = legendIsAtTop(legendInfo);
   const overlayLegend = legendInfo?.overlay ?? false;
-  if (hasTitle) return atTop && !overlayLegend ? 52 : 68;
-  return atTop && !overlayLegend ? 32 : 20;
+  const top = hasTitle ? (atTop && !overlayLegend ? 52 : 68) : atTop && !overlayLegend ? 32 : 20;
+  return compact ? Math.max(0, top - 11) : top;
 }
 
 export function getLegendTopPx(
@@ -140,7 +158,7 @@ export function buildLegendOption(
   legendOpt: echarts.EChartsOption['legend'] | undefined,
   legendInfo: LegendInfo | undefined,
   legendTopPx: number | undefined,
-  data: (string | { name: string; icon?: string; marker?: string })[],
+  data: LegendDataItem[],
   textStyle: ChartTextStyle & {
     fontWeight?: 'normal' | 'bold' | 'bolder' | 'lighter' | number;
   },

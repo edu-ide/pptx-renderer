@@ -36,19 +36,29 @@ function isCachePointInRange(idx: number | undefined, pointLimit: number): idx i
   );
 }
 
-export function extractStringValues(refNode: SafeXmlNode): string[] {
-  const cache = refNode.child('strRef').exists()
-    ? refNode.child('strRef').child('strCache')
-    : refNode.child('strCache');
+/** Reference caches win when populated; empty/missing caches may use inline data. */
+function resolveDataCache(refNode: SafeXmlNode, kind: 'str' | 'num'): SafeXmlNode {
+  const candidates = [
+    refNode.child(`${kind}Ref`).child(`${kind}Cache`),
+    refNode.child(`${kind}Lit`),
+    refNode.child(`${kind}Cache`),
+  ];
+  return (
+    candidates.find((cache) => cache.children('pt').length > 0) ??
+    candidates.find((cache) => cache.exists()) ??
+    candidates[0]
+  );
+}
 
-  if (!cache.exists()) {
-    const numCache = refNode.child('numRef').exists()
-      ? refNode.child('numRef').child('numCache')
-      : refNode.child('numCache');
-    if (numCache.exists()) {
+export function extractStringValues(refNode: SafeXmlNode): string[] {
+  const cache = resolveDataCache(refNode, 'str');
+
+  if (cache.children('pt').length === 0) {
+    const numCache = resolveDataCache(refNode, 'num');
+    if (numCache.exists() && (!cache.exists() || numCache.children('pt').length > 0)) {
       return extractNumericValuesAsStrings(numCache);
     }
-    return [];
+    if (!cache.exists()) return [];
   }
 
   const pointLimit = getCachePointLimit(cache);
@@ -66,9 +76,7 @@ export function extractStringValues(refNode: SafeXmlNode): string[] {
 }
 
 export function extractFormatCode(refNode: SafeXmlNode): string | undefined {
-  const cache = refNode.child('numRef').exists()
-    ? refNode.child('numRef').child('numCache')
-    : refNode.child('numCache');
+  const cache = resolveDataCache(refNode, 'num');
 
   if (!cache.exists()) return undefined;
 
@@ -77,6 +85,85 @@ export function extractFormatCode(refNode: SafeXmlNode): string | undefined {
 
   const text = fc.text();
   return text || undefined;
+}
+
+function splitFormatSections(formatCode: string): string[] {
+  const sections: string[] = [];
+  let current = '';
+  let inQuote = false;
+
+  for (let i = 0; i < formatCode.length; i++) {
+    const ch = formatCode[i];
+    if (ch === '"') {
+      inQuote = !inQuote;
+      current += ch;
+      continue;
+    }
+    if (ch === ';' && !inQuote) {
+      sections.push(current);
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+
+  sections.push(current);
+  return sections;
+}
+
+function normalizeNumericFormatSection(section: string): string {
+  const withoutDirectives = section.replace(/\[[^\]]+\]/g, '');
+  let normalized = '';
+
+  for (let i = 0; i < withoutDirectives.length; i++) {
+    const ch = withoutDirectives[i];
+
+    if (ch === '"') {
+      i++;
+      while (i < withoutDirectives.length && withoutDirectives[i] !== '"') i++;
+      continue;
+    }
+
+    if (ch === '\\') {
+      if (i + 1 < withoutDirectives.length) normalized += withoutDirectives[++i];
+      continue;
+    }
+
+    if (ch === '_' || ch === '*') {
+      i++;
+      continue;
+    }
+
+    normalized += ch;
+  }
+
+  return normalized.trim();
+}
+
+function formatOfficeNumber(value: number, formatCode: string): string | undefined {
+  const sections = splitFormatSections(formatCode);
+  const useNegativeSection = value < 0 && sections.length > 1;
+  const section = useNegativeSection ? sections[1] : sections[0];
+  const normalized = normalizeNumericFormatSection(section);
+
+  if (!/[#0]/.test(normalized) || (!normalized.includes(',') && sections.length === 1)) {
+    return undefined;
+  }
+
+  const decimalMatch = normalized.match(/\.(0+|#+)/);
+  const decimals = decimalMatch ? decimalMatch[1].length : 0;
+  const useThousands = normalized.includes(',');
+  const numericValue = useNegativeSection ? Math.abs(value) : value;
+  const formatted = numericValue.toLocaleString('en-US', {
+    useGrouping: useThousands,
+    minimumFractionDigits: decimalMatch?.[1].includes('0') ? decimals : 0,
+    maximumFractionDigits: decimals,
+  });
+
+  if (!useNegativeSection) return formatted;
+  if (normalized.includes('(') && normalized.includes(')')) return `(${formatted})`;
+  if (normalized.includes('-')) return `-${formatted}`;
+  return formatted;
 }
 
 export function formatValue(value: number, formatCode: string | undefined): string {
@@ -91,6 +178,9 @@ export function formatValue(value: number, formatCode: string | undefined): stri
     const pctValue = value * 100;
     return `${pctValue.toFixed(decimals)}%`;
   }
+
+  const officeNumber = formatOfficeNumber(value, formatCode);
+  if (officeNumber !== undefined) return officeNumber;
 
   const decMatch = formatCode.match(/\.(0+|#+)/);
   if (decMatch) {
@@ -107,24 +197,37 @@ export function formatValue(value: number, formatCode: string | undefined): stri
 }
 
 export function extractNumericValues(refNode: SafeXmlNode): number[] {
-  const cache = refNode.child('numRef').exists()
-    ? refNode.child('numRef').child('numCache')
-    : refNode.child('numCache');
+  return extractNumericValuesWithBlanks(refNode).values;
+}
 
-  if (!cache.exists()) return [];
+interface NumericValuesWithBlanks {
+  values: number[];
+  blankIndices: Set<number>;
+}
+
+export function extractNumericValuesWithBlanks(refNode: SafeXmlNode): NumericValuesWithBlanks {
+  const cache = resolveDataCache(refNode, 'num');
+
+  if (!cache.exists()) return { values: [], blankIndices: new Set() };
 
   const pointLimit = getCachePointLimit(cache);
   const values: number[] = new Array(pointLimit).fill(0);
+  const blankIndices = new Set<number>();
+  for (let i = 0; i < pointLimit; i++) blankIndices.add(i);
 
   for (const pt of cache.children('pt')) {
     const idx = pt.numAttr('idx');
     if (isCachePointInRange(idx, pointLimit)) {
-      const v = parseFloat(pt.child('v').text());
-      values[idx] = isNaN(v) ? 0 : v;
+      const raw = pt.child('v').text().trim();
+      const v = parseFloat(raw);
+      if (raw !== '' && !isNaN(v)) {
+        values[idx] = v;
+        blankIndices.delete(idx);
+      }
     }
   }
 
-  return values;
+  return { values, blankIndices };
 }
 
 function extractNumericValuesAsStrings(cache: SafeXmlNode): string[] {

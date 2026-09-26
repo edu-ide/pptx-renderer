@@ -241,6 +241,121 @@ function parseChartOption(xml: string, ctx?: RenderContext): ParseChartResult {
 // ---------------------------------------------------------------------------
 
 describe('ChartRenderer', () => {
+  it('preserves the ECharts default animation behavior', () => {
+    const { option } = parseChartOption(buildChartSpaceXml({}));
+
+    expect(option.animation).toBeUndefined();
+  });
+
+  describe('PowerPoint default Cartesian plot layout', () => {
+    it('uses compact Office plot margins for nonnegative vertical columns', () => {
+      const { option } = parseChartXml(
+        parseXml(buildChartSpaceXml({ valAxDeleted: false, values: [120, 180, 240] })),
+        createMockRenderContext(),
+        undefined,
+        { w: 960, h: 576 },
+      );
+
+      expect(option.grid).toMatchObject({ left: 14, right: 15, top: 9, bottom: 23 });
+    });
+
+    it('uses grouping-specific left insets for stacked Cartesian bars', () => {
+      const stackedXml = buildChartSpaceXml({ valAxDeleted: false }).replace(
+        '<c:grouping val="clustered"/>',
+        '<c:grouping val="stacked"/>',
+      );
+      const percentStackedXml = buildChartSpaceXml({ valAxDeleted: false }).replace(
+        '<c:grouping val="clustered"/>',
+        '<c:grouping val="percentStacked"/>',
+      );
+      const horizontalStackedXml = stackedXml.replace(
+        '<c:barDir val="col"/>',
+        '<c:barDir val="bar"/>',
+      );
+
+      expect(parseChartOption(stackedXml).option.grid).toMatchObject({ left: 12 });
+      expect(parseChartOption(percentStackedXml).option.grid).toMatchObject({ left: 13 });
+      expect(parseChartOption(horizontalStackedXml).option.grid).toMatchObject({ left: 14 });
+    });
+
+    it('preserves zero-crossing and horizontal-bar plot defaults', () => {
+      const negative = parseChartXml(
+        parseXml(buildChartSpaceXml({ valAxDeleted: false, values: [15, -8, 22] })),
+        createMockRenderContext(),
+        undefined,
+        { w: 960, h: 576 },
+      ).option.grid;
+      const horizontalXml = buildChartSpaceXml({
+        valAxDeleted: false,
+        values: [8, 25, 18],
+        titleText: 'Headcount',
+        autoTitleDeleted: false,
+      }).replace('<c:barDir val="col"/>', '<c:barDir val="bar"/>');
+      const horizontal = parseChartXml(
+        parseXml(horizontalXml),
+        createMockRenderContext(),
+        undefined,
+        { w: 960, h: 576 },
+      ).option.grid;
+
+      expect(negative).toMatchObject({ left: 18, right: 10, top: 20, bottom: 20 });
+      expect(horizontal).toMatchObject({ left: 12, right: 10, top: 61, bottom: 23 });
+    });
+
+    it('keeps horizontal-bar space for explicit top and bottom legends', () => {
+      const topLegendXml = buildChartSpaceXml({
+        hasLegend: true,
+        legendPos: 't',
+        valAxDeleted: false,
+      }).replace('<c:barDir val="col"/>', '<c:barDir val="bar"/>');
+      const bottomLegendXml = buildChartSpaceXml({
+        hasLegend: true,
+        legendPos: 'b',
+        valAxDeleted: false,
+      }).replace('<c:barDir val="col"/>', '<c:barDir val="bar"/>');
+
+      const topLegendGrid = parseChartOption(topLegendXml).option.grid;
+      const bottomLegendGrid = parseChartOption(bottomLegendXml).option.grid;
+
+      expect(topLegendGrid).toMatchObject({ top: 32, bottom: 23 });
+      expect(bottomLegendGrid).toMatchObject({ top: 14, bottom: 35 });
+    });
+
+    it('scales numeric-axis margins with the chart frame', () => {
+      const scatterXml = `
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <c:chart>
+            <c:plotArea>
+              <c:scatterChart>
+                <c:scatterStyle val="marker"/>
+                <c:ser>
+                  <c:idx val="0"/><c:order val="0"/>
+                  <c:xVal><c:numLit><c:ptCount val="2"/><c:pt idx="0"><c:v>1</c:v></c:pt><c:pt idx="1"><c:v>2</c:v></c:pt></c:numLit></c:xVal>
+                  <c:yVal><c:numLit><c:ptCount val="2"/><c:pt idx="0"><c:v>2</c:v></c:pt><c:pt idx="1"><c:v>3</c:v></c:pt></c:numLit></c:yVal>
+                </c:ser>
+                <c:axId val="1"/><c:axId val="2"/>
+              </c:scatterChart>
+              <c:valAx><c:axId val="1"/><c:scaling/><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/></c:valAx>
+              <c:valAx><c:axId val="2"/><c:scaling/><c:delete val="0"/><c:axPos val="l"/><c:crossAx val="1"/></c:valAx>
+            </c:plotArea>
+          </c:chart>
+        </c:chartSpace>`;
+
+      const large = parseChartXml(parseXml(scatterXml), createMockRenderContext(), undefined, {
+        w: 960,
+        h: 576,
+      }).option.grid;
+      const compact = parseChartXml(parseXml(scatterXml), createMockRenderContext(), undefined, {
+        w: 640,
+        h: 427,
+      }).option.grid;
+
+      expect(large).toMatchObject({ left: 17, right: 10, top: 9, bottom: 23 });
+      expect(compact).toMatchObject({ left: 12, right: 6, top: 9, bottom: 17 });
+    });
+  });
+
   describe('chart data safety', () => {
     it('does not trust oversized ptCount when only sparse points are present', () => {
       const xml = `
@@ -360,6 +475,31 @@ describe('ChartRenderer', () => {
       const { option } = parseChartOption(xml);
       const legend = option.legend as any;
       expect(legend?.textStyle?.fontSize).toBe(12);
+    });
+
+    it('should apply legend text outer shadow from legend txPr defRPr effectLst', () => {
+      const legendTxPr = `
+        <a:bodyPr/>
+        <a:lstStyle/>
+        <a:p>
+          <a:pPr>
+            <a:defRPr sz="900">
+              <a:effectLst>
+                <a:outerShdw blurRad="38100" dist="38100" dir="2700000" algn="tl">
+                  <a:srgbClr val="333333"><a:alpha val="50000"/></a:srgbClr>
+                </a:outerShdw>
+              </a:effectLst>
+            </a:defRPr>
+          </a:pPr>
+        </a:p>`;
+      const xml = buildChartSpaceXml({ hasLegend: true, legendPos: 'b', legendTxPr });
+      const { option } = parseChartOption(xml);
+      const legend = option.legend as any;
+
+      expect(legend?.textStyle?.textShadowColor).toBe('rgba(51,51,51,0.500)');
+      expect(legend.textStyle.textShadowBlur).toBeCloseTo(4);
+      expect(legend.textStyle.textShadowOffsetX).toBeCloseTo(2.8, 1);
+      expect(legend.textStyle.textShadowOffsetY).toBeCloseTo(2.8, 1);
     });
 
     it('should resolve theme font placeholders from legend txPr defRPr', () => {
@@ -1057,6 +1197,43 @@ describe('ChartRenderer', () => {
       expect(series?.data?.[1]?.value).toBe(200);
       expect(series?.data?.[1]?.label?.fontWeight).toBe('bold');
     });
+
+    it('should suppress point-level deleted data labels over a shared bar label', () => {
+      const xml = `<c:chartSpace
+        xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+        xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <c:chart>
+          <c:autoTitleDeleted val="1"/>
+          <c:plotArea>
+            <c:barChart>
+              <c:barDir val="col"/>
+              <c:grouping val="stacked"/>
+              <c:ser>
+                <c:idx val="0"/><c:order val="0"/>
+                <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>S1</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                <c:dLbls>
+                  <c:showVal val="1"/>
+                  <c:dLbl><c:idx val="1"/><c:delete val="1"/></c:dLbl>
+                </c:dLbls>
+                <c:cat><c:strRef><c:strCache><c:ptCount val="2"/><c:pt idx="0"><c:v>A</c:v></c:pt><c:pt idx="1"><c:v>B</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                <c:val><c:numRef><c:numCache><c:formatCode>0</c:formatCode><c:ptCount val="2"/><c:pt idx="0"><c:v>100</c:v></c:pt><c:pt idx="1"><c:v>200</c:v></c:pt></c:numCache></c:numRef></c:val>
+              </c:ser>
+              <c:axId val="1"/><c:axId val="2"/>
+            </c:barChart>
+            <c:catAx><c:axId val="1"/><c:delete val="0"/><c:crossAx val="2"/></c:catAx>
+            <c:valAx><c:axId val="2"/><c:delete val="1"/><c:crossAx val="1"/></c:valAx>
+          </c:plotArea>
+        </c:chart>
+      </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const series = (option.series as any[])?.[0];
+
+      expect(series?.label?.show).toBe(true);
+      expect(series?.data?.[0]).toBe(100);
+      expect(series?.data?.[1]?.value).toBe(200);
+      expect(series?.data?.[1]?.label).toEqual({ show: false });
+    });
   });
 
   describe('title txPr style', () => {
@@ -1074,6 +1251,67 @@ describe('ChartRenderer', () => {
       const title = option.title as any;
       expect(title?.textStyle?.fontSize).toBe(18);
       expect(title?.textStyle?.color).toMatch(/[1]{1}[2]{1}[3]{1}[4]{1}[5]{1}[6]{1}|#123456/i);
+    });
+
+    it('should apply title text outer shadow from title txPr defRPr effectLst', () => {
+      const titleTxPr = `
+        <a:bodyPr/>
+        <a:lstStyle/>
+        <a:p>
+          <a:pPr>
+            <a:defRPr sz="1400">
+              <a:effectLst>
+                <a:outerShdw blurRad="38100" dist="38100" dir="2700000" algn="tl">
+                  <a:srgbClr val="333333"><a:alpha val="50000"/></a:srgbClr>
+                </a:outerShdw>
+              </a:effectLst>
+            </a:defRPr>
+          </a:pPr>
+        </a:p>`;
+      const xml = buildChartSpaceXml({
+        hasLegend: false,
+        autoTitleDeleted: false,
+        titleText: 'Shadowed Chart',
+        titleTxPr,
+      });
+      const { option } = parseChartOption(xml);
+      const title = option.title as any;
+
+      expect(title?.textStyle?.textShadowColor).toBe('rgba(51,51,51,0.500)');
+      expect(title.textStyle.textShadowBlur).toBeCloseTo(4);
+      expect(title.textStyle.textShadowOffsetX).toBeCloseTo(2.8, 1);
+      expect(title.textStyle.textShadowOffsetY).toBeCloseTo(2.8, 1);
+    });
+
+    it('should preserve chart title rich run styles (model-platform chart titles)', () => {
+      const titleRichPPr = `
+        <a:defRPr sz="1800" b="1">
+          <a:solidFill><a:schemeClr val="dk1"/></a:solidFill>
+        </a:defRPr>`;
+      const xml = buildChartSpaceXml({
+        hasLegend: false,
+        autoTitleDeleted: false,
+        titleText: '1.2X 模型微调速度提升',
+        titleRichPPr,
+      }).replace(
+        '<a:r><a:t>1.2X 模型微调速度提升</a:t></a:r>',
+        `<a:r>
+          <a:rPr b="1">
+            <a:solidFill><a:srgbClr val="4D62D7"/></a:solidFill>
+          </a:rPr>
+          <a:t>1.2X </a:t>
+        </a:r>
+        <a:r>
+          <a:rPr sz="1600" b="0"/>
+          <a:t>模型微调速度提升</a:t>
+        </a:r>`,
+      );
+      const { option } = parseChartOption(xml);
+      const title = option.title as any;
+
+      expect(title?.text).toBe('{r0|1.2X }{r1|模型微调速度提升}');
+      expect(title.textStyle.rich.r0).toMatchObject({ color: '#4D62D7', fontWeight: 'bold' });
+      expect(title.textStyle.rich.r1).toMatchObject({ fontSize: 16, fontWeight: 'normal' });
     });
 
     it('should apply title rich text style when title txPr is omitted', () => {
@@ -1646,6 +1884,43 @@ describe('ChartRenderer', () => {
       expect(series?.center).toEqual(['50%', '55%']);
     });
 
+    it('maps OOXML firstSliceAng to ECharts startAngle for pie charts', () => {
+      const xml = `
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <c:chart>
+            <c:plotArea>
+              <c:pieChart>
+                <c:firstSliceAng val="30"/>
+                <c:ser>
+                  <c:idx val="0"/><c:order val="0"/>
+                  <c:tx>
+                    <c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Sales</c:v></c:pt></c:strCache></c:strRef>
+                  </c:tx>
+                  <c:cat>
+                    <c:strRef><c:strCache><c:ptCount val="2"/>
+                      <c:pt idx="0"><c:v>A</c:v></c:pt>
+                      <c:pt idx="1"><c:v>B</c:v></c:pt>
+                    </c:strCache></c:strRef>
+                  </c:cat>
+                  <c:val>
+                    <c:numRef><c:numCache><c:formatCode>0</c:formatCode><c:ptCount val="2"/>
+                      <c:pt idx="0"><c:v>60</c:v></c:pt>
+                      <c:pt idx="1"><c:v>40</c:v></c:pt>
+                    </c:numCache></c:numRef>
+                  </c:val>
+                </c:ser>
+              </c:pieChart>
+            </c:plotArea>
+          </c:chart>
+        </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const series = (option.series as any[])?.[0];
+      expect(series?.startAngle).toBe(60);
+      expect(series?.clockwise).toBe(true);
+    });
+
     it('should enlarge and left-shift pie when legend is on the right', () => {
       const xml = `
         <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
@@ -1915,6 +2190,98 @@ describe('ChartRenderer', () => {
       expect(radar.indicator[1].axisLabel).toBeUndefined();
     });
 
+    it('keeps radar gridlines gray for old theme charts unless axis styling is explicit (oracle-pypptx-chart-0018)', () => {
+      const xml = `
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <c:chart>
+            <c:autoTitleDeleted val="1"/>
+            <c:plotArea>
+              <c:radarChart>
+                <c:radarStyle val="marker"/>
+                <c:ser>
+                  <c:idx val="0"/><c:order val="0"/>
+                  <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Player A</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                  <c:cat><c:strRef><c:strCache><c:ptCount val="5"/><c:pt idx="0"><c:v>Speed</c:v></c:pt><c:pt idx="1"><c:v>Power</c:v></c:pt><c:pt idx="2"><c:v>Agility</c:v></c:pt><c:pt idx="3"><c:v>Defense</c:v></c:pt><c:pt idx="4"><c:v>Stamina</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                  <c:val><c:numRef><c:numCache><c:ptCount val="5"/><c:pt idx="0"><c:v>85</c:v></c:pt><c:pt idx="1"><c:v>70</c:v></c:pt><c:pt idx="2"><c:v>90</c:v></c:pt><c:pt idx="3"><c:v>65</c:v></c:pt><c:pt idx="4"><c:v>75</c:v></c:pt></c:numCache></c:numRef></c:val>
+                </c:ser>
+                <c:axId val="1"/><c:axId val="2"/>
+              </c:radarChart>
+              <c:catAx><c:axId val="1"/><c:delete val="0"/><c:crossAx val="2"/></c:catAx>
+              <c:valAx><c:axId val="2"/><c:delete val="0"/><c:majorGridlines/><c:crossAx val="1"/></c:valAx>
+            </c:plotArea>
+          </c:chart>
+        </c:chartSpace>`;
+      const ctx = createMockRenderContext();
+      ctx.theme = {
+        ...ctx.theme,
+        colorScheme: new Map([
+          ...ctx.theme.colorScheme,
+          ['accent1', '4F81BD'],
+          ['accent2', 'C0504D'],
+        ]),
+      };
+
+      const { option } = parseChartOption(xml, ctx);
+      const radar = option.radar as any;
+
+      expect(radar.splitLine.lineStyle).toMatchObject({ color: '#868686', width: 1 });
+      expect(radar.axisLine.lineStyle.color).toBe('#868686');
+    });
+
+    it('maps radar plotArea manualLayout to pixel center and radius (xcloud-plan radar charts)', () => {
+      const xml = `
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <c:chart>
+            <c:plotArea>
+              <c:layout>
+                <c:manualLayout>
+                  <c:xMode val="edge"/>
+                  <c:yMode val="edge"/>
+                  <c:x val="0.25"/>
+                  <c:y val="0.25"/>
+                  <c:w val="0.5"/>
+                  <c:h val="0.5"/>
+                </c:manualLayout>
+              </c:layout>
+              <c:radarChart>
+                <c:radarStyle val="marker"/>
+                <c:ser>
+                  <c:idx val="0"/>
+                  <c:order val="0"/>
+                  <c:tx><c:v>Series A</c:v></c:tx>
+                  <c:cat><c:strRef><c:strCache>
+                    <c:ptCount val="4"/>
+                    <c:pt idx="0"><c:v>A</c:v></c:pt>
+                    <c:pt idx="1"><c:v>B</c:v></c:pt>
+                    <c:pt idx="2"><c:v>C</c:v></c:pt>
+                    <c:pt idx="3"><c:v>D</c:v></c:pt>
+                  </c:strCache></c:strRef></c:cat>
+                  <c:val><c:numRef><c:numCache>
+                    <c:ptCount val="4"/>
+                    <c:pt idx="0"><c:v>10</c:v></c:pt>
+                    <c:pt idx="1"><c:v>20</c:v></c:pt>
+                    <c:pt idx="2"><c:v>30</c:v></c:pt>
+                    <c:pt idx="3"><c:v>40</c:v></c:pt>
+                  </c:numCache></c:numRef></c:val>
+                </c:ser>
+              </c:radarChart>
+              <c:valAx><c:axId val="2"/><c:delete val="0"/><c:crossAx val="1"/></c:valAx>
+            </c:plotArea>
+          </c:chart>
+        </c:chartSpace>`;
+
+      const { option } = parseChartXml(parseXml(xml), createMockRenderContext(), undefined, {
+        w: 600,
+        h: 400,
+      });
+      const radar = option.radar as any;
+
+      expect(radar.center).toEqual([300, 200]);
+      expect(radar.radius).toBe(100);
+    });
+
     it('should parse scatterChart with xVal and yVal', () => {
       const xml = `
         <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
@@ -2059,7 +2426,7 @@ describe('ChartRenderer', () => {
         }),
       );
       expect(option.title).toBeUndefined();
-      expect(grid?.left).toBe(24);
+      expect(grid?.left).toBe(18);
       expect(grid?.top).toBe(20);
       expect(grid?.bottom).toBe(20);
       expect(xAxis?.max).toBe(3);
@@ -2475,8 +2842,13 @@ describe('ChartRenderer', () => {
 
       const { option } = parseChartOption(xml);
       const series = option.series as any[];
-      expect(series.length).toBeGreaterThan(0);
+      expect(series).toHaveLength(1);
       expect(series[0].type).toBe('pie');
+      expect(series[0].name).toBe('Sales');
+      expect(series[0].data).toEqual([
+        expect.objectContaining({ name: 'East', value: 45 }),
+        expect.objectContaining({ name: 'West', value: 55 }),
+      ]);
     });
 
     it('should parse bar3DChart with 3D settings', () => {
@@ -2522,7 +2894,14 @@ describe('ChartRenderer', () => {
 
       const { option } = parseChartOption(xml);
       const series = option.series as any[];
-      expect(series.length).toBeGreaterThan(0);
+      expect(series).toHaveLength(1);
+      expect(series[0].type).toBe('bar');
+      expect(series[0].name).toBe('3D Data');
+      expect(series[0].data).toEqual([
+        expect.objectContaining({ value: 100 }),
+        expect.objectContaining({ value: 200 }),
+      ]);
+      expect((option.xAxis as any).data).toEqual(['Cat1', 'Cat2']);
     });
   });
 
@@ -2739,6 +3118,63 @@ describe('ChartRenderer', () => {
 
       const { option } = parseChartOption(xml);
       expect(option.backgroundColor).toBeDefined();
+    });
+
+    it('renders plotArea background as a graphic rect for radar charts without grid', () => {
+      const xml = `
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <c:chart>
+            <c:plotArea>
+              <c:layout>
+                <c:manualLayout>
+                  <c:x val="0.2"/>
+                  <c:y val="0.25"/>
+                  <c:w val="0.5"/>
+                  <c:h val="0.4"/>
+                </c:manualLayout>
+              </c:layout>
+              <c:spPr>
+                <a:solidFill><a:srgbClr val="F0F0F0"/></a:solidFill>
+              </c:spPr>
+              <c:radarChart>
+                <c:radarStyle val="marker"/>
+                <c:ser>
+                  <c:idx val="0"/>
+                  <c:order val="0"/>
+                  <c:tx><c:v>Series A</c:v></c:tx>
+                  <c:cat><c:strRef><c:strCache>
+                    <c:ptCount val="3"/>
+                    <c:pt idx="0"><c:v>A</c:v></c:pt>
+                    <c:pt idx="1"><c:v>B</c:v></c:pt>
+                    <c:pt idx="2"><c:v>C</c:v></c:pt>
+                  </c:strCache></c:strRef></c:cat>
+                  <c:val><c:numRef><c:numCache>
+                    <c:ptCount val="3"/>
+                    <c:pt idx="0"><c:v>10</c:v></c:pt>
+                    <c:pt idx="1"><c:v>20</c:v></c:pt>
+                    <c:pt idx="2"><c:v>30</c:v></c:pt>
+                  </c:numCache></c:numRef></c:val>
+                </c:ser>
+              </c:radarChart>
+              <c:valAx><c:axId val="2"/><c:delete val="0"/><c:crossAx val="1"/></c:valAx>
+            </c:plotArea>
+          </c:chart>
+        </c:chartSpace>`;
+
+      const { option } = parseChartXml(parseXml(xml), createMockRenderContext(), undefined, {
+        w: 600,
+        h: 400,
+      });
+      const graphic = option.graphic as any;
+
+      expect(graphic).toMatchObject({
+        type: 'rect',
+        left: 120,
+        top: 100,
+        shape: { width: 300, height: 160 },
+        style: { fill: '#F0F0F0' },
+      });
     });
 
     it('should expose chartSpace outline style for the rendered chart frame', () => {
@@ -3020,7 +3456,7 @@ describe('ChartRenderer', () => {
 
       expect(legend).not.toBeNull();
       expect(legend.style.flexDirection).toBe('column');
-      expect(legend.style.right).toBe('8px');
+      expect(legend.style.right).toBe('4px');
       expect(legend.style.top).toBe('150px');
       expect(legend.style.transform).toBe('translateY(-50%)');
     });
@@ -3200,8 +3636,8 @@ describe('ChartRenderer', () => {
       const grid = option.grid as any;
       const series = option.series as any[];
 
-      expect(grid.left).toBe(24);
-      expect(grid.bottom).toBe(20);
+      expect(grid.left).toBe(14);
+      expect(grid.bottom).toBe(23);
       expect(series[0].barGap).toBe('0%');
     });
 
@@ -3215,7 +3651,10 @@ describe('ChartRenderer', () => {
         values: [15, -8, 22],
       });
 
-      const { option } = parseChartOption(xml);
+      const { option } = parseChartXml(parseXml(xml), createMockRenderContext(), undefined, {
+        w: 960,
+        h: 576,
+      });
       const grid = option.grid as any;
 
       expect((option.title as any)?.text).toBe('Profit/Loss');
@@ -3261,8 +3700,10 @@ describe('ChartRenderer', () => {
       const { option } = parseChartOption(xml);
       const grid = option.grid as any;
 
-      expect(grid.left).toBe(10);
-      expect(grid.right).toBe(28);
+      expect(grid.left).toBe(12);
+      expect(grid.right).toBe(10);
+      expect(grid.top).toBe(61);
+      expect(grid.bottom).toBe(23);
     });
 
     it('uses PowerPoint-like automatic value axis range for line charts (oracle-pypptx-chart-0007)', () => {
@@ -3882,9 +4323,9 @@ describe('ChartRenderer', () => {
       const series = (option.series as any[])?.[0];
       const formatter = series?.label?.formatter;
       expect(typeof formatter).toBe('function');
-      // 1234.7 rounded → "1235"
+      // 1234.7 rounded and formatted with thousands separators -> "1,235"
       const result = formatter({ value: 1234.7 });
-      expect(result).toBe('1235');
+      expect(result).toBe('1,235');
     });
 
     it('should use fallback format for unrecognized formatCode with non-integer value', () => {
@@ -4136,6 +4577,7 @@ describe('ChartRenderer', () => {
       expect(series?.smooth).toBe(false);
       expect(series?.showSymbol).toBe(true);
       expect(series?.symbol).toBe('diamond');
+      expect(series?.symbolSize).toBe(12);
       expect(series?.data?.length).toBe(3);
       expect(series?.data?.[0]).toEqual([10, 100]);
       expect(series?.data?.[1]).toEqual([20, 200]);
@@ -4436,7 +4878,7 @@ describe('ChartRenderer', () => {
       expect(series?.type).toBe('pie');
       // First data point should have selected=true and selectedOffset
       expect(series?.data?.[0]?.selected).toBe(true);
-      expect(series?.data?.[0]?.selectedOffset).toBe(10);
+      expect(series?.data?.[0]?.selectedOffset).toBe(5);
       // selectedMode should allow exploded slices to remain selected together
       expect(series?.selectedMode).toBe('multiple');
     });
@@ -4481,7 +4923,7 @@ describe('ChartRenderer', () => {
       expect(series?.data.every((entry: any) => entry.selectedOffset === 25)).toBe(true);
     });
 
-    it('should preserve series-level explosion on pie charts without capping the offset', () => {
+    it('should map series-level pie explosion to an Office-like selected offset', () => {
       const xml = `<c:chartSpace
         xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
         xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
@@ -4516,7 +4958,7 @@ describe('ChartRenderer', () => {
       expect(series?.selectedMode).toBe('multiple');
       expect(series?.data).toHaveLength(4);
       expect(series?.data.every((entry: any) => entry.selected === true)).toBe(true);
-      expect(series?.data.every((entry: any) => entry.selectedOffset === 25)).toBe(true);
+      expect(series?.data.every((entry: any) => entry.selectedOffset === 13)).toBe(true);
     });
   });
 
@@ -4630,6 +5072,44 @@ describe('ChartRenderer', () => {
       const tooltip = option.tooltip as any;
       // Array value: should use first element
       expect(tooltip.valueFormatter([0.25])).toBe('25%');
+    });
+
+    it('does not apply the first series format as a global tooltip formatter for mixed formats', () => {
+      const xml = `<c:chartSpace
+        xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+        xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <c:chart>
+          <c:autoTitleDeleted val="1"/>
+          <c:plotArea>
+            <c:barChart>
+              <c:barDir val="col"/><c:grouping val="clustered"/>
+              <c:ser>
+                <c:idx val="0"/><c:order val="0"/>
+                <c:tx><c:v>Percent</c:v></c:tx>
+                <c:cat><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>A</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                <c:val><c:numRef><c:numCache><c:formatCode>0%</c:formatCode><c:ptCount val="1"/><c:pt idx="0"><c:v>0.25</c:v></c:pt></c:numCache></c:numRef></c:val>
+              </c:ser>
+              <c:ser>
+                <c:idx val="1"/><c:order val="1"/>
+                <c:tx><c:v>Count</c:v></c:tx>
+                <c:cat><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>A</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                <c:val><c:numRef><c:numCache><c:formatCode>#,##0</c:formatCode><c:ptCount val="1"/><c:pt idx="0"><c:v>1234</c:v></c:pt></c:numCache></c:numRef></c:val>
+              </c:ser>
+              <c:axId val="1"/><c:axId val="2"/>
+            </c:barChart>
+            <c:catAx><c:axId val="1"/><c:crossAx val="2"/></c:catAx>
+            <c:valAx><c:axId val="2"/><c:crossAx val="1"/></c:valAx>
+          </c:plotArea>
+        </c:chart>
+      </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const tooltip = option.tooltip as any;
+      const series = option.series as any[];
+
+      expect(tooltip.valueFormatter).toBeUndefined();
+      expect(series[0].tooltip.valueFormatter(0.25)).toBe('25%');
+      expect(series[1].tooltip.valueFormatter(1234)).toBe('1,234');
     });
   });
 
@@ -4899,9 +5379,9 @@ describe('ChartRenderer', () => {
       // symbolSize should be a function
       expect(typeof series[0].symbolSize).toBe('function');
       // Bubble diameter should follow sqrt(value / maxValue), not linear normalization.
-      expect(series[0].symbolSize([0, 0, 5])).toBeCloseTo(44.7214, 3);
-      expect(series[0].symbolSize([0, 0, 15])).toBeCloseTo(77.4597, 3);
-      expect(series[0].symbolSize([0, 0, 25])).toBeCloseTo(100, 3);
+      expect(series[0].symbolSize([0, 0, 5])).toBeCloseTo(53.6656, 3);
+      expect(series[0].symbolSize([0, 0, 15])).toBeCloseTo(92.9516, 3);
+      expect(series[0].symbolSize([0, 0, 25])).toBeCloseTo(120, 3);
     });
 
     it('honors explicit bubbleScale=0 instead of falling back to default scale', () => {
@@ -4953,9 +5433,16 @@ describe('ChartRenderer', () => {
           </c:chart>
         </c:chartSpace>`;
 
-      const { option } = parseChartOption(xml);
+      const { option } = parseChartXml(parseXml(xml), createMockRenderContext(), undefined, {
+        w: 960,
+        h: 576,
+      });
       const xAxis = option.xAxis as any;
       const yAxis = option.yAxis as any;
+      const grid = option.grid as any;
+      expect(grid.left).toBe(15);
+      expect(grid.top).toBe(9);
+      expect(grid.bottom).toBe(23);
       expect(xAxis.max).toBe(6);
       expect(xAxis.interval).toBe(1);
       expect(yAxis.max).toBe(5);
@@ -4986,10 +5473,13 @@ describe('ChartRenderer', () => {
           </c:chart>
         </c:chartSpace>`;
 
-      const { option } = parseChartOption(xml);
+      const { option } = parseChartXml(parseXml(xml), createMockRenderContext(), undefined, {
+        w: 960,
+        h: 576,
+      });
       const grid = option.grid as any;
 
-      expect(grid.top).toBe(68);
+      expect(grid.top).toBe(57);
     });
   });
 
@@ -5064,6 +5554,7 @@ describe('ChartRenderer', () => {
         <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
                       xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
           <c:chart>
+            <c:legend><c:legendPos val="r"/></c:legend>
             <c:plotArea>
               <c:stockChart>
                 <c:ser>
@@ -5086,6 +5577,7 @@ describe('ChartRenderer', () => {
                 <c:ser>
                   <c:idx val="2"/><c:order val="2"/>
                   <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Close</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                  <c:marker><c:symbol val="dot"/><c:size val="3"/></c:marker>
                   <c:val><c:numRef><c:numCache><c:ptCount val="1"/>
                     <c:pt idx="0"><c:v>35</c:v></c:pt>
                   </c:numCache></c:numRef></c:val>
@@ -5106,9 +5598,16 @@ describe('ChartRenderer', () => {
 
       const { option } = parseChartOption(xml);
       const series = option.series as any[];
+      const legend = option.legend as any;
       expect(series[0].type).toBe('custom');
       expect(typeof series[0].renderItem).toBe('function');
       expect(series[0].data[0]).toEqual([0, 50, 20, 35]);
+      expect(legend.icon).toBeUndefined();
+      expect(legend.data).toEqual([
+        { name: 'High', icon: 'none' },
+        { name: 'Low', icon: 'none' },
+        { name: 'Close', icon: 'circle' },
+      ]);
 
       const rendered = series[0].renderItem(
         {},
@@ -5256,6 +5755,70 @@ describe('ChartRenderer', () => {
       expect(Number(grid?.left)).toBeGreaterThanOrEqual(24);
     });
 
+    it('auto-rotates date-like HLC category labels and reserves bottom room', () => {
+      const xml = `
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <c:chart>
+            <c:plotArea>
+              <c:stockChart>
+                <c:ser>
+                  <c:idx val="0"/><c:order val="0"/>
+                  <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>High</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                  <c:cat><c:strRef><c:strCache><c:ptCount val="5"/>
+                    <c:pt idx="0"><c:v>2002/1/5</c:v></c:pt>
+                    <c:pt idx="1"><c:v>2002/1/6</c:v></c:pt>
+                    <c:pt idx="2"><c:v>2002/1/7</c:v></c:pt>
+                    <c:pt idx="3"><c:v>2002/1/8</c:v></c:pt>
+                    <c:pt idx="4"><c:v>2002/1/9</c:v></c:pt>
+                  </c:strCache></c:strRef></c:cat>
+                  <c:val><c:numRef><c:numCache><c:ptCount val="5"/>
+                    <c:pt idx="0"><c:v>55</c:v></c:pt><c:pt idx="1"><c:v>57</c:v></c:pt>
+                    <c:pt idx="2"><c:v>57</c:v></c:pt><c:pt idx="3"><c:v>58</c:v></c:pt>
+                    <c:pt idx="4"><c:v>58</c:v></c:pt>
+                  </c:numCache></c:numRef></c:val>
+                </c:ser>
+                <c:ser>
+                  <c:idx val="1"/><c:order val="1"/>
+                  <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Low</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                  <c:val><c:numRef><c:numCache><c:ptCount val="5"/>
+                    <c:pt idx="0"><c:v>11</c:v></c:pt><c:pt idx="1"><c:v>12</c:v></c:pt>
+                    <c:pt idx="2"><c:v>13</c:v></c:pt><c:pt idx="3"><c:v>11</c:v></c:pt>
+                    <c:pt idx="4"><c:v>35</c:v></c:pt>
+                  </c:numCache></c:numRef></c:val>
+                </c:ser>
+                <c:ser>
+                  <c:idx val="2"/><c:order val="2"/>
+                  <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Close</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                  <c:val><c:numRef><c:numCache><c:ptCount val="5"/>
+                    <c:pt idx="0"><c:v>32</c:v></c:pt><c:pt idx="1"><c:v>35</c:v></c:pt>
+                    <c:pt idx="2"><c:v>34</c:v></c:pt><c:pt idx="3"><c:v>35</c:v></c:pt>
+                    <c:pt idx="4"><c:v>43</c:v></c:pt>
+                  </c:numCache></c:numRef></c:val>
+                </c:ser>
+                <c:axId val="1"/><c:axId val="2"/>
+              </c:stockChart>
+              <c:catAx>
+                <c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling>
+                <c:delete val="0"/><c:axPos val="b"/><c:tickLblPos val="nextTo"/><c:crossAx val="2"/>
+              </c:catAx>
+              <c:valAx>
+                <c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling>
+                <c:delete val="0"/><c:axPos val="l"/><c:tickLblPos val="nextTo"/><c:crossAx val="1"/>
+              </c:valAx>
+            </c:plotArea>
+          </c:chart>
+        </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const xAxis = option.xAxis as any;
+      const grid = option.grid as any;
+
+      expect(xAxis.axisLabel.rotate).toBe(45);
+      expect(xAxis.axisLabel.margin).toBeGreaterThanOrEqual(10);
+      expect(grid.bottom).toBeGreaterThanOrEqual(56);
+    });
+
     it('should apply chart-space default font size to stock chart axis labels and legend text', () => {
       const xml = `
         <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
@@ -5359,7 +5922,7 @@ describe('ChartRenderer', () => {
       expect(yAxis.splitLine?.show).not.toBe(false);
     });
 
-    it('uses Office-style black major gridlines when c:majorGridlines has no explicit style', () => {
+    it('uses Office-style gray major gridlines when c:majorGridlines has no explicit style', () => {
       const xml = `<c:chartSpace
         xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
         xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
@@ -5388,11 +5951,57 @@ describe('ChartRenderer', () => {
       expect(yAxis.splitLine).toMatchObject({
         show: true,
         lineStyle: {
-          color: '#000000',
+          color: '#898989',
           width: 1,
           type: 'solid',
         },
       });
+      expect(yAxis.axisLabel.fontSize).toBe(10);
+    });
+
+    it('uses legacy Office black axis and gridline defaults for old theme charts (oracle-pypptx-chart-0005)', () => {
+      const xml = `<c:chartSpace
+        xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+        xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <c:chart>
+          <c:autoTitleDeleted val="1"/>
+          <c:plotArea>
+            <c:barChart>
+              <c:barDir val="bar"/>
+              <c:grouping val="clustered"/>
+              <c:ser>
+                <c:idx val="0"/><c:order val="0"/>
+                <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Headcount</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                <c:cat><c:strRef><c:strCache><c:ptCount val="2"/><c:pt idx="0"><c:v>Engineering</c:v></c:pt><c:pt idx="1"><c:v>Sales</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                <c:val><c:numRef><c:numCache><c:ptCount val="2"/><c:pt idx="0"><c:v>45</c:v></c:pt><c:pt idx="1"><c:v>32</c:v></c:pt></c:numCache></c:numRef></c:val>
+              </c:ser>
+              <c:axId val="1"/><c:axId val="2"/>
+            </c:barChart>
+            <c:catAx><c:axId val="1"/><c:delete val="0"/><c:axPos val="l"/><c:majorTickMark val="out"/><c:crossAx val="2"/></c:catAx>
+            <c:valAx><c:axId val="2"/><c:delete val="0"/><c:axPos val="b"/><c:majorGridlines/><c:majorTickMark val="out"/><c:crossAx val="1"/></c:valAx>
+          </c:plotArea>
+        </c:chart>
+      </c:chartSpace>`;
+      const ctx = createMockRenderContext();
+      ctx.theme = {
+        ...ctx.theme,
+        colorScheme: new Map([
+          ...ctx.theme.colorScheme,
+          ['accent1', '4F81BD'],
+          ['accent2', 'C0504D'],
+          ['accent3', '9BBB59'],
+        ]),
+      };
+
+      const { option } = parseChartOption(xml, ctx);
+      const xAxis = option.xAxis as any;
+
+      expect(xAxis.splitLine).toMatchObject({
+        show: true,
+        lineStyle: { color: '#000000', width: 1, type: 'solid' },
+      });
+      expect(xAxis.axisLine.lineStyle.color).toBe('#000000');
+      expect(xAxis.axisTick.lineStyle.color).toBe('#000000');
     });
 
     it('uses Office-style default axis text and lines when axis styling is omitted', () => {
@@ -5424,13 +6033,21 @@ describe('ChartRenderer', () => {
       expect(yAxis.axisLabel.formatter(1600)).toBe('1600');
       expect(xAxis.axisLabel.color).toBe('#000000');
       expect(yAxis.axisLabel.color).toBe('#000000');
+      expect(xAxis.axisLabel.fontSize).toBe(10);
+      expect(yAxis.axisLabel.fontSize).toBe(10);
       expect(xAxis.axisLine).toMatchObject({
         show: true,
-        lineStyle: { color: '#000000' },
+        lineStyle: { color: '#898989' },
       });
       expect(yAxis.axisLine).toMatchObject({
         show: true,
-        lineStyle: { color: '#000000' },
+        lineStyle: { color: '#898989' },
+      });
+      expect(xAxis.axisTick).toMatchObject({
+        lineStyle: { color: '#898989' },
+      });
+      expect(yAxis.axisTick).toMatchObject({
+        lineStyle: { color: '#898989' },
       });
     });
 
@@ -5493,6 +6110,47 @@ describe('ChartRenderer', () => {
       expect(yAxis.axisLine.show).toBe(false);
       expect(yAxis.axisTick.show).toBe(false);
       expect(yAxis.splitLine.show).toBe(false);
+    });
+
+    it('hides category and value axis ticks when OOXML majorTickMark is none', () => {
+      const xml = `<c:chartSpace
+        xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+        xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <c:chart>
+          <c:autoTitleDeleted val="1"/>
+          <c:plotArea>
+            <c:barChart>
+              <c:barDir val="col"/>
+              <c:grouping val="clustered"/>
+              <c:ser>
+                <c:idx val="0"/><c:order val="0"/>
+                <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>A</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                <c:cat><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Q1</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                <c:val><c:numRef><c:numCache><c:ptCount val="1"/><c:pt idx="0"><c:v>20</c:v></c:pt></c:numCache></c:numRef></c:val>
+              </c:ser>
+              <c:axId val="1"/><c:axId val="2"/>
+            </c:barChart>
+            <c:catAx>
+              <c:axId val="1"/><c:delete val="0"/><c:axPos val="b"/>
+              <c:majorTickMark val="none"/>
+              <c:crossAx val="2"/>
+            </c:catAx>
+            <c:valAx>
+              <c:axId val="2"/><c:delete val="0"/><c:axPos val="l"/>
+              <c:majorGridlines/>
+              <c:majorTickMark val="none"/>
+              <c:crossAx val="1"/>
+            </c:valAx>
+          </c:plotArea>
+        </c:chart>
+      </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const xAxis = option.xAxis as any;
+      const yAxis = option.yAxis as any;
+
+      expect(xAxis.axisTick.show).toBe(false);
+      expect(yAxis.axisTick.show).toBe(false);
     });
 
     it('treats legend overlay without val as true', () => {
@@ -5606,6 +6264,46 @@ describe('ChartRenderer', () => {
       expect(yAxis.interval).toBe(5);
     });
 
+    it('uses raw accent colors for single-series horizontal bars (oracle-pypptx-chart-0005)', () => {
+      const xml = `<c:chartSpace
+        xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+        xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <c:chart>
+          <c:autoTitleDeleted val="0"/>
+          <c:plotArea>
+            <c:barChart>
+              <c:barDir val="bar"/>
+              <c:grouping val="clustered"/>
+              <c:ser>
+                <c:idx val="0"/><c:order val="0"/>
+                <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Headcount</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                <c:cat><c:strRef><c:strCache><c:ptCount val="5"/><c:pt idx="0"><c:v>Engineering</c:v></c:pt><c:pt idx="1"><c:v>Sales</c:v></c:pt><c:pt idx="2"><c:v>Marketing</c:v></c:pt><c:pt idx="3"><c:v>Support</c:v></c:pt><c:pt idx="4"><c:v>HR</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                <c:val><c:numRef><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="5"/><c:pt idx="0"><c:v>45</c:v></c:pt><c:pt idx="1"><c:v>32</c:v></c:pt><c:pt idx="2"><c:v>18</c:v></c:pt><c:pt idx="3"><c:v>25</c:v></c:pt><c:pt idx="4"><c:v>8</c:v></c:pt></c:numCache></c:numRef></c:val>
+              </c:ser>
+              <c:axId val="1"/><c:axId val="2"/>
+            </c:barChart>
+            <c:catAx><c:axId val="1"/><c:delete val="0"/><c:axPos val="l"/><c:crossAx val="2"/></c:catAx>
+            <c:valAx><c:axId val="2"/><c:scaling/><c:delete val="0"/><c:axPos val="b"/><c:majorGridlines/><c:crossAx val="1"/></c:valAx>
+          </c:plotArea>
+        </c:chart>
+      </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const series = (option.series as any[])[0];
+      expect(series.data[0]).toMatchObject({
+        value: 45,
+        itemStyle: { color: '#4472C4' },
+      });
+      expect(series.data[1]).toMatchObject({
+        value: 32,
+        itemStyle: { color: '#ED7D31' },
+      });
+      expect(series.data[3]).toMatchObject({
+        value: 25,
+        itemStyle: { color: '#FFC000' },
+      });
+    });
+
     it('uses Office-like 1000-unit value axis ticks for 8390-scale bar charts (model-platform slide 3)', () => {
       const xml = `<c:chartSpace
         xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
@@ -5703,10 +6401,26 @@ describe('ChartRenderer', () => {
 
       applyZeroCrossingAxisLabelLayout(option, { w: 400, h: 300 });
 
-      expect(option.xAxis.axisLabel.margin).toBe(-86);
+      expect(option.xAxis.axisLabel.margin).toBe(-92);
       expect(option.xAxis.z).toBeGreaterThan(10);
       expect(option.grid.containLabel).toBe(false);
       expect(option.grid.left).toBeGreaterThanOrEqual(48);
+    });
+
+    it('scales zero-crossing value-label space for a native 10-inch chart frame', () => {
+      const option: any = {
+        grid: { left: 18, right: 10, top: 68, bottom: 20 },
+        xAxis: {
+          type: 'category',
+          axisLine: { onZero: true },
+          axisLabel: { fontSize: 24 },
+        },
+        yAxis: { type: 'value', min: -15, max: 25 },
+      };
+
+      applyZeroCrossingAxisLabelLayout(option, { w: 960, h: 576 });
+
+      expect(option.grid.left).toBe(62);
     });
 
     it('keeps dense line chart category labels horizontal unless OOXML requests rotation (oracle-pypptx-chart-0021)', () => {
@@ -5742,11 +6456,13 @@ describe('ChartRenderer', () => {
             <c:catAx><c:axId val="1"/><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
             <c:valAx><c:axId val="2"/><c:scaling/><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:crossAx val="1"/><c:crosses val="autoZero"/></c:valAx>
           </c:plotArea>
+          <c:legend><c:legendPos val="r"/><c:layout/><c:overlay val="0"/></c:legend>
         </c:chart>
       </c:chartSpace>`;
 
       const { option } = parseChartOption(xml);
       expect((option.xAxis as any).axisLabel.rotate).toBe(0);
+      expect((option.grid as any).right).toBe(108);
     });
 
     it('uses the chart-level line marker default when series markers are omitted (oracle-pypptx-chart-0021)', () => {
@@ -5764,6 +6480,20 @@ describe('ChartRenderer', () => {
                 <c:val><c:numRef><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="3"/><c:pt idx="0"><c:v>110</c:v></c:pt><c:pt idx="1"><c:v>103</c:v></c:pt><c:pt idx="2"><c:v>93</c:v></c:pt></c:numCache></c:numRef></c:val>
                 <c:smooth val="0"/>
               </c:ser>
+              <c:ser>
+                <c:idx val="1"/><c:order val="1"/>
+                <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Target</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                <c:cat><c:strRef><c:strCache><c:ptCount val="3"/><c:pt idx="0"><c:v>1</c:v></c:pt><c:pt idx="1"><c:v>2</c:v></c:pt><c:pt idx="2"><c:v>3</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                <c:val><c:numRef><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="3"/><c:pt idx="0"><c:v>90</c:v></c:pt><c:pt idx="1"><c:v>88</c:v></c:pt><c:pt idx="2"><c:v>91</c:v></c:pt></c:numCache></c:numRef></c:val>
+                <c:smooth val="0"/>
+              </c:ser>
+              <c:ser>
+                <c:idx val="2"/><c:order val="2"/>
+                <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Forecast</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                <c:cat><c:strRef><c:strCache><c:ptCount val="3"/><c:pt idx="0"><c:v>1</c:v></c:pt><c:pt idx="1"><c:v>2</c:v></c:pt><c:pt idx="2"><c:v>3</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                <c:val><c:numRef><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="3"/><c:pt idx="0"><c:v>105</c:v></c:pt><c:pt idx="1"><c:v>94</c:v></c:pt><c:pt idx="2"><c:v>97</c:v></c:pt></c:numCache></c:numRef></c:val>
+                <c:smooth val="0"/>
+              </c:ser>
               <c:marker val="1"/>
               <c:smooth val="0"/>
               <c:axId val="1"/><c:axId val="2"/>
@@ -5775,10 +6505,11 @@ describe('ChartRenderer', () => {
       </c:chartSpace>`;
 
       const { option } = parseChartOption(xml);
-      const series = (option.series as any[])[0];
-      expect(series.showSymbol).toBe(true);
-      expect(series.symbol).toBe('diamond');
-      expect(series.symbolSize).toBeCloseTo(6.667, 3);
+      const series = option.series as any[];
+      expect(series.map((s) => s.showSymbol)).toEqual([true, true, true]);
+      expect(series.map((s) => s.showAllSymbol)).toEqual([true, true, true]);
+      expect(series.map((s) => s.symbol)).toEqual(['diamond', 'rect', 'triangle']);
+      expect(series.map((s) => s.symbolSize)).toEqual([12, 12, 12]);
     });
 
     it('adds one Office-like tick of headroom when line data nearly reaches the nice max (oracle-pypptx-chart-0008)', () => {
@@ -5900,8 +6631,11 @@ describe('ChartRenderer', () => {
       </c:chartSpace>`;
 
       const { option } = parseChartOption(xml);
+      const series = (option.series as any[])?.[0];
       const xAxis = option.xAxis as any;
       const yAxis = option.yAxis as any;
+      expect(series.symbol).toBe('diamond');
+      expect(series.symbolSize).toBe(12);
       expect(xAxis.max).toBe(10);
       expect(yAxis.interval).toBe(1);
       expect(yAxis.max).toBe(9);
@@ -6052,10 +6786,12 @@ describe('ChartRenderer', () => {
       ]);
       expect(series.lineStyle).toBeUndefined();
       expect(series.symbol).toBe('diamond');
+      expect(series.symbolSize).toBe(12);
 
       const secondSeries = (option.series as any[])[1];
       expect(secondSeries.type).toBe('scatter');
       expect(secondSeries.symbol).toBe('rect');
+      expect(secondSeries.symbolSize).toBe(12);
 
       const xAxis = option.xAxis as any;
       const yAxis = option.yAxis as any;
@@ -6083,7 +6819,7 @@ describe('ChartRenderer', () => {
               <c:axId val="1"/><c:axId val="2"/>
             </c:radarChart>
             <c:catAx><c:axId val="1"/><c:delete val="0"/><c:crossAx val="2"/></c:catAx>
-            <c:valAx><c:axId val="2"/><c:scaling/><c:delete val="0"/><c:crossAx val="1"/></c:valAx>
+            <c:valAx><c:axId val="2"/><c:scaling/><c:delete val="0"/><c:majorGridlines/><c:crossAx val="1"/></c:valAx>
           </c:plotArea>
         </c:chart>
       </c:chartSpace>`;
@@ -6093,8 +6829,15 @@ describe('ChartRenderer', () => {
       const radarSeries = (option.series as any[])[0];
       expect(radar.center).toEqual(['50%', '55%']);
       expect(radar.radius).toBe('76%');
+      expect(radar.z).toBeGreaterThan(radarSeries.z);
       expect(radar.indicator.every((axis: any) => axis.max === 100)).toBe(true);
       expect(radar.indicator[0].axisLabel.formatter(100)).toBe('100');
+      expect(radar.indicator[0].axisLabel.color).toBe('#000000');
+      expect(radar.splitLine).toMatchObject({ show: false });
+      const areaFill = radarSeries.data[0].areaStyle.color;
+      expect(areaFill).toMatchObject({ x: 0, y: 0, x2: 0, y2: 1 });
+      expect(areaFill.colorStops.map((stop: any) => stop.offset)).toEqual([0, 1]);
+      expect(areaFill.colorStops.map((stop: any) => stop.color)).toEqual(['#78a8ff', '#0b59bb']);
       expect(radarSeries.data[0].areaStyle.opacity).toBe(0.75);
       expect(radarSeries.data[0].symbol).toBe('none');
     });
@@ -6193,10 +6936,12 @@ describe('ChartRenderer', () => {
       expect(series.every((s) => s.areaStyle?.opacity === 1)).toBe(true);
       expect(series.every((s) => s.showSymbol === false)).toBe(true);
       expect(legend.icon).toBe('rect');
-      expect(legend.data).toEqual(['A', 'B']);
+      expect(legend.data.map((item: any) => item.name)).toEqual(['B', 'A']);
+      expect(legend.data.map((item: any) => item.itemStyle.color)).toEqual(['#ED7D31', '#4472C4']);
       expect(xAxis.boundaryGap).toBe(false);
       expect(yAxis.interval).toBe(2);
       expect(yAxis.max).toBe(14);
+      expect((option.grid as any).left).toBe(14);
     });
 
     it('uses PowerPoint-like axis headroom for standard area charts (oracle-pypptx-chart-0014)', () => {
@@ -6260,15 +7005,20 @@ describe('ChartRenderer', () => {
             <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/></c:catAx>
             <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:crossAx val="1"/></c:valAx>
           </c:plotArea>
+          <c:legend><c:legendPos val="r"/></c:legend>
         </c:chart>
       </c:chartSpace>`;
 
       const { option } = parseChartOption(xml);
       const series = option.series as any[];
       const xAxis = option.xAxis as any;
+      const legend = option.legend as any;
 
       expect(series.map((s) => s.stack)).toEqual(['total', 'total']);
       expect(xAxis.boundaryGap).toBeUndefined();
+      expect(legend.data.map((item: any) => item.name)).toEqual(['B', 'A']);
+      expect(legend.data.map((item: any) => item.lineStyle.color)).toEqual(['#ED7D31', '#4472C4']);
+      expect((option.grid as any).left).toBe(12);
     });
 
     it('applies maxMin axis orientation as ECharts inverse axes', () => {
@@ -6414,8 +7164,8 @@ describe('ChartRenderer', () => {
       const series = option.series as any[];
 
       expect(series).toHaveLength(2);
-      expect(series[0].radius).toEqual(['41%', '61%']);
-      expect(series[1].radius).toEqual(['62%', '82%']);
+      expect(series[0].radius).toEqual(['44%', '65%']);
+      expect(series[1].radius).toEqual(['66%', '87%']);
       expect((option.legend as any).data).toEqual(['A', 'B', 'C', 'D']);
     });
 
@@ -6483,7 +7233,7 @@ describe('ChartRenderer', () => {
             ? (point as { value: unknown }).value
             : point,
         ),
-      ).toEqual([0, 0, 7]);
+      ).toEqual([null, null, 7]);
     });
 
     it('ignores incomplete gradient fills and uses default gradient angle when lin is absent', () => {
@@ -6590,6 +7340,27 @@ describe('ChartRenderer', () => {
       expect(xAxis.axisLabel?.margin).toBeLessThan(0);
       expect(xAxis.z).toBe(20);
       expect((option.grid as any).containLabel).toBe(false);
+    });
+
+    it('moves horizontal-bar category labels next to the zero-crossing value axis', () => {
+      const option: echarts.EChartsOption = {
+        grid: { left: 48, right: 12, top: 12, bottom: 24 },
+        xAxis: { type: 'value', min: -20, max: 80 },
+        yAxis: {
+          type: 'category',
+          axisLine: { onZero: true },
+          axisLabel: { fontSize: 12 },
+          data: ['Loss', 'Gain'],
+        },
+        series: [{ type: 'bar', data: [-20, 80] }],
+      };
+
+      applyZeroCrossingAxisLabelLayout(option, { w: 400, h: 300 });
+
+      expect((option.yAxis as any).axisLabel.margin).toBe(-44);
+      expect((option.yAxis as any).z).toBe(20);
+      expect((option.grid as any).containLabel).toBeUndefined();
+      expect((option.grid as any).left).toBe(48);
     });
 
     it('does not apply zero-crossing layout to non-crossing or zero-span axes', () => {
@@ -6891,6 +7662,118 @@ describe('ChartRenderer', () => {
       expect(cells).toEqual(['S', '1.3', '2.5', '']);
     });
 
+    it('keeps per-series data table formats through the chart render path', () => {
+      const xml = `
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <c:chart>
+            <c:plotArea>
+              <c:barChart>
+                <c:ser>
+                  <c:idx val="0"/><c:order val="0"/>
+                  <c:tx><c:v>Percent</c:v></c:tx>
+                  <c:cat><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>A</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                  <c:val><c:numRef><c:numCache><c:formatCode>0%</c:formatCode><c:ptCount val="1"/><c:pt idx="0"><c:v>0.25</c:v></c:pt></c:numCache></c:numRef></c:val>
+                </c:ser>
+                <c:ser>
+                  <c:idx val="1"/><c:order val="1"/>
+                  <c:tx><c:v>Count</c:v></c:tx>
+                  <c:cat><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>A</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                  <c:val><c:numRef><c:numCache><c:formatCode>#,##0</c:formatCode><c:ptCount val="1"/><c:pt idx="0"><c:v>1234</c:v></c:pt></c:numCache></c:numRef></c:val>
+                </c:ser>
+                <c:axId val="1"/><c:axId val="2"/>
+              </c:barChart>
+              <c:dTable><c:showKeys val="0"/></c:dTable>
+              <c:catAx><c:axId val="1"/><c:crossAx val="2"/></c:catAx>
+              <c:valAx><c:axId val="2"/><c:crossAx val="1"/></c:valAx>
+            </c:plotArea>
+          </c:chart>
+        </c:chartSpace>`;
+      const node = {
+        id: 'chart',
+        name: 'chart',
+        nodeType: 'chart',
+        chartPath: 'ppt/charts/chart1.xml',
+        position: { x: 0, y: 0 },
+        size: { w: 300, h: 220 },
+        rotation: 0,
+        flipH: false,
+        flipV: false,
+      } satisfies ChartNodeData;
+      const ctx = createMockRenderContext();
+      ctx.presentation.charts.set('ppt/charts/chart1.xml', parseXml(xml));
+
+      const el = renderChart(node, ctx);
+      const cells = Array.from(el.querySelectorAll('tbody td')).map((td) => td.textContent);
+
+      expect(cells).toEqual(['Percent', '25%', 'Count', '1,234']);
+    });
+
+    it('keeps missing bar chart points as gaps instead of synthetic zero values', () => {
+      const xml = `
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <c:chart>
+            <c:plotArea>
+              <c:barChart>
+                <c:barDir val="col"/>
+                <c:ser>
+                  <c:idx val="0"/><c:order val="0"/>
+                  <c:tx><c:v>S</c:v></c:tx>
+                  <c:cat><c:strRef><c:strCache><c:ptCount val="3"/><c:pt idx="0"><c:v>A</c:v></c:pt><c:pt idx="1"><c:v>B</c:v></c:pt><c:pt idx="2"><c:v>C</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                  <c:val><c:numRef><c:numCache><c:ptCount val="3"/><c:pt idx="0"><c:v>5</c:v></c:pt><c:pt idx="2"><c:v>7</c:v></c:pt></c:numCache></c:numRef></c:val>
+                </c:ser>
+                <c:axId val="1"/><c:axId val="2"/>
+              </c:barChart>
+              <c:catAx><c:axId val="1"/><c:crossAx val="2"/></c:catAx>
+              <c:valAx><c:axId val="2"/><c:crossAx val="1"/></c:valAx>
+            </c:plotArea>
+            <c:dispBlanksAs val="gap"/>
+          </c:chart>
+        </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const series = (option.series as any[])[0];
+
+      expect(
+        series.data.map((point: unknown) =>
+          typeof point === 'object' && point !== null && 'value' in point
+            ? (point as { value: unknown }).value
+            : point,
+        ),
+      ).toEqual([5, null, 7]);
+    });
+
+    it('spans missing line chart points when dispBlanksAs requests span', () => {
+      const xml = `
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <c:chart>
+            <c:plotArea>
+              <c:lineChart>
+                <c:grouping val="standard"/>
+                <c:ser>
+                  <c:idx val="0"/><c:order val="0"/>
+                  <c:tx><c:v>S</c:v></c:tx>
+                  <c:cat><c:strRef><c:strCache><c:ptCount val="3"/><c:pt idx="0"><c:v>A</c:v></c:pt><c:pt idx="1"><c:v>B</c:v></c:pt><c:pt idx="2"><c:v>C</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                  <c:val><c:numRef><c:numCache><c:ptCount val="3"/><c:pt idx="0"><c:v>1</c:v></c:pt><c:pt idx="2"><c:v>3</c:v></c:pt></c:numCache></c:numRef></c:val>
+                </c:ser>
+                <c:axId val="1"/><c:axId val="2"/>
+              </c:lineChart>
+              <c:catAx><c:axId val="1"/><c:crossAx val="2"/></c:catAx>
+              <c:valAx><c:axId val="2"/><c:crossAx val="1"/></c:valAx>
+            </c:plotArea>
+            <c:dispBlanksAs val="span"/>
+          </c:chart>
+        </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const series = (option.series as any[])[0];
+
+      expect(series.data).toEqual([1, null, 3]);
+      expect(series.connectNulls).toBe(true);
+    });
+
     it.each([
       ['outEnd', 'top'],
       ['inEnd', 'insideTop'],
@@ -6947,6 +7830,47 @@ describe('ChartRenderer', () => {
       expect(series.label.position).toBe(expected);
     });
 
+    it('applies point-level line data label overrides and manual layout', () => {
+      const xml = `
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <c:chart>
+            <c:plotArea>
+              <c:lineChart>
+                <c:grouping val="standard"/>
+                <c:dLbls>
+                  <c:showVal val="1"/>
+                  <c:dLbl>
+                    <c:idx val="1"/>
+                    <c:dLblPos val="r"/>
+                    <c:layout><c:manualLayout><c:x val="0.2"/><c:y val="0.3"/></c:manualLayout></c:layout>
+                    <c:showVal val="1"/>
+                  </c:dLbl>
+                </c:dLbls>
+                <c:ser>
+                  <c:idx val="0"/><c:order val="0"/>
+                  <c:tx><c:v>S</c:v></c:tx>
+                  <c:cat><c:strRef><c:strCache><c:ptCount val="2"/><c:pt idx="0"><c:v>A</c:v></c:pt><c:pt idx="1"><c:v>B</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                  <c:val><c:numRef><c:numCache><c:ptCount val="2"/><c:pt idx="0"><c:v>1</c:v></c:pt><c:pt idx="1"><c:v>2</c:v></c:pt></c:numCache></c:numRef></c:val>
+                </c:ser>
+                <c:axId val="1"/><c:axId val="2"/>
+              </c:lineChart>
+              <c:catAx><c:axId val="1"/><c:crossAx val="2"/></c:catAx>
+              <c:valAx><c:axId val="2"/><c:crossAx val="1"/></c:valAx>
+            </c:plotArea>
+          </c:chart>
+        </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const series = (option.series as any[])[0];
+
+      expect(series.label.position).toBe('top');
+      expect(series.data[0]).toBe(1);
+      expect(series.data[1].value).toBe(2);
+      expect(series.data[1].label.position).toBe('right');
+      expect(series.labelLayout({ dataIndex: 1 })).toEqual({ x: '20%', y: '30%' });
+    });
+
     it.each([
       ['r', ['38%', '55%'], '82%'],
       ['l', ['62%', '55%'], '82%'],
@@ -6977,6 +7901,62 @@ describe('ChartRenderer', () => {
 
       expect(series.center).toEqual(center);
       expect(series.radius).toBe(radius);
+    });
+
+    it('uses a smaller right-legend layout for exploded doughnut charts (oracle-pypptx-chart-0013)', () => {
+      const xml = `
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <c:chart>
+            <c:plotArea>
+              <c:doughnutChart>
+                <c:ser>
+                  <c:idx val="0"/><c:order val="0"/>
+                  <c:tx><c:strRef><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Values</c:v></c:pt></c:strCache></c:strRef></c:tx>
+                  <c:explosion val="25"/>
+                  <c:cat><c:strRef><c:strCache><c:ptCount val="3"/><c:pt idx="0"><c:v>A</c:v></c:pt><c:pt idx="1"><c:v>B</c:v></c:pt><c:pt idx="2"><c:v>C</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                  <c:val><c:numRef><c:numCache><c:ptCount val="3"/><c:pt idx="0"><c:v>50</c:v></c:pt><c:pt idx="1"><c:v>30</c:v></c:pt><c:pt idx="2"><c:v>20</c:v></c:pt></c:numCache></c:numRef></c:val>
+                </c:ser>
+                <c:holeSize val="50"/>
+              </c:doughnutChart>
+            </c:plotArea>
+            <c:legend><c:legendPos val="r"/><c:layout/><c:overlay val="0"/></c:legend>
+          </c:chart>
+        </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const series = (option.series as any[])[0];
+
+      expect(series.center).toEqual(['45%', '55%']);
+      expect(series.radius).toEqual(['38%', '76%']);
+      expect(series.selectedOffset).toBe(25);
+    });
+
+    it('uses an Office-like right-legend layout for plain doughnut charts (oracle-pypptx-chart-0012)', () => {
+      const xml = `
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <c:chart>
+            <c:plotArea>
+              <c:doughnutChart>
+                <c:ser>
+                  <c:idx val="0"/><c:order val="0"/>
+                  <c:tx><c:v>Status</c:v></c:tx>
+                  <c:cat><c:strRef><c:strCache><c:ptCount val="3"/><c:pt idx="0"><c:v>Complete</c:v></c:pt><c:pt idx="1"><c:v>In Progress</c:v></c:pt><c:pt idx="2"><c:v>Not Started</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                  <c:val><c:numRef><c:numCache><c:ptCount val="3"/><c:pt idx="0"><c:v>65</c:v></c:pt><c:pt idx="1"><c:v>20</c:v></c:pt><c:pt idx="2"><c:v>15</c:v></c:pt></c:numCache></c:numRef></c:val>
+                </c:ser>
+                <c:holeSize val="50"/>
+              </c:doughnutChart>
+            </c:plotArea>
+            <c:legend><c:legendPos val="r"/><c:layout/><c:overlay val="0"/></c:legend>
+          </c:chart>
+        </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const series = (option.series as any[])[0];
+
+      expect(series.center).toEqual(['39%', '54%']);
+      expect(series.radius).toEqual(['44%', '87%']);
     });
 
     it('merges pie point label overrides with manual layout, box style, and series name', () => {
@@ -7035,13 +8015,44 @@ describe('ChartRenderer', () => {
         width: '30%',
         height: '40%',
       });
-      expect(series.labelLayout({ dataIndex: 0, rect: { x: 10, y: 20, width: 200, height: 100 } }))
-        .toEqual({
-          x: 30,
-          y: 40,
-          width: 60,
-          height: 40,
-        });
+      expect(
+        series.labelLayout({ dataIndex: 0, rect: { x: 10, y: 20, width: 200, height: 100 } }),
+      ).toEqual({
+        x: 30,
+        y: 40,
+        width: 60,
+        height: 40,
+      });
+    });
+
+    it('suppresses point-level deleted pie labels over shared labels', () => {
+      const xml = `
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <c:chart>
+            <c:plotArea>
+              <c:pieChart>
+                <c:ser>
+                  <c:idx val="0"/><c:order val="0"/>
+                  <c:tx><c:v>Series One</c:v></c:tx>
+                  <c:dLbls>
+                    <c:showVal val="1"/>
+                    <c:dLbl><c:idx val="1"/><c:delete val="1"/></c:dLbl>
+                  </c:dLbls>
+                  <c:cat><c:strRef><c:strCache><c:ptCount val="2"/><c:pt idx="0"><c:v>A</c:v></c:pt><c:pt idx="1"><c:v>B</c:v></c:pt></c:strCache></c:strRef></c:cat>
+                  <c:val><c:numRef><c:numCache><c:formatCode>0</c:formatCode><c:ptCount val="2"/><c:pt idx="0"><c:v>25</c:v></c:pt><c:pt idx="1"><c:v>75</c:v></c:pt></c:numCache></c:numRef></c:val>
+                </c:ser>
+              </c:pieChart>
+            </c:plotArea>
+          </c:chart>
+        </c:chartSpace>`;
+
+      const { option } = parseChartOption(xml);
+      const series = (option.series as any[])?.[0];
+
+      expect(series.label.show).toBe(true);
+      expect(series.data[0].label).toBeUndefined();
+      expect(series.data[1].label).toEqual({ show: false });
     });
 
     it.each([
@@ -7051,9 +8062,7 @@ describe('ChartRenderer', () => {
       ['[Red]weird', 1.234, '1.23'],
       ['0.0%', 0.125, '12.5%'],
     ])('formats value-axis labels with numFmt=%s', (formatCode, input, expected) => {
-      const numFmtXml = formatCode
-        ? `<c:numFmt formatCode="${formatCode}" sourceLinked="0"/>`
-        : '';
+      const numFmtXml = formatCode ? `<c:numFmt formatCode="${formatCode}" sourceLinked="0"/>` : '';
       const xml = buildChartSpaceXml({ valAxDeleted: false }).replace(
         '<c:axId val="2"/>\n          <c:scaling><c:orientation val="minMax"/></c:scaling>',
         `<c:axId val="2"/>
@@ -7171,9 +8180,9 @@ describe('ChartRenderer', () => {
       const series = (option.series as any[])[0];
 
       expect(series.selectedMode).toBe('multiple');
-      expect(series.selectedOffset).toBe(16);
-      expect(series.data[0]).toMatchObject({ selected: true, selectedOffset: 8 });
-      expect(series.data[1]).toMatchObject({ selected: true, selectedOffset: 16 });
+      expect(series.selectedOffset).toBe(8);
+      expect(series.data[0]).toMatchObject({ selected: true, selectedOffset: 4 });
+      expect(series.data[1]).toMatchObject({ selected: true, selectedOffset: 8 });
     });
 
     it('keeps smooth scatter line data finite for short and non-monotonic x values', () => {

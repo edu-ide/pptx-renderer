@@ -7,3 +7,5 @@ test/e2e/
 *.png
 *.jpg
 pnpm-lock.yaml
+scripts/ooxml-geometry/generated/
+src/shapes/generated/ooxmlPresetGeometrySubset.ts

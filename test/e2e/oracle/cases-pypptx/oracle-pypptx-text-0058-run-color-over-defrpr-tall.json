@@ -1,0 +1,27 @@
+{
+  "name": "oracle-pypptx-text-0058-run-color-over-defrpr-tall",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "requiredFonts": [
+      "Microsoft YaHei"
+    ],
+    "features": [
+      "text.color.precedence",
+      "shape.style.fontRef=accent1",
+      "paragraph.defRPr.solidFill.schemeClr=accent2",
+      "run.rPr.solidFill.srgbClr=7030A0",
+      "layout.aspectRatio=tall",
+      "precedence.run-rPr-over-paragraph-defRPr"
+    ]
+  }
+}

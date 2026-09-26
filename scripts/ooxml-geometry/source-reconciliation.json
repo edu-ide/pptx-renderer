@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "shape": "leftArrow",
+      "status": "use-ecma",
+      "rationale": "The ECMA guide y1 references the previously defined dy1. The inspected docx4j reference instead contains an unresolved dy token.",
+      "manualReferences": [
+        {
+          "name": "docx4j",
+          "sha256": "6fc9592cb55db6e572051f41d15a079ae4164635af902db6f13a8a61d0c949d3",
+          "url": "https://github.com/plutext/docx4j/blob/VERSION_11_5_14/docx4j-core/src/main/resources/org/docx4j/model/shapes/presetShapeDefinitions.xml"
+        }
+      ]
+    },
+    {
+      "shape": "upArrow",
+      "status": "pending-native-oracle",
+      "rationale": "The ECMA electronic addendum has no upArrow element. Reference implementations add it but do not agree on every guide, connection site, and text rectangle.",
+      "manualReferences": [
+        {
+          "name": "docx4j",
+          "sha256": "6fc9592cb55db6e572051f41d15a079ae4164635af902db6f13a8a61d0c949d3",
+          "url": "https://github.com/plutext/docx4j/blob/VERSION_11_5_14/docx4j-core/src/main/resources/org/docx4j/model/shapes/presetShapeDefinitions.xml"
+        },
+        {
+          "name": "LibreOffice",
+          "sha256": "eaff19f4405b3be6822428c96ef46cc685499217366fd58e5e63a5a24739f02f",
+          "url": "https://github.com/LibreOffice/core/blob/a99249f88f05400c61a7f5d9d6460fa6669caf36/oox/source/drawingml/customshapes/presetShapeDefinitions.xml"
+        }
+      ]
+    }
+  ],
+  "formulaNormalizations": [
+    {
+      "shape": "circularArrow",
+      "guide": "xB",
+      "original": "+- xH 0 dxB 0",
+      "normalized": "+- xH 0 dxB",
+      "rationale": "The source has a fourth trailing zero although the ECMA +- formula has exactly three operands."
+    },
+    {
+      "shape": "circularArrow",
+      "guide": "yB",
+      "original": "+- yH 0 dyB 0",
+      "normalized": "+- yH 0 dyB",
+      "rationale": "The source has a fourth trailing zero although the ECMA +- formula has exactly three operands."
+    },
+    {
+      "shape": "leftCircularArrow",
+      "guide": "xB",
+      "original": "+- xH 0 dxB 0",
+      "normalized": "+- xH 0 dxB",
+      "rationale": "The source has a fourth trailing zero although the ECMA +- formula has exactly three operands."
+    },
+    {
+      "shape": "leftCircularArrow",
+      "guide": "yB",
+      "original": "+- yH 0 dyB 0",
+      "normalized": "+- yH 0 dyB",
+      "rationale": "The source has a fourth trailing zero although the ECMA +- formula has exactly three operands."
+    },
+    {
+      "shape": "leftRightCircularArrow",
+      "guide": "xB",
+      "original": "+- xH 0 dxB 0",
+      "normalized": "+- xH 0 dxB",
+      "rationale": "The source has a fourth trailing zero although the ECMA +- formula has exactly three operands."
+    },
+    {
+      "shape": "leftRightCircularArrow",
+      "guide": "yB",
+      "original": "+- yH 0 dyB 0",
+      "normalized": "+- yH 0 dyB",
+      "rationale": "The source has a fourth trailing zero although the ECMA +- formula has exactly three operands."
+    },
+    {
+      "shape": "leftRightCircularArrow",
+      "guide": "xJ",
+      "original": "+- xI 0 dxJ 0",
+      "normalized": "+- xI 0 dxJ",
+      "rationale": "The source has a fourth trailing zero although the ECMA +- formula has exactly three operands."
+    },
+    {
+      "shape": "leftRightCircularArrow",
+      "guide": "yJ",
+      "original": "+- yI 0 dyJ 0",
+      "normalized": "+- yI 0 dyJ",
+      "rationale": "The source has a fourth trailing zero although the ECMA +- formula has exactly three operands."
+    }
+  ]
+}

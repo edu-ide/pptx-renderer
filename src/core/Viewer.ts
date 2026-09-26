@@ -12,8 +12,10 @@ import {
   type TextSearchOptions,
   type TextSearchResult,
 } from '../search/TextSearch';
-import type { ECharts } from 'echarts';
+import type { EChartsType } from 'echarts/core';
 import type { PdfjsConfig } from '../utils/pdfRenderer';
+import type { EmbeddedFontLimits } from '../renderer/EmbeddedFontLoader';
+import type { FontFaceConfig } from '../renderer/ConfiguredFontLoader';
 
 export type { SlideHandle } from '../renderer/SlideRenderer';
 
@@ -41,6 +43,10 @@ export interface ViewerOptions {
   lazySlides?: boolean;
   /** Optional pdfjs URLs for EMF-embedded PDF fallback rendering. Use `false` to disable. */
   pdfjs?: PdfjsConfig;
+  /** Optional embedded-font resource limit overrides. Defaults remain enforced for omitted fields. */
+  embeddedFontLimits?: EmbeddedFontLimits;
+  /** Host-provided faces for fonts referenced by the PPTX but not embedded in it. */
+  fontFaces?: readonly FontFaceConfig[];
   onSlideChange?: (index: number) => void;
   onSlideRendered?: (index: number, element: HTMLElement) => void;
   onSlideError?: (index: number, error: unknown) => void;
@@ -112,8 +118,9 @@ export class PptxViewer extends EventTarget {
   protected container: HTMLElement;
   private viewerOptions: ViewerOptions;
   private presentation: PresentationData | null = null;
+  private inputGeneration = 0;
   private mediaUrlCache = new Map<string, string>();
-  private chartInstances = new Set<ECharts>();
+  private chartInstances = new Set<EChartsType>();
   private currentSlide = 0;
   private _fitMode: FitMode;
   private _isRendering = false;
@@ -228,6 +235,7 @@ export class PptxViewer extends EventTarget {
    * `renderSlide()` afterwards.
    */
   load(presentation: PresentationData): void {
+    this.inputGeneration++;
     this.renderGeneration++;
     this._isRendering = false;
     this.unloadRenderedState();
@@ -288,15 +296,18 @@ export class PptxViewer extends EventTarget {
 
     // Clean up previous state
     this.destroy();
+    const inputGeneration = this.inputGeneration;
 
     const buffer = await normalizePreviewInput(input);
     checkAborted();
+    if (inputGeneration !== this.inputGeneration) return;
 
     const useLazyMedia = options?.lazyMedia ?? this.viewerOptions.lazyMedia ?? false;
     const files = useLazyMedia
       ? await parseZipLazyMedia(buffer, this.viewerOptions.zipLimits)
       : await parseZip(buffer, this.viewerOptions.zipLimits);
     checkAborted();
+    if (inputGeneration !== this.inputGeneration) return;
 
     const useLazySlides = options?.lazySlides ?? this.viewerOptions.lazySlides ?? false;
     const presentation = useLazySlides
@@ -480,9 +491,9 @@ export class PptxViewer extends EventTarget {
     const handle = renderSlideInternal(this.presentation, slide, {
       onNodeError: (nodeId, error) => this.emitNodeError(nodeId, error),
       onNavigate: (target) => this.handleNavigate(target),
-      mediaUrlCache: this.mediaUrlCache,
       pdfjs: this.viewerOptions.pdfjs,
-      chartInstances: this.chartInstances,
+      embeddedFontLimits: this.viewerOptions.embeddedFontLimits,
+      fontFaces: this.viewerOptions.fontFaces,
     });
 
     if (scale !== undefined && scale !== 1) {
@@ -634,6 +645,7 @@ export class PptxViewer extends EventTarget {
   // -----------------------------------------------------------------------
 
   destroy(): void {
+    this.inputGeneration++;
     this.renderGeneration++;
     this._isRendering = false;
     this.teardownAdaptiveResize();
@@ -977,6 +989,8 @@ export class PptxViewer extends EventTarget {
         onNavigate: (target) => this.handleNavigate(target),
         mediaUrlCache: this.mediaUrlCache,
         pdfjs: this.viewerOptions.pdfjs,
+        embeddedFontLimits: this.viewerOptions.embeddedFontLimits,
+        fontFaces: this.viewerOptions.fontFaces,
         chartInstances: this.chartInstances,
       });
 
@@ -1207,6 +1221,8 @@ export class PptxViewer extends EventTarget {
         onNavigate: (target) => this.handleNavigate(target),
         mediaUrlCache: this.mediaUrlCache,
         pdfjs: this.viewerOptions.pdfjs,
+        embeddedFontLimits: this.viewerOptions.embeddedFontLimits,
+        fontFaces: this.viewerOptions.fontFaces,
         chartInstances: this.chartInstances,
       });
       this.slideHandles.set(this.currentSlide, handle);

@@ -5,6 +5,8 @@ import { parseOoxmlBoolElement } from './ooxml';
 import { extractChartLineStyle, resolveColorToHex } from './style';
 import { extractTitleText, extractTitleTextStyle, extractTxPrStyle } from './text';
 import {
+  DEFAULT_CHART_AXIS_LABEL_FONT_SIZE,
+  DEFAULT_CHART_AXIS_LINE_COLOR,
   DEFAULT_CHART_FOREGROUND_COLOR,
   DEFAULT_MAJOR_GRIDLINE_STYLE,
   type AxisInfo,
@@ -17,6 +19,20 @@ const DEFAULT_AXIS_INFO: AxisInfo = {
   hasMajorGridlines: false,
   orientation: 'minMax',
 };
+
+function themeHex(ctx: RenderContext, key: string): string | undefined {
+  const value = ctx.theme.colorScheme.get(key);
+  return value?.replace('#', '').toUpperCase();
+}
+
+function legacyOfficeImplicitAxisColor(ctx: RenderContext): string | undefined {
+  // Office 2007/2010 default chart themes use black implicit axis/grid lines,
+  // while newer Office themes use the lighter gray default.
+  if (themeHex(ctx, 'accent1') === '4F81BD' && themeHex(ctx, 'accent2') === 'C0504D') {
+    return '#000000';
+  }
+  return undefined;
+}
 
 function extractAxisLabelColor(ax: SafeXmlNode, ctx: RenderContext): string | undefined {
   const txPr = ax.child('txPr');
@@ -91,12 +107,19 @@ function parseAxisNode(ax: SafeXmlNode, ctx: RenderContext): AxisInfo {
   const min = minNode.exists() ? parseFloat(minNode.attr('val') || '') : undefined;
   const max = maxNode.exists() ? parseFloat(maxNode.attr('val') || '') : undefined;
   const hasMajorGridlines = ax.child('majorGridlines').exists();
+  const majorTickMark = ax.child('majorTickMark').attr('val');
   const orientation = scaling.child('orientation').attr('val') || 'minMax';
   const txStyle = extractTxPrStyle(ax, ctx);
   const labelColor = txStyle?.color ?? extractAxisLabelColor(ax, ctx);
   const labelFontSize = txStyle?.fontSize;
-  const lineColor = extractAxisLineColor(ax, ctx);
-  const majorGridlineStyle = hasMajorGridlines ? extractMajorGridlineStyle(ax, ctx) : undefined;
+  const implicitAxisColor = legacyOfficeImplicitAxisColor(ctx);
+  const lineColor = extractAxisLineColor(ax, ctx) ?? implicitAxisColor;
+  const majorGridlineStyle = hasMajorGridlines
+    ? (extractMajorGridlineStyle(ax, ctx) ??
+      (implicitAxisColor
+        ? { ...DEFAULT_MAJOR_GRIDLINE_STYLE, color: implicitAxisColor }
+        : undefined))
+    : undefined;
   const axisTitle = extractAxisTitle(ax, ctx);
   return {
     deleted,
@@ -106,6 +129,7 @@ function parseAxisNode(ax: SafeXmlNode, ctx: RenderContext): AxisInfo {
     min: min !== undefined && !isNaN(min) ? min : undefined,
     max: max !== undefined && !isNaN(max) ? max : undefined,
     hasMajorGridlines,
+    majorTickMark,
     orientation,
     ...axisTitle,
     labelColor,
@@ -228,6 +252,20 @@ export function applyAxisInfo(
     axisDef.axisLabel = { ...((axisDef.axisLabel as object) || {}), show: false };
   }
 
+  if (info.majorTickMark === 'none') {
+    const existingTick = (axisDef.axisTick as Record<string, unknown>) || {};
+    axisDef.axisTick = { ...existingTick, show: false };
+  } else if (!info.deleted) {
+    const existingTick = (axisDef.axisTick as Record<string, unknown>) || {};
+    const existingLineStyle = (existingTick.lineStyle as Record<string, unknown>) || {};
+    if (existingLineStyle.color === undefined) {
+      axisDef.axisTick = {
+        ...existingTick,
+        lineStyle: { ...existingLineStyle, color: info.lineColor ?? DEFAULT_CHART_AXIS_LINE_COLOR },
+      };
+    }
+  }
+
   if (kind === 'value') {
     if (info.min !== undefined) axisDef.min = info.min;
     if (info.max !== undefined) axisDef.max = info.max;
@@ -240,6 +278,16 @@ export function applyAxisInfo(
       axisDef.axisLabel = {
         ...existingLabel,
         formatter: (val: number) => formatValue(val, nf),
+      };
+    }
+  }
+
+  if (!info.deleted && info.tickLblPos !== 'none') {
+    const existingLabel = (axisDef.axisLabel as Record<string, unknown>) || {};
+    if (existingLabel.fontSize === undefined) {
+      axisDef.axisLabel = {
+        ...existingLabel,
+        fontSize: DEFAULT_CHART_AXIS_LABEL_FONT_SIZE,
       };
     }
   }
@@ -285,7 +333,7 @@ export function applyAxisInfo(
     const existingLineStyle = (existingLine.lineStyle as Record<string, unknown>) || {};
     const color =
       info.lineColor ??
-      (existingLineStyle.color === undefined ? DEFAULT_CHART_FOREGROUND_COLOR : undefined);
+      (existingLineStyle.color === undefined ? DEFAULT_CHART_AXIS_LINE_COLOR : undefined);
     if (color) {
       axisDef.axisLine = {
         ...existingLine,

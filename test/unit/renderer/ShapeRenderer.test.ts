@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { parseXml } from '../../../src/parser/XmlParser';
 import { parseShapeNode } from '../../../src/model/nodes/ShapeNode';
 import { renderShape } from '../../../src/renderer/ShapeRenderer';
+import type { RenderContext } from '../../../src/renderer/RenderContext';
+import { getOoxmlPresetShapePaths } from '../../../src/shapes/ooxmlGeometryRuntime';
 import { createMockRenderContext } from '../helpers/mockContext';
 import { applyColorModifiers, applyTint, hexToRgb, rgbToHex } from '../../../src/utils/color';
 
@@ -29,6 +31,20 @@ function buildLineShapeXml(): string {
   `;
 }
 
+function buildFlowchartShapeXml(shapeType: string, styleXml: string): string {
+  return `
+    <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+          xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+          xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+      <p:nvSpPr><p:cNvPr id="65" name="Flowchart"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+      <p:spPr>
+        <a:xfrm><a:off x="0" y="0"/><a:ext cx="3810000" cy="2667000"/></a:xfrm>
+        <a:prstGeom prst="${shapeType}"><a:avLst/></a:prstGeom>
+        ${styleXml}
+      </p:spPr>
+    </p:sp>`;
+}
+
 function mixHex(base: string, target: string, t: number): string {
   const b = hexToRgb(base);
   const dst = hexToRgb(target);
@@ -40,6 +56,297 @@ function extractPathNumbers(path: string): number[] {
 }
 
 describe('ShapeRenderer', () => {
+  it('renders the approved OOXML geometry subset through the parent shape renderer', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="69" name="Terminator"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="3810000" cy="2667000"/></a:xfrm>
+          <a:prstGeom prst="flowChartTerminator"><a:avLst/></a:prstGeom>
+          <a:solidFill><a:srgbClr val="4472C4"/></a:solidFill>
+        </p:spPr>
+      </p:sp>`;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+
+    expect(el.querySelector('path')?.getAttribute('d')).toBe(
+      'M64.351852,0 L335.648148,0 A64.351852,140 0 0,1 335.648148,280 L64.351852,280 A64.351852,140 0 0,1 64.351852,0 Z',
+    );
+  });
+
+  it.each([
+    ['flowChartProcess', 'L400,280'],
+    ['flowChartDocument', 'C'],
+    ['flowChartMagneticTape', 'A'],
+  ])('renders generated %s geometry through the parent shape renderer', (shapeType, command) => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="1" name="Flowchart"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="3810000" cy="2667000"/></a:xfrm>
+          <a:prstGeom prst="${shapeType}"><a:avLst/></a:prstGeom>
+        </p:spPr>
+      </p:sp>`;
+
+    const path = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext())
+      .querySelector('path')
+      ?.getAttribute('d');
+
+    expect(path).toContain(command);
+    expect(path).not.toMatch(/NaN|Infinity/);
+  });
+
+  it.each([
+    'flowChartPredefinedProcess',
+    'flowChartInternalStorage',
+    'flowChartMultidocument',
+    'flowChartSummingJunction',
+    'flowChartOr',
+    'flowChartSort',
+    'flowChartMagneticDisk',
+    'flowChartMagneticDrum',
+  ])('renders generated %s paths in declared paint order', (shapeType) => {
+    const xml = buildFlowchartShapeXml(
+      shapeType,
+      `<a:solidFill><a:srgbClr val="4472C4"/></a:solidFill>
+       <a:ln w="12700"><a:solidFill><a:srgbClr val="203864"/></a:solidFill></a:ln>`,
+    );
+    const expected = getOoxmlPresetShapePaths(shapeType, 400, 280);
+    const rendered = Array.from(
+      renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext()).querySelectorAll(
+        'svg > path',
+      ),
+    );
+
+    expect(expected, shapeType).toHaveLength(3);
+    expect(rendered, shapeType).toHaveLength(3);
+    expect(rendered.map((path) => path.getAttribute('d'))).toEqual(expected?.map(({ d }) => d));
+    expect(rendered.map((path) => path.getAttribute('fill'))).toEqual(['#4472C4', 'none', 'none']);
+    expect(rendered.map((path) => path.getAttribute('stroke'))).toEqual([
+      'none',
+      '#203864',
+      shapeType === 'flowChartMultidocument' ? 'none' : '#203864',
+    ]);
+  });
+
+  it('applies solid dash, cap, and join styles to generated multi-path outlines', () => {
+    const xml = buildFlowchartShapeXml(
+      'flowChartPredefinedProcess',
+      `<a:solidFill><a:srgbClr val="4472C4"/></a:solidFill>
+       <a:ln w="25400" cap="rnd">
+         <a:solidFill><a:srgbClr val="203864"/></a:solidFill>
+         <a:prstDash val="dash"/><a:round/>
+       </a:ln>`,
+    );
+    const paths = Array.from(
+      renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext()).querySelectorAll(
+        'svg > path',
+      ),
+    );
+
+    expect(paths).toHaveLength(3);
+    for (const path of paths.slice(1)) {
+      expect(path.getAttribute('stroke')).toBe('#203864');
+      expect(Number(path.getAttribute('stroke-width'))).toBeGreaterThan(0);
+      expect(path.getAttribute('stroke-dasharray')).toBeTruthy();
+      expect(path.getAttribute('stroke-linecap')).toBe('round');
+      expect(path.getAttribute('stroke-linejoin')).toBe('round');
+    }
+  });
+
+  it('applies gradient line paint to generated multi-path details and outline', () => {
+    const xml = buildFlowchartShapeXml(
+      'flowChartInternalStorage',
+      `<a:solidFill><a:srgbClr val="4472C4"/></a:solidFill>
+       <a:ln w="25400">
+         <a:gradFill>
+           <a:gsLst>
+             <a:gs pos="0"><a:srgbClr val="112233"/></a:gs>
+             <a:gs pos="100000"><a:srgbClr val="AABBCC"/></a:gs>
+           </a:gsLst>
+           <a:lin ang="0" scaled="1"/>
+         </a:gradFill>
+         <a:prstDash val="dash"/>
+       </a:ln>`,
+    );
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const paths = Array.from(el.querySelectorAll('svg > path'));
+
+    expect(paths).toHaveLength(3);
+    expect(el.querySelector('linearGradient[id^="grad-stroke-"]')).toBeTruthy();
+    expect(paths[0].getAttribute('stroke')).toBe('none');
+    expect(paths[1].getAttribute('stroke')).toMatch(/^url\(#grad-stroke-/);
+    expect(paths[2].getAttribute('stroke')).toBe(paths[1].getAttribute('stroke'));
+    expect(paths[1].getAttribute('stroke-dasharray')).toBeTruthy();
+    expect(paths[2].getAttribute('stroke-dasharray')).toBe(
+      paths[1].getAttribute('stroke-dasharray'),
+    );
+  });
+
+  it('keeps every generated multi-path stroke disabled for explicit line noFill', () => {
+    const xml = buildFlowchartShapeXml(
+      'flowChartSort',
+      `<a:solidFill><a:srgbClr val="4472C4"/></a:solidFill><a:ln><a:noFill/></a:ln>`,
+    );
+    const paths = Array.from(
+      renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext()).querySelectorAll(
+        'svg > path',
+      ),
+    );
+
+    expect(paths).toHaveLength(3);
+    expect(paths.every((path) => path.getAttribute('stroke') === 'none')).toBe(true);
+  });
+
+  it('does not synthesize generated outlines when shape and line paint are both absent', () => {
+    const xml = buildFlowchartShapeXml('flowChartSort', `<a:noFill/>`);
+    const paths = Array.from(
+      renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext()).querySelectorAll(
+        'svg > path',
+      ),
+    );
+
+    expect(paths).toHaveLength(3);
+    expect(paths.every((path) => path.getAttribute('stroke') === 'none')).toBe(true);
+  });
+
+  it('keeps generated multi-path details above an immediate image fill', () => {
+    const xml = buildFlowchartShapeXml(
+      'flowChartPredefinedProcess',
+      `<a:blipFill><a:blip r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></a:blipFill>`,
+    );
+    const base = createMockRenderContext();
+    const ctx = createMockRenderContext({
+      slide: {
+        ...base.slide,
+        rels: new Map([['rId1', { type: 'image', target: '../media/image1.png' }]]),
+      },
+      presentation: {
+        ...base.presentation,
+        media: new Map([['ppt/media/image1.png', new Uint8Array([137, 80, 78, 71])]]),
+      },
+    });
+    const expected = getOoxmlPresetShapePaths('flowChartPredefinedProcess', 400, 280);
+    const svg = renderShape(parseShapeNode(parseXml(xml)), ctx).querySelector('svg')!;
+    const paths = Array.from(svg.children).filter(
+      (child): child is SVGPathElement => child.localName === 'path',
+    );
+    const children = Array.from(svg.children);
+    const image = children.find((child) => child.localName === 'image');
+
+    expect(image).toBeTruthy();
+    expect(paths.map((path) => path.getAttribute('d'))).toEqual(
+      expected?.slice(1).map(({ d }) => d),
+    );
+    expect(paths.every((path) => path.getAttribute('stroke') === 'none')).toBe(true);
+    expect(children.indexOf(image!)).toBeLessThan(children.indexOf(paths[0]));
+  });
+
+  it('keeps generated multi-path details above a lazily resolved image fill', async () => {
+    const xml = buildFlowchartShapeXml(
+      'flowChartPredefinedProcess',
+      `<a:blipFill><a:blip r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></a:blipFill>
+       <a:ln w="12700"><a:solidFill><a:srgbClr val="203864"/></a:solidFill></a:ln>`,
+    );
+    const ctx = createMockRenderContext();
+    ctx.asyncTasks = [];
+    ctx.slide.rels.set('rId1', { type: 'image', target: '../media/lazy-flowchart.png' });
+    ctx.presentation.mediaResolver = {
+      resolve: vi.fn(async () => ({
+        mediaPath: 'ppt/media/lazy-flowchart.png',
+        data: new Uint8Array([137, 80, 78, 71]),
+      })),
+    };
+
+    const svg = renderShape(parseShapeNode(parseXml(xml)), ctx).querySelector('svg')!;
+    await Promise.all(ctx.asyncTasks);
+    const children = Array.from(svg.children);
+    const image = children.find((child) => child.localName === 'image');
+    const paths = children.filter((child): child is SVGPathElement => child.localName === 'path');
+
+    expect(image).toBeTruthy();
+    expect(paths).toHaveLength(3);
+    expect(children.indexOf(image)).toBeLessThan(children.indexOf(paths[0]));
+    expect(paths.slice(1).every((path) => path.getAttribute('stroke') === '#203864')).toBe(true);
+  });
+
+  it('renders wordArtVert as upright stacked text instead of sideways vertical text', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr>
+          <p:cNvPr id="34" name="WordArt Vertical"/>
+          <p:cNvSpPr txBox="1"/>
+          <p:nvPr/>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="1828800"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr vert="wordArtVert" wrap="square" lIns="0" tIns="0" rIns="0" bIns="0">
+            <a:noAutofit/>
+          </a:bodyPr>
+          <a:lstStyle/>
+          <a:p><a:r><a:t>STACK</a:t></a:r></a:p>
+        </p:txBody>
+      </p:sp>
+    `;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const span = Array.from(el.querySelectorAll('span')).find((node) =>
+      node.textContent?.includes('STACK'),
+    ) as HTMLElement | undefined;
+    const paragraph = span?.closest('div') as HTMLElement | undefined;
+    const textContainer = paragraph?.parentElement as HTMLElement | undefined;
+
+    expect(textContainer).toBeDefined();
+    expect(textContainer!.style.writingMode).toBe('vertical-lr');
+    expect(textContainer!.style.textOrientation).toBe('upright');
+    expect(textContainer!.style.whiteSpace).toBe('normal');
+  });
+
+  it.each([
+    ['mongolianVert', 'vertical-lr', '', ''],
+    ['vert', 'vertical-rl', 'sideways', ''],
+    ['vert270', 'vertical-rl', 'sideways', 'rotate(180deg)'],
+    ['wordArtVertRtl', 'vertical-rl', 'upright', ''],
+  ])(
+    'maps DrawingML %s to the matching CSS flow, orientation, and rotation',
+    (verticalMode, writingMode, textOrientation, transform) => {
+      const xml = `
+        <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+              xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <p:nvSpPr><p:cNvPr id="35" name="Vertical mode"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
+          <p:spPr>
+            <a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="1828800"/></a:xfrm>
+            <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          </p:spPr>
+          <p:txBody>
+            <a:bodyPr vert="${verticalMode}" wrap="square" lIns="0" tIns="0" rIns="0" bIns="0">
+              <a:noAutofit/>
+            </a:bodyPr>
+            <a:lstStyle/>
+            <a:p><a:r><a:t>ALPHA中文</a:t></a:r></a:p>
+          </p:txBody>
+        </p:sp>
+      `;
+
+      const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+      const span = Array.from(el.querySelectorAll('span')).find((node) =>
+        node.textContent?.includes('ALPHA'),
+      ) as HTMLElement | undefined;
+      const textContainer = span?.closest('div')?.parentElement as HTMLElement | undefined;
+
+      expect(textContainer).toBeDefined();
+      expect(textContainer!.style.writingMode).toBe(writingMode);
+      expect(textContainer!.style.textOrientation).toBe(textOrientation);
+      expect(textContainer!.style.transform).toBe(transform);
+    },
+  );
+
   it('keeps master text size for vertical text boxes without applying wide CSS line-height (ai-computing slide 22)', () => {
     const xml = `
       <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
@@ -98,9 +405,9 @@ describe('ShapeRenderer', () => {
     expect(span!.style.fontSize).toBe('24pt');
     expect(paragraph).toBeDefined();
     expect(paragraph!.style.lineHeight).toBe('1');
-    expect(paragraph!.style.wordBreak).toBe('keep-all');
+    expect(paragraph!.style.wordBreak).toBe('');
     expect(textContainer).toBeDefined();
-    expect(textContainer!.style.justifyContent).toBe('center');
+    expect(textContainer!.style.justifyContent).toBe('flex-start');
     expect(textContainer!.style.alignItems).toBe('flex-start');
   });
 
@@ -206,11 +513,124 @@ describe('ShapeRenderer', () => {
     expect(polygon?.getAttribute('points')).toBe('0,5 10,0 10,10');
     expect(marker?.getAttribute('refX')).toBe('10');
     expect(Number.parseFloat(marker!.getAttribute('markerWidth') ?? '0')).toBeCloseTo(16, 3);
-    expect(Number.parseFloat(marker!.getAttribute('markerHeight') ?? '0')).toBeCloseTo(
-      13.333,
-      3,
-    );
-    expect(pathNumbers[1]).toBeCloseTo(16, 3);
+    expect(Number.parseFloat(marker!.getAttribute('markerHeight') ?? '0')).toBeCloseTo(13.333, 3);
+    // flipV is now applied to the connector path itself, so the same visual 16px
+    // head inset lands at height - 16 in SVG path coordinates.
+    expect(pathNumbers[1]).toBeCloseTo(35.16 - 16, 3);
+  });
+
+  it('mirrors flipped connector geometry before marker orientation is applied (issue #3)', () => {
+    const xml = `
+      <p:cxnSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+               xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvCxnSpPr>
+          <p:cNvPr id="58" name="连接符: 肘形 57"/>
+          <p:cNvCxnSpPr/>
+          <p:nvPr/>
+        </p:nvCxnSpPr>
+        <p:spPr>
+          <a:xfrm flipH="1">
+            <a:off x="0" y="0"/>
+            <a:ext cx="1000000" cy="200000"/>
+          </a:xfrm>
+          <a:prstGeom prst="bentConnector3">
+            <a:avLst><a:gd name="adj1" fmla="val 80000"/></a:avLst>
+          </a:prstGeom>
+          <a:ln w="12700">
+            <a:solidFill><a:srgbClr val="FF9900"/></a:solidFill>
+            <a:tailEnd type="triangle"/>
+          </a:ln>
+        </p:spPr>
+      </p:cxnSp>
+    `;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const path = el.querySelector('svg > path');
+    const numbers = extractPathNumbers(path?.getAttribute('d') ?? '');
+
+    expect(el.style.transform).not.toContain('scaleX(-1)');
+    expect(numbers[0]).toBeGreaterThan(numbers[numbers.length - 2]);
+    expect(path?.getAttribute('marker-end')).toContain('arrow-marker-');
+  });
+
+  it('orients a bentConnector3 tailEnd from the prior segment when the terminal leg is tiny (issue #3 slide 2)', () => {
+    const xml = `
+      <p:cxnSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+               xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvCxnSpPr>
+          <p:cNvPr id="62" name="连接符: 肘形 61"/>
+          <p:cNvCxnSpPr/>
+          <p:nvPr/>
+        </p:nvCxnSpPr>
+        <p:spPr>
+          <a:xfrm flipH="1">
+            <a:off x="0" y="0"/>
+            <a:ext cx="2406175" cy="152650"/>
+          </a:xfrm>
+          <a:prstGeom prst="bentConnector3">
+            <a:avLst><a:gd name="adj1" fmla="val 99825"/></a:avLst>
+          </a:prstGeom>
+          <a:ln w="12700">
+            <a:solidFill><a:srgbClr val="F89D09"/></a:solidFill>
+            <a:tailEnd type="triangle"/>
+          </a:ln>
+        </p:spPr>
+      </p:cxnSp>
+    `;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const path = el.querySelector('svg > path');
+    const marker = el.querySelector('defs marker');
+    const numbers = extractPathNumbers(path?.getAttribute('d') ?? '');
+    const prevX = numbers[numbers.length - 4];
+    const prevY = numbers[numbers.length - 3];
+    const endX = numbers[numbers.length - 2];
+    const endY = numbers[numbers.length - 1];
+
+    expect(path?.getAttribute('marker-end')).toContain('arrow-marker-');
+    expect(Number.parseFloat(marker?.getAttribute('markerWidth') ?? '0')).toBeCloseTo(10, 3);
+    expect(Number.parseFloat(marker?.getAttribute('markerHeight') ?? '0')).toBeCloseTo(7.5, 3);
+    expect(endX).toBeCloseTo(prevX, 3);
+    expect(endY).toBeGreaterThan(prevY);
+    expect(endY).toBeCloseTo(6.026, 3);
+  });
+
+  it('preserves intentional short connector terminal legs even when the stroke is thick', () => {
+    const xml = `
+      <p:cxnSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+               xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvCxnSpPr>
+          <p:cNvPr id="63" name="Thick bent connector"/>
+          <p:cNvCxnSpPr/>
+          <p:nvPr/>
+        </p:nvCxnSpPr>
+        <p:spPr>
+          <a:xfrm>
+            <a:off x="0" y="0"/>
+            <a:ext cx="1000000" cy="400000"/>
+          </a:xfrm>
+          <a:prstGeom prst="bentConnector3">
+            <a:avLst><a:gd name="adj1" fmla="val 88000"/></a:avLst>
+          </a:prstGeom>
+          <a:ln w="190500">
+            <a:solidFill><a:srgbClr val="F89D09"/></a:solidFill>
+            <a:tailEnd type="triangle"/>
+          </a:ln>
+        </p:spPr>
+      </p:cxnSp>
+    `;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const path = el.querySelector('svg > path');
+    const numbers = extractPathNumbers(path?.getAttribute('d') ?? '');
+    const prevX = numbers[numbers.length - 4];
+    const prevY = numbers[numbers.length - 3];
+    const endX = numbers[numbers.length - 2];
+    const endY = numbers[numbers.length - 1];
+
+    expect(path?.getAttribute('marker-end')).toContain('arrow-marker-');
+    expect(endX).toBeGreaterThan(prevX + 10);
+    expect(endY).toBeCloseTo(prevY, 3);
   });
 
   it('keeps tailEnd marker visible when gradient stroke fades to transparent (xcloud-solution slide 45)', () => {
@@ -322,6 +742,141 @@ describe('ShapeRenderer', () => {
     expect(path?.getAttribute('d')).toContain(' C');
     expect(pathNumbers[0]).toBeGreaterThan(10);
     expect(pathNumbers[1]).toBeGreaterThanOrEqual(0);
+  });
+
+  it('insets curved connector tailEnd so the arrow tip stays anchored', () => {
+    const xml = `
+      <p:cxnSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+               xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvCxnSpPr>
+          <p:cNvPr id="64" name="Curved connector tail"/>
+          <p:cNvCxnSpPr/>
+          <p:nvPr/>
+        </p:nvCxnSpPr>
+        <p:spPr>
+          <a:xfrm>
+            <a:off x="0" y="0"/>
+            <a:ext cx="914400" cy="914400"/>
+          </a:xfrm>
+          <a:prstGeom prst="curvedConnector2"><a:avLst/></a:prstGeom>
+          <a:noFill/>
+          <a:ln w="12700" cap="flat">
+            <a:solidFill><a:srgbClr val="F89D09"/></a:solidFill>
+            <a:tailEnd type="triangle"/>
+          </a:ln>
+        </p:spPr>
+      </p:cxnSp>
+    `;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const path = el.querySelector('path');
+    const marker = el.querySelector('marker');
+    const pathNumbers = extractPathNumbers(path?.getAttribute('d') ?? '');
+    const endX = pathNumbers[pathNumbers.length - 2];
+    const endY = pathNumbers[pathNumbers.length - 1];
+
+    expect(path?.getAttribute('marker-end')).toContain('arrow-marker-');
+    expect(path?.getAttribute('d')).toContain(' C');
+    expect(Number.parseFloat(marker?.getAttribute('markerWidth') ?? '0')).toBeCloseTo(10, 3);
+    expect(endX).toBeGreaterThan(95);
+    expect(endX).toBeLessThanOrEqual(96);
+    expect(endY).toBeLessThan(90);
+  });
+
+  it('insets the tailEnd of multi-segment curved connectors on the final cubic segment', () => {
+    const xml = `
+      <p:cxnSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+               xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvCxnSpPr>
+          <p:cNvPr id="65" name="Multi curved connector tail"/>
+          <p:cNvCxnSpPr/>
+          <p:nvPr/>
+        </p:nvCxnSpPr>
+        <p:spPr>
+          <a:xfrm>
+            <a:off x="0" y="0"/>
+            <a:ext cx="914400" cy="914400"/>
+          </a:xfrm>
+          <a:prstGeom prst="curvedConnector4"><a:avLst/></a:prstGeom>
+          <a:noFill/>
+          <a:ln w="12700" cap="flat">
+            <a:solidFill><a:srgbClr val="F89D09"/></a:solidFill>
+            <a:tailEnd type="triangle"/>
+          </a:ln>
+        </p:spPr>
+      </p:cxnSp>
+    `;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const path = el.querySelector('path');
+    const pathD = path?.getAttribute('d') ?? '';
+    const pathNumbers = extractPathNumbers(pathD);
+    const endX = pathNumbers[pathNumbers.length - 2];
+    const endY = pathNumbers[pathNumbers.length - 1];
+
+    expect(path?.getAttribute('marker-end')).toContain('arrow-marker-');
+    expect(pathD.match(/\bC/g)?.length).toBe(3);
+    expect(endX).toBeGreaterThan(90);
+    expect(endX).toBeLessThanOrEqual(96);
+    expect(endY).toBeLessThan(90);
+  });
+
+  it('insets arc tailEnd so the arrow tip stays anchored on the original endpoint', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="66" name="Arc tail"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="1905000" cy="952500"/></a:xfrm>
+          <a:prstGeom prst="arc"><a:avLst/></a:prstGeom>
+          <a:noFill/>
+          <a:ln w="12700" cap="flat">
+            <a:solidFill><a:srgbClr val="F89D09"/></a:solidFill>
+            <a:tailEnd type="triangle"/>
+          </a:ln>
+        </p:spPr>
+      </p:sp>
+    `;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const path = el.querySelector('path');
+    const numbers = extractPathNumbers(path?.getAttribute('d') ?? '');
+    const endX = numbers[numbers.length - 2];
+    const endY = numbers[numbers.length - 1];
+
+    expect(path?.getAttribute('marker-end')).toContain('arrow-marker-');
+    expect(path?.getAttribute('d')).toContain(' A');
+    expect(endX).toBeLessThan(200);
+    expect(endY).toBeLessThan(50);
+  });
+
+  it('insets arc headEnd so the arrow tip stays anchored on the original startpoint', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="67" name="Arc head"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="1905000" cy="952500"/></a:xfrm>
+          <a:prstGeom prst="arc"><a:avLst/></a:prstGeom>
+          <a:noFill/>
+          <a:ln w="12700" cap="flat">
+            <a:solidFill><a:srgbClr val="F89D09"/></a:solidFill>
+            <a:headEnd type="triangle"/>
+          </a:ln>
+        </p:spPr>
+      </p:sp>
+    `;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const path = el.querySelector('path');
+    const numbers = extractPathNumbers(path?.getAttribute('d') ?? '');
+    const startX = numbers[0];
+    const startY = numbers[1];
+
+    expect(path?.getAttribute('marker-start')).toContain('arrow-marker-');
+    expect(path?.getAttribute('d')).toContain(' A');
+    expect(startX).toBeGreaterThan(100);
+    expect(startY).toBeGreaterThan(0);
   });
 
   it('renders lineInv using theme lnRef stroke when shape has no explicit <a:ln>', () => {
@@ -438,6 +993,63 @@ describe('ShapeRenderer', () => {
     expect(path?.getAttribute('fill')).toBe('#4472C4');
     // circularArrow should have no stroke
     expect(path?.getAttribute('stroke')).toBe('none');
+  });
+
+  it.each(['leftBracket', 'rightBracket', 'leftBrace', 'rightBrace', 'bracketPair', 'bracePair'])(
+    'renders %s as a fillable preset shape, not a stroke-only connector',
+    (preset) => {
+      const xml = `
+        <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+              xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <p:nvSpPr>
+            <p:cNvPr id="31" name="${preset}"/>
+            <p:cNvSpPr/>
+            <p:nvPr/>
+          </p:nvSpPr>
+          <p:spPr>
+            <a:xfrm>
+              <a:off x="0" y="0"/>
+              <a:ext cx="3657600" cy="2560320"/>
+            </a:xfrm>
+            <a:prstGeom prst="${preset}"><a:avLst/></a:prstGeom>
+            <a:solidFill><a:srgbClr val="4472C4"/></a:solidFill>
+            <a:ln w="12700"><a:solidFill><a:srgbClr val="2F5597"/></a:solidFill></a:ln>
+          </p:spPr>
+        </p:sp>
+      `;
+
+      const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+      const path = el.querySelector('path');
+
+      expect(path?.getAttribute('fill')).toBe('#4472C4');
+      expect(path?.getAttribute('stroke')).toBe('#2F5597');
+    },
+  );
+
+  it('does not fill bracket or brace presets from a style fillRef idx of 0', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr>
+          <p:cNvPr id="31" name="Left Brace"/>
+          <p:cNvSpPr/>
+          <p:nvPr/>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="3657600" cy="2560320"/></a:xfrm>
+          <a:prstGeom prst="leftBrace"><a:avLst/></a:prstGeom>
+        </p:spPr>
+        <p:style>
+          <a:lnRef idx="2"><a:schemeClr val="accent1"/></a:lnRef>
+          <a:fillRef idx="0"><a:schemeClr val="accent1"/></a:fillRef>
+        </p:style>
+      </p:sp>
+    `;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const path = el.querySelector('path');
+
+    expect(path?.getAttribute('fill')).toBe('none');
   });
 
   it('renders fillRef theme gradient using phClr from fillRef color (windows pypptx shape adj)', () => {
@@ -638,8 +1250,7 @@ describe('ShapeRenderer', () => {
       const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
       const textContainer = Array.from(el.querySelectorAll('div')).find(
         (div) =>
-          div.textContent?.includes('Scaled then measured') &&
-          div.style.flexDirection === 'column',
+          div.textContent?.includes('Scaled then measured') && div.style.flexDirection === 'column',
       ) as HTMLElement | undefined;
       const scaleCount = textContainer?.style.transform.match(/scale\(/g)?.length ?? 0;
 
@@ -706,8 +1317,7 @@ describe('ShapeRenderer', () => {
       const el = renderShape(shapeNode, createMockRenderContext());
       const textContainer = Array.from(el.querySelectorAll('div')).find(
         (div) =>
-          div.textContent?.includes('Scaled bounded text') &&
-          div.style.flexDirection === 'column',
+          div.textContent?.includes('Scaled bounded text') && div.style.flexDirection === 'column',
       ) as HTMLElement | undefined;
       const span = textContainer?.querySelector('span') as HTMLSpanElement | null;
 
@@ -761,6 +1371,8 @@ describe('ShapeRenderer', () => {
       expect(textContainer).toBeDefined();
       expect(textContainer!.style.transform).toContain('rotate(180deg)');
       expect(textContainer!.style.transform).toContain('scale(0.5)');
+      expect(textContainer!.style.overflowX).toBe('hidden');
+      expect(textContainer!.style.overflowY).toBe('hidden');
     } finally {
       clientHeightSpy.mockRestore();
       scrollHeightSpy.mockRestore();
@@ -962,6 +1574,7 @@ describe('ShapeRenderer', () => {
       expect(scale).toBeGreaterThan(0.98);
       expect(scale).toBeLessThan(1);
       expect(textContainer!.style.whiteSpace).toBe('nowrap');
+      expect(textContainer!.style.overflowX).toBe('hidden');
       expect(textContainer!.style.overflowY).toBe('hidden');
     } finally {
       clientWidthSpy.mockRestore();
@@ -1000,8 +1613,7 @@ describe('ShapeRenderer', () => {
 
     const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
     const textContainer = Array.from(el.querySelectorAll('div')).find(
-      (div) =>
-        div.textContent?.includes('quick brown fox') && div.style.flexDirection === 'column',
+      (div) => div.textContent?.includes('quick brown fox') && div.style.flexDirection === 'column',
     ) as HTMLElement | undefined;
 
     expect(textContainer).toBeDefined();
@@ -1069,6 +1681,7 @@ describe('ShapeRenderer', () => {
 
       expect(textContainer).toBeDefined();
       expect(textContainer!.style.transform).not.toContain('scale(');
+      expect(textContainer!.style.overflowX).toBe('visible');
       expect(textContainer!.style.overflowY).toBe('visible');
       expect(textContainer!.style.paddingTop).toBe('0px');
       expect(textContainer!.style.paddingBottom).toBe('0px');
@@ -1078,6 +1691,41 @@ describe('ShapeRenderer', () => {
       scrollWidthSpy.mockRestore();
       scrollHeightSpy.mockRestore();
     }
+  });
+
+  it('preserves explicit horizontal overflow for spAutoFit text boxes', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr>
+          <p:cNvPr id="64" name="Explicit horizontal overflow"/>
+          <p:cNvSpPr txBox="1"/>
+          <p:nvPr/>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="90000" cy="700000"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:noFill/>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr horzOverflow="overflow" wrap="square" lIns="0" tIns="0" rIns="0" bIns="0">
+            <a:spAutoFit/>
+          </a:bodyPr>
+          <a:lstStyle/>
+          <a:p><a:r><a:rPr sz="800"/><a:t>Overflow allowed</a:t></a:r></a:p>
+        </p:txBody>
+      </p:sp>
+    `;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const textContainer = Array.from(el.querySelectorAll('div')).find(
+      (div) =>
+        div.textContent?.includes('Overflow allowed') && div.style.flexDirection === 'column',
+    ) as HTMLElement | undefined;
+
+    expect(textContainer).toBeDefined();
+    expect(textContainer!.style.overflowX).toBe('visible');
+    expect(textContainer!.style.overflowY).toBe('clip');
   });
 
   it('auto-shrinks single-line shape text when bodyPr omits an autofit mode (ai-computing slide 12)', () => {
@@ -1136,10 +1784,146 @@ describe('ShapeRenderer', () => {
       ) as HTMLElement | undefined;
 
       expect(textContainer).toBeDefined();
+      expect(textContainer!.style.overflowX).toBe('hidden');
       expect(textContainer!.style.overflowY).toBe('hidden');
       expect(textContainer!.style.transform).toContain('scale(');
       const scale = Number(textContainer!.style.transform.match(/scale\(([^)]+)\)/)?.[1]);
       expect(scale).toBeLessThan(1);
+    } finally {
+      clientWidthSpy.mockRestore();
+      clientHeightSpy.mockRestore();
+      scrollWidthSpy.mockRestore();
+      scrollHeightSpy.mockRestore();
+    }
+  });
+
+  it('keeps a near-fit square-wrapped CJK heading on one line', () => {
+    const isFitContainer = (el: HTMLElement) =>
+      el.style.display === 'flex' && el.style.flexDirection === 'column';
+    const clientWidthSpy = vi
+      .spyOn(HTMLElement.prototype, 'clientWidth', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) ? 1307 : 0;
+      });
+    const clientHeightSpy = vi
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) ? 128 : 0;
+      });
+    const scrollWidthSpy = vi
+      .spyOn(HTMLElement.prototype, 'scrollWidth', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) && this.style.whiteSpace === 'nowrap' ? 1311 : 1307;
+      });
+    const scrollHeightSpy = vi
+      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) && this.style.whiteSpace === 'nowrap' ? 95 : 142;
+      });
+
+    try {
+      const xml = `
+        <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+              xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <p:nvSpPr>
+            <p:cNvPr id="248" name="textbox 248"/>
+            <p:cNvSpPr txBox="1"/>
+            <p:nvPr/>
+          </p:nvSpPr>
+          <p:spPr>
+            <a:xfrm><a:off x="1989455" y="522605"/><a:ext cx="12448540" cy="1496060"/></a:xfrm>
+            <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+            <a:noFill/>
+          </p:spPr>
+          <p:txBody>
+            <a:bodyPr vert="horz" wrap="square" lIns="0" tIns="0" rIns="0" bIns="0"/>
+            <a:lstStyle/>
+            <a:p><a:pPr algn="l"><a:lnSpc><a:spcPct val="86000"/></a:lnSpc></a:pPr><a:endParaRPr sz="300"/></a:p>
+            <a:p>
+              <a:pPr marL="12700" algn="l"><a:lnSpc><a:spcPct val="86000"/></a:lnSpc></a:pPr>
+              <a:r><a:rPr sz="5400" b="1" spc="50"><a:ea typeface="微软雅黑"/></a:rPr><a:t>发扬遵义会议精神自觉做到</a:t></a:r>
+              <a:r><a:rPr sz="5400" spc="-1380"><a:ea typeface="微软雅黑"/></a:rPr><a:t xml:space="preserve"> </a:t></a:r>
+              <a:r><a:rPr sz="5400" b="1" spc="50"><a:ea typeface="微软雅黑"/></a:rPr><a:t>“两个维护”</a:t></a:r>
+            </a:p>
+          </p:txBody>
+        </p:sp>
+      `;
+
+      const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+      const textContainer = Array.from(el.querySelectorAll('div')).find(
+        (div) =>
+          div.textContent?.includes('发扬遵义会议精神自觉做到') &&
+          div.style.flexDirection === 'column',
+      ) as HTMLElement | undefined;
+      const scale = Number(textContainer?.style.transform.match(/scale\(([^)]+)\)/)?.[1]);
+
+      expect(textContainer).toBeDefined();
+      expect(textContainer!.style.whiteSpace).toBe('nowrap');
+      expect(scale).toBeGreaterThan(0.99);
+      expect(scale).toBeLessThan(1);
+    } finally {
+      clientWidthSpy.mockRestore();
+      clientHeightSpy.mockRestore();
+      scrollWidthSpy.mockRestore();
+      scrollHeightSpy.mockRestore();
+    }
+  });
+
+  it('preserves intentional square wrapping when the lines fit the text box', () => {
+    const isFitContainer = (el: HTMLElement) =>
+      el.style.display === 'flex' && el.style.flexDirection === 'column';
+    const clientWidthSpy = vi
+      .spyOn(HTMLElement.prototype, 'clientWidth', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) ? 300 : 0;
+      });
+    const clientHeightSpy = vi
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) ? 90 : 0;
+      });
+    const scrollWidthSpy = vi
+      .spyOn(HTMLElement.prototype, 'scrollWidth', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) && this.style.whiteSpace === 'nowrap' ? 450 : 300;
+      });
+    const scrollHeightSpy = vi
+      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return isFitContainer(this) ? 60 : 0;
+      });
+
+    try {
+      const xml = `
+        <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+              xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <p:nvSpPr>
+            <p:cNvPr id="249" name="Intentional wrapped label"/>
+            <p:cNvSpPr txBox="1"/>
+            <p:nvPr/>
+          </p:nvSpPr>
+          <p:spPr>
+            <a:xfrm><a:off x="0" y="0"/><a:ext cx="2857500" cy="857250"/></a:xfrm>
+            <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+            <a:noFill/>
+          </p:spPr>
+          <p:txBody>
+            <a:bodyPr wrap="square" lIns="0" tIns="0" rIns="0" bIns="0"/>
+            <a:lstStyle/>
+            <a:p><a:r><a:rPr sz="2400"><a:ea typeface="微软雅黑"/></a:rPr><a:t>这是需要保留两行布局的中文说明文本</a:t></a:r></a:p>
+          </p:txBody>
+        </p:sp>
+      `;
+
+      const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+      const textContainer = Array.from(el.querySelectorAll('div')).find(
+        (div) =>
+          div.textContent?.includes('这是需要保留两行布局') && div.style.flexDirection === 'column',
+      ) as HTMLElement | undefined;
+
+      expect(textContainer).toBeDefined();
+      expect(textContainer!.style.whiteSpace).toBe('normal');
+      expect(textContainer!.style.transform).not.toContain('scale(');
     } finally {
       clientWidthSpy.mockRestore();
       clientHeightSpy.mockRestore();
@@ -1206,6 +1990,7 @@ describe('ShapeRenderer', () => {
 
       expect(textContainer).toBeDefined();
       expect(textContainer!.style.transform).not.toContain('scale(');
+      expect(textContainer!.style.overflowX).toBe('clip');
       expect(textContainer!.style.overflowY).toBe('visible');
       expect(textContainer!.style.paddingTop).toBe('0px');
       expect(textContainer!.style.paddingBottom).toBe('0px');
@@ -1652,7 +2437,7 @@ describe('ShapeRenderer', () => {
     }
   });
 
-  it('does not collapse or clip wrapped spAutoFit body text metric overhang (xcloud-solution slide 38)', () => {
+  it('keeps tolerated spAutoFit metric overhang non-scrollable (issue #15, xcloud-solution slide 38)', () => {
     const isFitContainer = (el: HTMLElement) =>
       el.style.display === 'flex' && el.style.flexDirection === 'column';
     const clientWidthSpy = vi
@@ -1727,6 +2512,7 @@ describe('ShapeRenderer', () => {
       expect(textContainer!.style.transform).not.toContain('scale(');
       expect(textContainer!.style.width).toBe('100%');
       expect(textContainer!.style.height).toBe('100%');
+      expect(textContainer!.style.overflowX).toBe('clip');
       expect(textContainer!.style.overflowY).toBe('visible');
     } finally {
       clientWidthSpy.mockRestore();
@@ -1736,7 +2522,7 @@ describe('ShapeRenderer', () => {
     }
   });
 
-  it('keeps bullet spAutoFit text at full size when nowrap fits the original box (xcloud-solution slide 27)', () => {
+  it('grows a multi-paragraph spAutoFit text box at full size (xcloud-solution slide 27)', () => {
     const isFitContainer = (el: HTMLElement) =>
       el.style.display === 'flex' && el.style.flexDirection === 'column';
     const clientWidthSpy = vi
@@ -1806,10 +2592,13 @@ describe('ShapeRenderer', () => {
       ) as HTMLElement | undefined;
 
       expect(textContainer).toBeDefined();
-      expect(textContainer!.style.whiteSpace).toBe('nowrap');
+      expect(textContainer!.style.whiteSpace).toBe('normal');
       expect(textContainer!.style.transform).not.toContain('scale(');
+      expect(textContainer!.style.overflowX).toBe('visible');
+      expect(textContainer!.style.overflowY).toBe('visible');
       expect(textContainer!.style.width).toBe('100%');
       expect(textContainer!.style.height).toBe('100%');
+      expect(el.style.height).toBe('73px');
     } finally {
       clientWidthSpy.mockRestore();
       clientHeightSpy.mockRestore();
@@ -1852,11 +2641,11 @@ describe('ShapeRenderer', () => {
     const span = textContainer?.querySelector('span') as HTMLElement | null;
 
     expect(textContainer).toBeDefined();
-    expect(para?.style.lineHeight).toBe('');
+    expect(para?.style.lineHeight).toBe('1.18');
     expect(span?.style.fontSize).toBe('72pt');
   });
 
-  it('remeasures dynamic spAutoFit after fonts are ready to remove stale fallback-font scaling', async () => {
+  it('remeasures spAutoFit after fonts are ready to remove stale fallback-font growth', async () => {
     const isFitContainer = (el: HTMLElement) =>
       el.style.display === 'flex' && el.style.flexDirection === 'column';
     let fontsReady = false;
@@ -1932,7 +2721,8 @@ describe('ShapeRenderer', () => {
       ) as HTMLElement | undefined;
 
       expect(textContainer).toBeDefined();
-      expect(textContainer!.style.transform).toContain('scale(');
+      expect(textContainer!.style.transform).not.toContain('scale(');
+      expect(el.style.height).toBe('120px');
 
       document.body.appendChild(el);
       resolveFontsReady();
@@ -1948,6 +2738,7 @@ describe('ShapeRenderer', () => {
       expect(textContainer!.style.transform).not.toContain('scale(');
       expect(textContainer!.style.width).toBe('100%');
       expect(textContainer!.style.height).toBe('100%');
+      expect(parseFloat(el.style.height)).toBeLessThan(60);
     } finally {
       clientWidthSpy.mockRestore();
       clientHeightSpy.mockRestore();
@@ -2124,6 +2915,7 @@ describe('ShapeRenderer', () => {
 
       expect(textContainer).toBeDefined();
       expect(textContainer!.style.transform).not.toContain('scale(');
+      expect(textContainer!.style.overflowX).toBe('hidden');
       expect(firstParagraph?.style.lineHeight).toBe('1.1');
       expect(emptyParagraph?.style.fontSize).toBe('10.5pt');
     } finally {
@@ -2329,12 +3121,66 @@ describe('ShapeRenderer', () => {
     );
 
     expect(paragraphs).toHaveLength(2);
-    expect(paragraphs[0].style.lineHeight).toBe('');
-    expect(paragraphs[1].style.lineHeight).toBe('');
+    expect(paragraphs[0].style.lineHeight).toBe('1.16');
+    expect(paragraphs[1].style.lineHeight).toBe('1.16');
     expect(paragraphs[0].style.marginTop).toBe('0px');
     expect(paragraphs[0].style.marginBottom).toBe('12pt');
     expect(paragraphs[1].style.marginTop).toBe('6pt');
     expect(paragraphs[1].style.marginBottom).toBe('0px');
+  });
+
+  it('trims outer paragraph spacing for noAutofit text boxes', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr>
+          <p:cNvPr id="4" name="Spacing probe"/>
+          <p:cNvSpPr txBox="1"/>
+          <p:nvPr/>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="914400" y="457200"/><a:ext cx="9144000" cy="5486400"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:noFill/>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr wrap="square" anchor="ctr"><a:noAutofit/></a:bodyPr>
+          <a:lstStyle/>
+          ${['First', 'Middle', 'Last']
+            .map(
+              (text) => `
+                <a:p>
+                  <a:pPr>
+                    <a:spcBef><a:spcPts val="600"/></a:spcBef>
+                    <a:spcAft><a:spcPts val="1000"/></a:spcAft>
+                    <a:defRPr sz="2600"/>
+                  </a:pPr>
+                  <a:r><a:t>${text}</a:t></a:r>
+                </a:p>`,
+            )
+            .join('')}
+        </p:txBody>
+      </p:sp>
+    `;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const textContainer = Array.from(el.querySelectorAll('div')).find(
+      (div) => div.style.flexDirection === 'column' && div.textContent === 'FirstMiddleLast',
+    );
+    const paragraphs = Array.from(textContainer?.children ?? []) as HTMLElement[];
+
+    expect(paragraphs).toHaveLength(3);
+    expect(paragraphs[0].style.marginTop).toBe('0px');
+    expect(paragraphs[0].style.marginBottom).toBe('10pt');
+    expect(paragraphs[1].style.marginTop).toBe('6pt');
+    expect(paragraphs[1].style.marginBottom).toBe('10pt');
+    expect(paragraphs[2].style.marginTop).toBe('6pt');
+    expect(paragraphs[2].style.marginBottom).toBe('0px');
+    expect(paragraphs.map((paragraph) => paragraph.style.lineHeight)).toEqual([
+      '1.16',
+      '1.16',
+      '1.16',
+    ]);
   });
 
   it('renders supported prstTxWarp text as SVG textPath (ai-computing slide 28)', () => {
@@ -2954,10 +3800,209 @@ describe('ShapeRenderer', () => {
     const filter = el.querySelector('filter');
 
     expect(el.style.boxShadow).toBe('');
-    expect(path?.getAttribute('filter')).toContain('url(#shape-shadow-');
+    expect(path?.getAttribute('filter') ?? '').toContain('url(#shape-shadow-');
     expect(filter).toBeTruthy();
     expect(filter?.querySelector('feDropShadow')).toBeTruthy();
+    expect(el.querySelector('[data-pptx-outer-shadow="scaled-silhouette"]')).toBeNull();
   });
+
+  it('renders a 102% centered outer shadow as a separately scaled silhouette', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="301" name="Scaled up shadow"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="2000000" cy="1000000"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:solidFill><a:srgbClr val="4472C4"/></a:solidFill>
+          <a:ln><a:noFill/></a:ln>
+          <a:effectLst>
+            <a:outerShdw blurRad="115455" dist="46182" sx="102000" sy="102000" algn="ctr" rotWithShape="0">
+              <a:srgbClr val="000000"><a:alpha val="35000"/></a:srgbClr>
+            </a:outerShdw>
+          </a:effectLst>
+        </p:spPr>
+      </p:sp>
+    `;
+
+    const shapeNode = parseShapeNode(parseXml(xml));
+    const el = renderShape(shapeNode, createMockRenderContext());
+    const mainPath = el.querySelector('svg > path');
+    const shadowGroup = el.querySelector<SVGGElement>(
+      'svg > g[data-pptx-outer-shadow="scaled-silhouette"]',
+    );
+    const shadowPath = shadowGroup?.querySelector('path');
+
+    expect(mainPath?.getAttribute('filter')).toBeNull();
+    expect(shadowGroup).toBeTruthy();
+    expect(shadowGroup?.getAttribute('data-pptx-shadow-scale-x')).toBe('1.02');
+    expect(shadowGroup?.getAttribute('data-pptx-shadow-scale-y')).toBe('1.02');
+    expect(shadowGroup?.getAttribute('data-pptx-shadow-alignment')).toBe('ctr');
+    expect(Number(shadowGroup?.getAttribute('data-pptx-shadow-anchor-x'))).toBeCloseTo(
+      shapeNode.size.w / 2,
+      8,
+    );
+    expect(Number(shadowGroup?.getAttribute('data-pptx-shadow-anchor-y'))).toBeCloseTo(
+      shapeNode.size.h / 2,
+      8,
+    );
+    expect(shadowGroup?.getAttribute('filter') ?? '').toContain('url(#shape-shadow-blur-');
+    expect(shadowPath?.getAttribute('d')).toBe(mainPath?.getAttribute('d'));
+    expect(shadowPath?.getAttribute('fill')).toBe('rgb(0,0,0)');
+    expect(shadowPath?.getAttribute('fill-opacity')).toBe('0.3500');
+    expect(el.querySelector('filter feGaussianBlur')).toBeTruthy();
+    expect(el.querySelector('filter feDropShadow')).toBeNull();
+  });
+
+  it('keeps a 92% top-right outer shadow visible with its native scale anchor (xcloud-plan slide 42)', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="302" name="Scaled down shadow"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="2000000" cy="1000000"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:solidFill><a:srgbClr val="4472C4"/></a:solidFill>
+          <a:ln><a:noFill/></a:ln>
+          <a:effectLst>
+            <a:outerShdw blurRad="317500" dist="127000" dir="8100000" sx="92000" sy="92000" algn="tr" rotWithShape="0">
+              <a:srgbClr val="000000"><a:alpha val="35000"/></a:srgbClr>
+            </a:outerShdw>
+          </a:effectLst>
+        </p:spPr>
+      </p:sp>
+    `;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const mainPath = el.querySelector('svg > path');
+    const shadowGroup = el.querySelector<SVGGElement>(
+      'svg > g[data-pptx-outer-shadow="scaled-silhouette"]',
+    );
+
+    expect(mainPath?.getAttribute('filter')).toBeNull();
+    expect(shadowGroup).toBeTruthy();
+    expect(shadowGroup?.getAttribute('data-pptx-shadow-scale-x')).toBe('0.92');
+    expect(shadowGroup?.getAttribute('data-pptx-shadow-scale-y')).toBe('0.92');
+    expect(shadowGroup?.getAttribute('data-pptx-shadow-alignment')).toBe('tr');
+    expect(Number(shadowGroup?.getAttribute('data-pptx-shadow-anchor-x'))).toBeGreaterThan(200);
+    expect(Number(shadowGroup?.getAttribute('data-pptx-shadow-anchor-y'))).toBe(0);
+    expect(shadowGroup?.querySelector('path')?.getAttribute('transform')).toContain(
+      'scale(0.92 0.92)',
+    );
+    expect(el.querySelector('filter feGaussianBlur')?.getAttribute('stdDeviation')).not.toBe(
+      '0.00',
+    );
+    expect(el.querySelector('filter feDropShadow')).toBeNull();
+  });
+
+  it('keeps the bounded scaled-silhouette path disabled inside a rotated group', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="303" name="Rotated group child"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="2000000" cy="1000000"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:solidFill><a:srgbClr val="4472C4"/></a:solidFill>
+          <a:ln><a:noFill/></a:ln>
+          <a:effectLst>
+            <a:outerShdw blurRad="115455" dist="46182" sx="102000" sy="102000" algn="ctr" rotWithShape="0">
+              <a:srgbClr val="000000"><a:alpha val="35000"/></a:srgbClr>
+            </a:outerShdw>
+          </a:effectLst>
+        </p:spPr>
+      </p:sp>
+    `;
+
+    const el = renderShape(
+      parseShapeNode(parseXml(xml)),
+      createMockRenderContext({ groupTransformHasRotationOrFlip: true }),
+    );
+
+    expect(el.querySelector('[data-pptx-outer-shadow="scaled-silhouette"]')).toBeNull();
+    expect(el.querySelector('svg > path')?.getAttribute('filter') ?? '').toContain(
+      'url(#shape-shadow-',
+    );
+  });
+
+  it.each([
+    { label: 'unverified alignment', attributes: 'algn="l" sx="102000" sy="102000"' },
+    {
+      label: 'scale outside the native matrix',
+      attributes: 'algn="ctr" sx="110000" sy="110000"',
+    },
+    {
+      label: 'unverified combination of otherwise verified matrix values',
+      attributes: 'algn="tr" sx="102000" sy="102000"',
+    },
+    {
+      label: 'nested group',
+      attributes: 'algn="ctr" sx="102000" sy="102000"',
+      context: { groupDepth: 2, groupChildScale: { x: 1.25, y: 1.25 } },
+    },
+    {
+      label: 'unverified group scale',
+      attributes: 'algn="ctr" sx="102000" sy="102000"',
+      context: { groupDepth: 1, groupChildScale: { x: 1.5, y: 1.5 } },
+    },
+  ])('keeps $label on the outer-shadow approximation path', ({ attributes, context }) => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="305" name="Bounded shadow fallback"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="2000000" cy="1000000"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:solidFill><a:srgbClr val="4472C4"/></a:solidFill>
+          <a:ln><a:noFill/></a:ln>
+          <a:effectLst>
+            <a:outerShdw blurRad="115455" dist="46182" ${attributes} rotWithShape="0">
+              <a:srgbClr val="000000"><a:alpha val="35000"/></a:srgbClr>
+            </a:outerShdw>
+          </a:effectLst>
+        </p:spPr>
+      </p:sp>
+    `;
+
+    const el = renderShape(
+      parseShapeNode(parseXml(xml)),
+      createMockRenderContext(context as Partial<RenderContext>),
+    );
+
+    expect(Boolean(el.querySelector('[data-pptx-outer-shadow="scaled-silhouette"]'))).toBe(false);
+    expect(el.querySelector('svg > path')?.getAttribute('filter') ?? '').toContain(
+      'url(#shape-shadow-',
+    );
+  });
+
+  it.each([
+    ['zero-distance blur', '', '5.00'],
+    ['directional blur', 'dist="127000" dir="5400000"', '6.67'],
+  ])(
+    'calibrates bounded %s without changing directional shadow blur',
+    (_label, attrs, expected) => {
+      const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="304" name="Blur calibration"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="2000000" cy="1000000"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:solidFill><a:srgbClr val="4472C4"/></a:solidFill>
+          <a:ln><a:noFill/></a:ln>
+          <a:effectLst>
+            <a:outerShdw blurRad="127000" ${attrs} rotWithShape="0">
+              <a:srgbClr val="000000"><a:alpha val="35000"/></a:srgbClr>
+            </a:outerShdw>
+          </a:effectLst>
+        </p:spPr>
+      </p:sp>
+    `;
+
+      const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+      expect(el.querySelector('feDropShadow')?.getAttribute('stdDeviation')).toBe(expected);
+    },
+  );
 
   it('treats spAutoFit as bounded text fit to prevent overflow bleed', () => {
     const xml = `
@@ -2991,6 +4036,46 @@ describe('ShapeRenderer', () => {
 
     expect(textContainer).toBeTruthy();
     expect(textContainer?.style.overflowY).toBe('hidden');
+  });
+
+  it('hides horizontal overflow for bounded spAutoFit text so nowrap tokens do not show scrollbars', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr>
+          <p:cNvPr id="301" name="spAutoFit nowrap scrollbar regression"/>
+          <p:cNvSpPr/>
+          <p:nvPr/>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="1371600" cy="1569720"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:noFill/><a:ln><a:noFill/></a:ln>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr wrap="square" anchor="t"><a:spAutoFit/></a:bodyPr>
+          <a:lstStyle/>
+          <a:p>
+            <a:r><a:rPr sz="4800"/><a:t>80% </a:t></a:r>
+          </a:p>
+        </p:txBody>
+      </p:sp>
+    `;
+
+    const shapeNode = parseShapeNode(parseXml(xml));
+    const el = renderShape(shapeNode, createMockRenderContext());
+    const textContainer = Array.from(el.querySelectorAll('div')).find(
+      (d) => (d as HTMLDivElement).style.flexDirection === 'column',
+    ) as HTMLDivElement | undefined;
+    const outerRun = textContainer?.querySelector('span') as HTMLSpanElement | undefined;
+    const token = outerRun?.querySelector('span') as HTMLSpanElement | undefined;
+
+    expect(textContainer).toBeTruthy();
+    expect(outerRun?.style.whiteSpace).not.toBe('nowrap');
+    expect(token?.textContent).toBe('80%');
+    expect(token?.style.whiteSpace).toBe('nowrap');
+    expect(textContainer?.style.overflowY).toBe('hidden');
+    expect(textContainer?.style.overflowX).toBe('hidden');
   });
 
   it('applies theme effectRef outer shadow when shape has no explicit effectLst', () => {
@@ -3063,6 +4148,89 @@ describe('ShapeRenderer', () => {
     expect(path?.getAttribute('filter')).toContain('url(#shape-shadow-');
     expect(el.innerHTML).toContain('<filter');
     expect(el.innerHTML).toContain('stdDeviation="2.10"');
+    expect(el.querySelector('filter')?.getAttribute('color-interpolation-filters')).toBeNull();
+  });
+
+  it('applies inner shadows to non-line SVG paths without blurring text (xcloud-solution slide 5)', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="14" name="椭圆 13"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="1167614" cy="1188194"/></a:xfrm>
+          <a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom>
+          <a:solidFill><a:srgbClr val="FFFFFF"><a:alpha val="0"/></a:srgbClr></a:solidFill>
+          <a:ln w="19050">
+            <a:solidFill><a:srgbClr val="5C71CE"/></a:solidFill>
+          </a:ln>
+          <a:effectLst>
+            <a:innerShdw blurRad="190500" dist="698500">
+              <a:prstClr val="black"/>
+            </a:innerShdw>
+          </a:effectLst>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr/>
+          <a:lstStyle/>
+          <a:p><a:r><a:t>Label</a:t></a:r></a:p>
+        </p:txBody>
+      </p:sp>
+    `;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const path = el.querySelector('svg > path');
+    const filter = el.querySelector('filter[id^="shape-inner-shadow-"]');
+    const textContainer = Array.from(el.querySelectorAll('div')).find((div) =>
+      div.textContent?.includes('Label'),
+    ) as HTMLElement | undefined;
+
+    expect(path?.getAttribute('filter') ?? '').toContain('url(#shape-inner-shadow-');
+    expect(filter?.querySelector('feOffset')).toBeTruthy();
+    expect(filter?.querySelector('feGaussianBlur')).toBeTruthy();
+    expect(filter?.querySelector('feComposite[operator="in"]')).toBeTruthy();
+    expect(filter?.querySelector('feFlood')?.getAttribute('flood-color')).toBe('rgb(0,0,0)');
+    expect(filter?.querySelector('feMergeNode[in="SourceGraphic"]')).toBeTruthy();
+    expect(textContainer?.style.filter).toBe('');
+  });
+
+  it('applies soft edge as a path group filter without replacing outer shadow (ai-computing slide 13)', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="104" name="同侧圆角矩形 104"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="1524000" cy="762000"/></a:xfrm>
+          <a:prstGeom prst="roundRect"><a:avLst/></a:prstGeom>
+          <a:solidFill><a:srgbClr val="5C71CE"/></a:solidFill>
+          <a:effectLst>
+            <a:outerShdw blurRad="152400" dist="76200" dir="5400000">
+              <a:srgbClr val="000000"><a:alpha val="35000"/></a:srgbClr>
+            </a:outerShdw>
+            <a:softEdge rad="12700"/>
+          </a:effectLst>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr/>
+          <a:lstStyle/>
+          <a:p><a:r><a:t>Soft edge label</a:t></a:r></a:p>
+        </p:txBody>
+      </p:sp>
+    `;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const softGroup = el.querySelector('svg > g[filter^="url(#shape-soft-edge-"]');
+    const path = softGroup?.querySelector('path');
+    const softFilter = el.querySelector('filter[id^="shape-soft-edge-"]');
+    const shadowFilter = el.querySelector('filter[id^="shape-shadow-"]');
+    const textContainer = Array.from(el.querySelectorAll('div')).find((div) =>
+      div.textContent?.includes('Soft edge label'),
+    ) as HTMLElement | undefined;
+
+    expect(softGroup).toBeTruthy();
+    expect(path?.getAttribute('filter') ?? '').toContain('url(#shape-shadow-');
+    expect(softFilter?.querySelector('feGaussianBlur')?.getAttribute('stdDeviation')).toBe('0.67');
+    expect(shadowFilter?.querySelector('feDropShadow')).toBeTruthy();
+    expect(textContainer?.style.filter).toBe('');
   });
 
   it('applies shape glow from spPr effectLst (ai-computing slide 27)', () => {
@@ -3338,6 +4506,34 @@ describe('ShapeRenderer', () => {
     expect(el.style.transform).toContain('scaleY(-1)');
   });
 
+  it('counter-flips text on the horizontal axis for both flip axes', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="580" name="Flipped text"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm flipH="1" flipV="1"><a:off x="0" y="0"/><a:ext cx="1000000" cy="500000"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr/>
+          <a:lstStyle/>
+          <a:p><a:r><a:t>Flip text</a:t></a:r></a:p>
+        </p:txBody>
+      </p:sp>
+    `;
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const textContainer = Array.from(el.querySelectorAll('div')).find((div) =>
+      div.textContent?.includes('Flip text'),
+    ) as HTMLElement | undefined;
+
+    expect(el.style.transform).toContain('scaleX(-1)');
+    expect(el.style.transform).toContain('scaleY(-1)');
+    expect(textContainer?.style.transform ?? '').toContain('scaleX(-1)');
+    expect(textContainer?.style.transform ?? '').not.toContain('scaleY(-1)');
+  });
+
   it('renders stealth arrowhead marker', () => {
     const xml = `
       <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
@@ -3475,7 +4671,7 @@ describe('ShapeRenderer', () => {
     expect(path?.getAttribute('stroke-linejoin')).toBe('round');
   });
 
-  it('applies reflection approximation via -webkit-box-reflect', () => {
+  it('renders a bottom-aligned reflection as an explicit mirrored layer', () => {
     const xml = `
       <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
             xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
@@ -3485,16 +4681,27 @@ describe('ShapeRenderer', () => {
           <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
           <a:solidFill><a:srgbClr val="4472C4"/></a:solidFill>
           <a:effectLst>
-            <a:reflection stA="40000" endA="0" stPos="0" endPos="100000" dist="63500"/>
+            <a:reflection blurRad="6350" stA="40000" endA="0" stPos="0"
+                          endPos="100000" dist="63500" dir="5400000"
+                          sy="-100000" algn="bl" rotWithShape="0"/>
           </a:effectLst>
         </p:spPr>
       </p:sp>
     `;
     const shapeNode = parseShapeNode(parseXml(xml));
     const el = renderShape(shapeNode, createMockRenderContext());
-    const reflect =
-      el.style.getPropertyValue('-webkit-box-reflect') || (el.style as any).webkitBoxReflect || '';
-    expect(reflect).toContain('linear-gradient');
+    const reflection = el.querySelector<HTMLElement>('[data-pptx-reflection-layer="true"]');
+    const source = reflection?.querySelector<HTMLElement>('[data-pptx-reflection-source="true"]');
+
+    expect(el.style.getPropertyValue('-webkit-box-reflect')).toBe('');
+    expect(reflection).toBeTruthy();
+    expect(reflection?.getAttribute('aria-hidden')).toBe('true');
+    expect(reflection?.style.top).toBe('90.6562px');
+    expect(reflection?.style.left).toBe('0px');
+    expect(reflection?.style.filter).toContain('blur(0.6667px)');
+    expect(reflection?.style.maskImage).toContain('180deg');
+    expect(reflection?.style.maskImage).toContain('0.400');
+    expect(source?.style.transform).toContain('matrix(1, 0, 0, -1');
   });
 
   it('renders linear gradient fill on shape', () => {
@@ -3549,6 +4756,35 @@ describe('ShapeRenderer', () => {
     expect(defs).toBeTruthy();
     const radialGrad = defs?.querySelector('radialGradient');
     expect(radialGrad).toBeTruthy();
+    expect(Number(radialGrad?.getAttribute('r'))).toBeCloseTo(
+      Math.hypot(shapeNode.size.w / 2, shapeNode.size.h / 2),
+      4,
+    );
+  });
+
+  it('uses fillToRect as the center shade area for radial shape gradients', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="204" name="RadialFocus"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="2000000" cy="1000000"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:gradFill path="circle">
+            <a:gsLst>
+              <a:gs pos="0"><a:srgbClr val="FFFFFF"/></a:gs>
+              <a:gs pos="100000"><a:srgbClr val="000000"/></a:gs>
+            </a:gsLst>
+            <a:path path="circle"><a:fillToRect l="25000" t="25000" r="25000" b="25000"/></a:path>
+          </a:gradFill>
+        </p:spPr>
+      </p:sp>
+    `;
+    const shapeNode = parseShapeNode(parseXml(xml));
+    const el = renderShape(shapeNode, createMockRenderContext());
+    const stops = Array.from(el.querySelectorAll('radialGradient stop'));
+
+    expect(stops.map((stop) => stop.getAttribute('offset'))).toEqual(['50%', '100%']);
   });
 
   it('renders radial gradient with path="rect" using two linear gradients with lighten blend', () => {
@@ -3586,6 +4822,34 @@ describe('ShapeRenderer', () => {
     expect(blendGroup).toBeTruthy();
   });
 
+  it('preserves fillToRect focus width for rectangular path gradients', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="205" name="RectFocus"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="2000000" cy="1000000"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:gradFill path="rect">
+            <a:gsLst>
+              <a:gs pos="0"><a:srgbClr val="FFFFFF"/></a:gs>
+              <a:gs pos="100000"><a:srgbClr val="808080"/></a:gs>
+            </a:gsLst>
+            <a:path path="rect"><a:fillToRect l="25000" t="25000" r="25000" b="25000"/></a:path>
+          </a:gradFill>
+        </p:spPr>
+      </p:sp>
+    `;
+    const shapeNode = parseShapeNode(parseXml(xml));
+    const el = renderShape(shapeNode, createMockRenderContext());
+    const horizontalStops = Array.from(el.querySelectorAll('linearGradient[id$="-h"] stop')).map(
+      (stop) => stop.getAttribute('offset'),
+    );
+
+    expect(horizontalStops).toContain('25.00%');
+    expect(horizontalStops).toContain('75.00%');
+  });
+
   it('renders gradient stroke on shape', () => {
     const xml = `
       <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
@@ -3617,6 +4881,61 @@ describe('ShapeRenderer', () => {
     expect(stroke).toContain('url(#');
     const linearGrad = defs?.querySelector('linearGradient');
     expect(linearGrad?.getAttribute('color-interpolation')).toBe('linearRGB');
+  });
+
+  it('preserves sub-pixel gradient stroke width on non-line custom geometry (issue-3 skyline)', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="205" name="Skyline"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="10147139" cy="1292783"/></a:xfrm>
+          <a:custGeom>
+            <a:avLst/>
+            <a:gdLst/>
+            <a:ahLst/>
+            <a:cxnLst/>
+            <a:rect l="0" t="0" r="r" b="b"/>
+            <a:pathLst>
+              <a:path w="10147139" h="1292783">
+                <a:moveTo><a:pt x="0" y="1292783"/></a:moveTo>
+                <a:lnTo><a:pt x="0" y="600000"/></a:lnTo>
+                <a:lnTo><a:pt x="1200000" y="600000"/></a:lnTo>
+                <a:lnTo><a:pt x="1200000" y="200000"/></a:lnTo>
+                <a:lnTo><a:pt x="2400000" y="200000"/></a:lnTo>
+                <a:lnTo><a:pt x="2400000" y="1292783"/></a:lnTo>
+                <a:close/>
+              </a:path>
+            </a:pathLst>
+          </a:custGeom>
+          <a:gradFill flip="none" rotWithShape="1">
+            <a:gsLst>
+              <a:gs pos="0"><a:schemeClr val="accent1"><a:alpha val="13000"/></a:schemeClr></a:gs>
+              <a:gs pos="100000"><a:schemeClr val="bg1"><a:alpha val="0"/></a:schemeClr></a:gs>
+            </a:gsLst>
+            <a:lin ang="5400000" scaled="1"/>
+            <a:tileRect/>
+          </a:gradFill>
+          <a:ln w="6350" cap="flat">
+            <a:gradFill flip="none" rotWithShape="1">
+              <a:gsLst>
+                <a:gs pos="0"><a:schemeClr val="accent1"><a:alpha val="0"/></a:schemeClr></a:gs>
+                <a:gs pos="47000"><a:schemeClr val="accent1"><a:alpha val="33000"/></a:schemeClr></a:gs>
+                <a:gs pos="100000"><a:schemeClr val="accent1"><a:alpha val="0"/></a:schemeClr></a:gs>
+              </a:gsLst>
+              <a:lin ang="0" scaled="1"/>
+              <a:tileRect/>
+            </a:gradFill>
+          </a:ln>
+        </p:spPr>
+      </p:sp>
+    `;
+    const shapeNode = parseShapeNode(parseXml(xml));
+    const el = renderShape(shapeNode, createMockRenderContext());
+    const path = el.querySelector('path[stroke^="url("]');
+
+    expect(path).toBeTruthy();
+    expect(Number(path?.getAttribute('stroke-width'))).toBeCloseTo(6350 / 9525, 5);
   });
 
   it('uses shape bounds for non-line gradient stroke coordinates (xcloud-intro slide 13 trapezoid)', () => {
@@ -4834,6 +6153,7 @@ describe('ShapeRenderer', () => {
     // Line spacing reduction should be applied
     expect(textContainer?.style.lineHeight).toBeTruthy();
     // Text should be clipped at container boundary
+    expect(textContainer?.style.overflowX).toBe('hidden');
     expect(textContainer?.style.overflowY).toBe('hidden');
   });
 
@@ -4865,6 +6185,7 @@ describe('ShapeRenderer', () => {
     // fontScale=100000 means full size — no scale transform should be applied
     expect(textContainer?.style.transform ?? '').not.toContain('scale(');
     // Still clipped
+    expect(textContainer?.style.overflowX).toBe('hidden');
     expect(textContainer?.style.overflowY).toBe('hidden');
   });
 
@@ -4896,14 +6217,17 @@ describe('ShapeRenderer', () => {
       (d) => (d as HTMLDivElement).style.flexDirection === 'column',
     ) as HTMLDivElement | undefined;
     expect(textContainer).toBeTruthy();
+    expect(textContainer?.style.overflowX).toBe('hidden');
+    expect(textContainer?.style.overflowY).toBe('hidden');
     // Visibility must be restored (not left hidden)
     expect(el.style.visibility).not.toBe('hidden');
   });
 
   // ---- Reflection effect: additional edge cases ----
 
-  it('reflection with default stA and endA values produces valid gradient', () => {
-    // stA and endA omitted → defaults: stA=50000, endA=0
+  it('uses the ECMA-376 reflection defaults when optional attributes are omitted', () => {
+    // ECMA-376 Part 1 CT_ReflectionEffect defaults: stA=100%, endA=0%,
+    // endPos=100%, fadeDir=90deg, sx=sy=100%, and algn=b.
     const xml = `
       <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
             xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
@@ -4920,15 +6244,17 @@ describe('ShapeRenderer', () => {
     `;
     const shapeNode = parseShapeNode(parseXml(xml));
     const el = renderShape(shapeNode, createMockRenderContext());
-    const reflect =
-      el.style.getPropertyValue('-webkit-box-reflect') || (el.style as any).webkitBoxReflect || '';
-    // Default stA=0.5, endA=0 → gradient goes from rgba(255,255,255,0.500) to rgba(255,255,255,0.000)
-    expect(reflect).toContain('0.500');
-    expect(reflect).toContain('0.000');
-    expect(reflect).toContain('below');
+    const reflection = el.querySelector<HTMLElement>('[data-pptx-reflection-layer="true"]');
+    const source = reflection?.querySelector<HTMLElement>('[data-pptx-reflection-source="true"]');
+
+    expect(reflection?.style.maskImage).toContain('180deg');
+    expect(reflection?.style.maskImage).toContain('1.000');
+    expect(reflection?.style.maskImage).toContain('0.000');
+    expect(reflection?.style.maskImage).toContain('100.0%');
+    expect(source?.style.transform).toContain('matrix(1, 0, 0, 1');
   });
 
-  it('reflection with zero dist produces "below 0.0px" in reflect value', () => {
+  it('anchors a zero-distance vertical reflection at the shape bottom edge', () => {
     const xml = `
       <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
             xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
@@ -4938,16 +6264,45 @@ describe('ShapeRenderer', () => {
           <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
           <a:solidFill><a:srgbClr val="ED7D31"/></a:solidFill>
           <a:effectLst>
-            <a:reflection stA="30000" endA="0" dist="0"/>
+            <a:reflection stA="30000" endA="0" dist="0" dir="5400000"
+                          sy="-100000" algn="bl" rotWithShape="0"/>
           </a:effectLst>
         </p:spPr>
       </p:sp>
     `;
     const shapeNode = parseShapeNode(parseXml(xml));
     const el = renderShape(shapeNode, createMockRenderContext());
-    const reflect =
-      el.style.getPropertyValue('-webkit-box-reflect') || (el.style as any).webkitBoxReflect || '';
-    expect(reflect).toContain('below 0.0px');
+    const reflection = el.querySelector<HTMLElement>('[data-pptx-reflection-layer="true"]');
+    expect(reflection?.style.top).toBe('83.9895px');
+  });
+
+  it('keeps a centered no-wrap spAutoFit text box top-aligned by default', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr>
+          <p:cNvPr id="502" name="Top aligned text box"/>
+          <p:cNvSpPr txBox="1"/>
+          <p:nvPr/>
+        </p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="5486400" cy="1280160"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:noFill/><a:ln><a:noFill/></a:ln>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr wrap="none" lIns="0" rIns="0" tIns="0" bIns="0"><a:spAutoFit/></a:bodyPr>
+          <a:lstStyle/>
+          <a:p><a:pPr algn="ctr"/><a:r><a:rPr sz="3400"/><a:t>LIVE REFLECTION</a:t></a:r></a:p>
+        </p:txBody>
+      </p:sp>
+    `;
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const textContainer = Array.from(el.querySelectorAll('div')).find(
+      (div) => div.style.flexDirection === 'column',
+    ) as HTMLElement | undefined;
+
+    expect(textContainer?.style.justifyContent).toBe('flex-start');
   });
 
   // ---- effectRef: boundary and skip cases ----
@@ -5516,7 +6871,12 @@ describe('ShapeRenderer', () => {
 
   it.each([
     ['r:embed="rIdImage"', 'local blob', /^blob:/, 'none'],
-    ['r:link="rIdAllowed"', 'allowed external URL', /^https:\/\/example.com\/image.png$/, 'xMidYMid slice'],
+    [
+      'r:link="rIdAllowed"',
+      'allowed external URL',
+      /^https:\/\/example.com\/image.png$/,
+      'xMidYMid slice',
+    ],
     ['r:embed="rIdStretchNoRect"', 'stretch without fillRect', /^blob:/, 'none'],
   ])('renders shape blipFill from %s as an SVG image', (relAttr, _label, hrefMatcher, preserve) => {
     const xml = `
@@ -5615,5 +6975,437 @@ describe('ShapeRenderer', () => {
     const el = renderShape(parseShapeNode(parseXml(xml)), ctx);
 
     expect(el.querySelector('svg image')).toBeNull();
+  });
+
+  it('renders the bounded static 3D bevel below the text overlay', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="81" name="3D round rectangle"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="1905000" cy="952500"/></a:xfrm>
+          <a:prstGeom prst="roundRect"><a:avLst/></a:prstGeom>
+          <a:solidFill><a:srgbClr val="4472C4"/></a:solidFill>
+          <a:scene3d><a:camera prst="orthographicFront"/><a:lightRig rig="threePt" dir="t"/></a:scene3d>
+          <a:sp3d contourW="12700">
+            <a:bevelT w="127000" h="127000" prst="circle"/>
+            <a:contourClr><a:srgbClr val="FFFFFF"/></a:contourClr>
+          </a:sp3d>
+        </p:spPr>
+        <p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Readable</a:t></a:r></a:p></p:txBody>
+      </p:sp>`;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const bevel = el.querySelector('[data-pptx-shape3d-bevel]');
+    const contour = el.querySelector('[data-pptx-shape3d-contour]');
+    const text = Array.from(el.children).find((child) => child.tagName.toLowerCase() === 'div');
+
+    expect(bevel).toBeTruthy();
+    expect(contour).toBeTruthy();
+    expect(text?.textContent).toContain('Readable');
+    expect(text?.hasAttribute('filter')).toBe(false);
+    expect(Array.from(el.children).indexOf(text!)).toBeGreaterThan(
+      Array.from(el.children).indexOf(el.querySelector('svg')!),
+    );
+  });
+
+  it('treats a solid theme fill reference as eligible static 3D paint', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="83" name="3D theme donut"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="1905000" cy="952500"/></a:xfrm>
+          <a:prstGeom prst="donut"><a:avLst><a:gd name="adj" fmla="val 32000"/></a:avLst></a:prstGeom>
+          <a:scene3d><a:camera prst="orthographicFront"/><a:lightRig rig="threePt" dir="t"/></a:scene3d>
+          <a:sp3d><a:bevelT w="127000" h="127000" prst="circle"/></a:sp3d>
+        </p:spPr>
+        <p:style>
+          <a:lnRef idx="0"><a:schemeClr val="accent1"/></a:lnRef>
+          <a:fillRef idx="1"><a:schemeClr val="accent1"/></a:fillRef>
+          <a:effectRef idx="0"><a:schemeClr val="accent1"/></a:effectRef>
+          <a:fontRef idx="minor"><a:schemeClr val="tx1"/></a:fontRef>
+        </p:style>
+      </p:sp>`;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+
+    expect(el.querySelector('svg > path')?.getAttribute('fill')).toBe('#4472C4');
+    expect(el.querySelector('[data-pptx-shape3d-bevel]')).toBeTruthy();
+  });
+
+  it('replaces the flat path with the bounded perspective camera plane', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="84" name="3D camera plane"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="3840480" cy="3840480"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:solidFill><a:srgbClr val="2F75B5"/></a:solidFill>
+          <a:ln><a:noFill/></a:ln>
+          <a:scene3d>
+            <a:camera prst="perspectiveRelaxedModerately" fov="7200000">
+              <a:rot lat="18590633" lon="0" rev="0"/>
+            </a:camera>
+            <a:lightRig rig="threePt" dir="t"/>
+          </a:scene3d>
+          <a:sp3d extrusionH="0"/>
+        </p:spPr>
+        <p:txBody><a:bodyPr/><a:lstStyle/><a:p/></p:txBody>
+      </p:sp>`;
+
+    const ctx = createMockRenderContext({
+      presentation: {
+        ...createMockRenderContext().presentation,
+        width: 1280,
+        height: 720,
+      },
+    });
+    const el = renderShape(parseShapeNode(parseXml(xml)), ctx);
+    const basePath = el.querySelector('svg > path');
+    const projected = el.querySelector('[data-pptx-shape3d-projected-plane="perspective"]');
+    const gradient = el.querySelector(
+      'linearGradient[data-pptx-shape3d-camera-gradient="perspectiveRelaxedModerately"]',
+    );
+
+    expect(basePath?.getAttribute('visibility')).toBe('hidden');
+    expect(projected?.getAttribute('d')).toMatch(/^M[^Z]+ Z$/);
+    expect(projected?.getAttribute('fill')).toMatch(/^url\(#shape3d-camera-gradient-/);
+    expect(gradient?.getAttribute('gradientUnits')).toBe('userSpaceOnUse');
+    expect(gradient?.getAttribute('color-interpolation')).toBe('linearRGB');
+  });
+
+  it('moves a theme effectRef outer shadow onto the projected camera plane', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="841" name="Scene-only plane shadow"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="3840480" cy="3840480"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:solidFill><a:srgbClr val="2F75B5"/></a:solidFill>
+          <a:ln><a:noFill/></a:ln>
+          <a:scene3d>
+            <a:camera prst="perspectiveRelaxedModerately" fov="7200000">
+              <a:rot lat="18590633" lon="0" rev="0"/>
+            </a:camera>
+            <a:lightRig rig="threePt" dir="t"/>
+          </a:scene3d>
+        </p:spPr>
+        <p:style><a:effectRef idx="2"><a:schemeClr val="accent1"/></a:effectRef></p:style>
+        <p:txBody><a:bodyPr/><a:lstStyle/><a:p/></p:txBody>
+      </p:sp>`;
+    const themeEffectStyles = [
+      parseXml(`
+        <a:effectStyle xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <a:effectLst/>
+        </a:effectStyle>`),
+      parseXml(`
+        <a:effectStyle xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <a:effectLst>
+            <a:outerShdw blurRad="40000" dist="23000" dir="5400000" rotWithShape="0">
+              <a:srgbClr val="000000"><a:alpha val="35000"/></a:srgbClr>
+            </a:outerShdw>
+          </a:effectLst>
+        </a:effectStyle>`),
+    ];
+    const baseContext = createMockRenderContext();
+    const ctx = createMockRenderContext({
+      presentation: { ...baseContext.presentation, width: 1280, height: 720 },
+      theme: { ...baseContext.theme, effectStyles: themeEffectStyles },
+    });
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), ctx);
+    const basePath = el.querySelector('svg > path');
+    const projected = el.querySelector('[data-pptx-shape3d-projected-plane="perspective"]');
+    const shadowFilter = el.querySelector('filter[id^="shape-shadow-"]');
+    const projectedCoordinates = extractPathNumbers(projected?.getAttribute('d') ?? '');
+    const projectedX = projectedCoordinates.filter((_, index) => index % 2 === 0);
+    const projectedY = projectedCoordinates.filter((_, index) => index % 2 === 1);
+    const filterX = Number(shadowFilter?.getAttribute('x'));
+    const filterY = Number(shadowFilter?.getAttribute('y'));
+    const filterRight = filterX + Number(shadowFilter?.getAttribute('width'));
+    const filterBottom = filterY + Number(shadowFilter?.getAttribute('height'));
+
+    expect(projected?.getAttribute('filter')).toMatch(/^url\(#shape-shadow-/);
+    expect(basePath?.getAttribute('filter')).toBeNull();
+    const dropShadow = shadowFilter?.querySelector('feDropShadow');
+    expect(dropShadow).toBeTruthy();
+    expect(dropShadow?.getAttribute('dx')).toBe('0.0');
+    expect(dropShadow?.getAttribute('dy')).toBe('4.3');
+    expect(dropShadow?.getAttribute('stdDeviation')).toBe('3.74');
+    expect(shadowFilter?.getAttribute('color-interpolation-filters')).toBe('sRGB');
+    expect(filterX).toBeLessThan(Math.min(...projectedX));
+    expect(filterY).toBeLessThan(Math.min(...projectedY));
+    expect(filterRight).toBeGreaterThan(Math.max(...projectedX));
+    expect(filterBottom).toBeGreaterThan(Math.max(...projectedY));
+  });
+
+  it('scales an orthographic camera shadow to the projected plane footprint', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="842" name="Orthographic plane shadow"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="3840480" cy="3840480"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:solidFill><a:srgbClr val="2F75B5"/></a:solidFill>
+          <a:ln><a:noFill/></a:ln>
+          <a:scene3d>
+            <a:camera prst="orthographicFront"/>
+            <a:lightRig rig="threePt" dir="t"/>
+          </a:scene3d>
+        </p:spPr>
+        <p:style><a:effectRef idx="2"><a:schemeClr val="accent1"/></a:effectRef></p:style>
+        <p:txBody><a:bodyPr/><a:lstStyle/><a:p/></p:txBody>
+      </p:sp>`;
+
+    const baseContext = createMockRenderContext();
+    const el = renderShape(
+      parseShapeNode(parseXml(xml)),
+      createMockRenderContext({
+        theme: {
+          ...baseContext.theme,
+          effectStyles: [
+            parseXml(
+              '<a:effectStyle xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:effectLst/></a:effectStyle>',
+            ),
+            parseXml(
+              '<a:effectStyle xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:effectLst><a:outerShdw blurRad="40000" dist="23000" dir="5400000" rotWithShape="0"><a:srgbClr val="000000"><a:alpha val="35000"/></a:srgbClr></a:outerShdw></a:effectLst></a:effectStyle>',
+            ),
+          ],
+        },
+      }),
+    );
+    const projected = el.querySelector('[data-pptx-shape3d-projected-plane="orthographic"]');
+    const shadowFilter = el.querySelector('filter[id^="shape-shadow-"]');
+    const dropShadow = shadowFilter?.querySelector('feDropShadow');
+
+    expect(projected?.getAttribute('filter')).toMatch(/^url\(#shape-shadow-/);
+    expect(dropShadow?.getAttribute('stdDeviation')).toBe('1.99');
+    expect(dropShadow?.getAttribute('dx')).toBe('0.0');
+    expect(dropShadow?.getAttribute('dy')).toBe('2.3');
+    expect(shadowFilter?.getAttribute('color-interpolation-filters')).toBe('sRGB');
+  });
+
+  it('keeps a camera shape with visible text on the ordinary flat renderer', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="85" name="Camera plane with text"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="1905000" cy="952500"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:solidFill><a:srgbClr val="2F75B5"/></a:solidFill>
+          <a:ln><a:noFill/></a:ln>
+          <a:scene3d>
+            <a:camera prst="perspectiveRelaxedModerately" fov="7200000">
+              <a:rot lat="18590633" lon="0" rev="0"/>
+            </a:camera>
+            <a:lightRig rig="threePt" dir="t"/>
+          </a:scene3d>
+          <a:sp3d extrusionH="0"/>
+        </p:spPr>
+        <p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Keep readable</a:t></a:r></a:p></p:txBody>
+      </p:sp>`;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+
+    expect(el.querySelector('[data-pptx-shape3d-projected-plane]')).toBeNull();
+    expect(el.querySelector('svg > path')?.hasAttribute('visibility')).toBe(false);
+    expect(el.textContent).toContain('Keep readable');
+  });
+
+  it('renders the native-backed bottom-bevel front material while preserving live text', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="851" name="Bottom bevel front material"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="5486400" cy="2743200"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:solidFill><a:srgbClr val="4472C4"/></a:solidFill>
+          <a:ln><a:noFill/></a:ln>
+          <a:scene3d>
+            <a:camera prst="orthographicFront"/>
+            <a:lightRig rig="threePt" dir="t"><a:rot lat="0" lon="0" rev="3000000"/></a:lightRig>
+          </a:scene3d>
+          <a:sp3d prstMaterial="dkEdge"><a:bevelB prst="relaxedInset"/></a:sp3d>
+        </p:spPr>
+        <p:style>
+          <a:lnRef idx="1"><a:schemeClr val="accent1"/></a:lnRef>
+          <a:fillRef idx="3"><a:schemeClr val="accent1"/></a:fillRef>
+          <a:effectRef idx="2"><a:schemeClr val="accent1"/></a:effectRef>
+          <a:fontRef idx="minor"><a:schemeClr val="lt1"/></a:fontRef>
+        </p:style>
+        <p:txBody>
+          <a:bodyPr anchor="ctr"/><a:lstStyle/>
+          <a:p><a:pPr algn="ctr"/><a:r><a:rPr sz="2000" b="1"><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></a:rPr><a:t>底部斜面</a:t></a:r></a:p>
+        </p:txBody>
+      </p:sp>`;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+    const projected = el.querySelector('[data-pptx-shape3d-projected-plane="orthographic"]');
+
+    expect(projected?.getAttribute('fill')).toBe('#4676cb');
+    expect(el.querySelector('[data-pptx-shape3d-front-material="dkEdge"]')).toBeTruthy();
+    expect(el.querySelector('svg > path')?.getAttribute('visibility')).toBe('hidden');
+    expect(el.textContent).toContain('底部斜面');
+  });
+
+  it('keeps the native-equivalent transparent bottom-bevel overlay on the flat composition path', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="852" name="Transparent bottom bevel"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="5486400" cy="2743200"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:solidFill><a:srgbClr val="BDC4F0"><a:alpha val="5000"/></a:srgbClr></a:solidFill>
+          <a:ln><a:noFill/></a:ln>
+          <a:scene3d><a:camera prst="orthographicFront"/><a:lightRig rig="threePt" dir="t"><a:rot lat="0" lon="0" rev="3000000"/></a:lightRig></a:scene3d>
+          <a:sp3d prstMaterial="dkEdge"><a:bevelB prst="relaxedInset"/></a:sp3d>
+        </p:spPr>
+        <p:txBody><a:bodyPr anchor="ctr"/><a:lstStyle/><a:p><a:r><a:t>运营管理</a:t></a:r></a:p></p:txBody>
+      </p:sp>`;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+
+    expect(el.querySelector('[data-pptx-shape3d-projected-plane]')).toBeNull();
+    expect(el.querySelector('svg > path')?.getAttribute('fill')).toBe('rgba(189,196,240,0.050)');
+    expect(el.querySelector('svg > path')?.hasAttribute('visibility')).toBe(false);
+    expect(el.textContent).toContain('运营管理');
+  });
+
+  it('projects the exact scene-only text plane while preserving live DOM text', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="86" name="Projected text"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="4206240" cy="3657600"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:noFill/>
+          <a:scene3d>
+            <a:camera prst="perspectiveContrastingRightFacing" fov="5100000">
+              <a:rot lat="0" lon="19532225" rev="0"/>
+            </a:camera>
+            <a:lightRig rig="threePt" dir="t"/>
+          </a:scene3d>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr wrap="none" anchor="ctr"><a:spAutoFit/></a:bodyPr>
+          <a:lstStyle/>
+          <a:p><a:pPr algn="ctr"/><a:r><a:rPr sz="2600"/><a:t>Editable camera text</a:t></a:r></a:p>
+        </p:txBody>
+      </p:sp>`;
+    const ctx = createMockRenderContext({
+      presentation: { ...createMockRenderContext().presentation, width: 1280, height: 720 },
+    });
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), ctx);
+    const textPlane = el.querySelector<HTMLElement>(
+      '[data-pptx-shape3d-projected-text-plane="perspective"]',
+    );
+
+    expect(textPlane).toBeTruthy();
+    expect(textPlane?.style.transform).toMatch(/^matrix3d\(/);
+    expect(textPlane?.style.transformOrigin).toBe('0px 0px');
+    expect(textPlane?.textContent).toContain('Editable camera text');
+    expect(textPlane?.querySelector('canvas, img, svg')).toBeNull();
+  });
+
+  it('does not project a scene-only text plane with a shape style reference', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="87" name="Styled camera text"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="4206240" cy="3657600"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:noFill/>
+          <a:scene3d>
+            <a:camera prst="perspectiveContrastingRightFacing" fov="5100000">
+              <a:rot lat="0" lon="19532225" rev="0"/>
+            </a:camera>
+            <a:lightRig rig="threePt" dir="t"/>
+          </a:scene3d>
+        </p:spPr>
+        <p:style><a:fontRef idx="minor"><a:schemeClr val="tx1"/></a:fontRef></p:style>
+        <p:txBody>
+          <a:bodyPr wrap="none" anchor="ctr"><a:spAutoFit/></a:bodyPr>
+          <a:lstStyle/>
+          <a:p><a:r><a:rPr sz="2600"/><a:t>Styled camera text</a:t></a:r></a:p>
+        </p:txBody>
+      </p:sp>`;
+
+    const el = renderShape(
+      parseShapeNode(parseXml(xml)),
+      createMockRenderContext({
+        presentation: { ...createMockRenderContext().presentation, width: 1280, height: 720 },
+      }),
+    );
+
+    expect(el.querySelector('[data-pptx-shape3d-projected-text-plane]')).toBeNull();
+    expect(el.textContent).toContain('Styled camera text');
+  });
+
+  it('does not promote inherited body properties into the scene-only text tuple', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="88" name="Inherited camera text"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="4206240" cy="3657600"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:noFill/>
+          <a:scene3d>
+            <a:camera prst="perspectiveContrastingRightFacing" fov="5100000">
+              <a:rot lat="0" lon="19532225" rev="0"/>
+            </a:camera>
+            <a:lightRig rig="threePt" dir="t"/>
+          </a:scene3d>
+        </p:spPr>
+        <p:txBody>
+          <a:bodyPr/>
+          <a:lstStyle/>
+          <a:p><a:r><a:t>Inherited camera text</a:t></a:r></a:p>
+        </p:txBody>
+      </p:sp>`;
+    const node = parseShapeNode(parseXml(xml));
+    node.textBody!.layoutBodyProperties = parseXml(`
+      <a:bodyPr xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+                wrap="none" anchor="ctr"><a:spAutoFit/></a:bodyPr>`);
+
+    const el = renderShape(
+      node,
+      createMockRenderContext({
+        presentation: { ...createMockRenderContext().presentation, width: 1280, height: 720 },
+      }),
+    );
+
+    expect(el.querySelector('[data-pptx-shape3d-projected-text-plane]')).toBeNull();
+    expect(el.textContent).toContain('Inherited camera text');
+  });
+
+  it('keeps unsupported perspective shape 3D as the ordinary flat renderer', () => {
+    const xml = `
+      <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr><p:cNvPr id="82" name="Perspective fallback"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="1905000" cy="952500"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:solidFill><a:srgbClr val="4472C4"/></a:solidFill>
+          <a:scene3d><a:camera prst="perspectiveFront"/><a:lightRig rig="threePt" dir="t"/></a:scene3d>
+          <a:sp3d><a:bevelT w="127000" h="127000" prst="circle"/></a:sp3d>
+        </p:spPr>
+      </p:sp>`;
+
+    const el = renderShape(parseShapeNode(parseXml(xml)), createMockRenderContext());
+
+    expect(el.querySelector('[data-pptx-shape3d-bevel]')).toBeNull();
+    expect(el.querySelector('svg > path')?.getAttribute('fill')).toBe('#4472C4');
   });
 });

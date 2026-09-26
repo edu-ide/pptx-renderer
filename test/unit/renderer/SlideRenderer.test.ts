@@ -168,7 +168,130 @@ function makeLazySlideFiles(): PptxFiles {
   };
 }
 
+function makeNestedCompatibleGroupFiles(): PptxFiles {
+  const files = makeLazySlideFiles();
+  files.slides.set(
+    'ppt/slides/slide1.xml',
+    `
+      <sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+           xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+           xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main">
+        <cSld><spTree>
+          <grpSp>
+            <nvGrpSpPr><cNvPr id="10" name="Outer group"/><nvPr/></nvGrpSpPr>
+            <grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1828800" cy="914400"/><a:chOff x="0" y="0"/><a:chExt cx="1828800" cy="914400"/></a:xfrm></grpSpPr>
+            <grpSp>
+              <nvGrpSpPr><cNvPr id="11" name="Inner group"/><nvPr/></nvGrpSpPr>
+              <grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1828800" cy="914400"/><a:chOff x="0" y="0"/><a:chExt cx="1828800" cy="914400"/></a:xfrm></grpSpPr>
+              <mc:AlternateContent>
+                <mc:Choice Requires="p14"><p14:contentPart/></mc:Choice>
+                <mc:Fallback>
+                  <sp>
+                    <nvSpPr><cNvPr id="12" name="First nested"/><nvPr/></nvSpPr>
+                    <spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="914400"/></a:xfrm><a:prstGeom prst="rect"/></spPr>
+                    <txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>First nested</a:t></a:r></a:p></txBody>
+                  </sp>
+                  <sp>
+                    <nvSpPr><cNvPr id="13" name="Second nested"/><nvPr/></nvSpPr>
+                    <spPr><a:xfrm><a:off x="914400" y="0"/><a:ext cx="914400" cy="914400"/></a:xfrm><a:prstGeom prst="rect"/></spPr>
+                    <txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Second nested</a:t></a:r></a:p></txBody>
+                  </sp>
+                </mc:Fallback>
+              </mc:AlternateContent>
+            </grpSp>
+          </grpSp>
+        </spTree></cSld>
+      </sld>
+    `,
+  );
+  return files;
+}
+
 describe('renderSlide', () => {
+  it('reports successful top-level slide nodes without template or group descendants', () => {
+    const pres = buildPresentation(makeNestedCompatibleGroupFiles());
+    const template = parseXml(`
+      <spTree xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <sp>
+          <nvSpPr><cNvPr id="10" name="Template with overlapping id"/><nvPr/></nvSpPr>
+          <spPr><xfrm><off x="0" y="0"/><ext cx="914400" cy="914400"/></xfrm>
+            <prstGeom prst="rect"><avLst/></prstGeom></spPr>
+        </sp>
+      </spTree>
+    `);
+    pres.masters.values().next().value!.spTree = template;
+    pres.layouts.values().next().value!.spTree = template;
+    pres.slides[0].nodes.push(makeTextShape('20', 'Slide text', 'Editable text'));
+    const onNodeRendered = vi.fn();
+
+    const handle = renderSlide(pres, pres.slides[0], { onNodeRendered });
+
+    expect(onNodeRendered.mock.calls.map(([id]) => id)).toEqual(['10', '20']);
+    for (const [, element] of onNodeRendered.mock.calls) {
+      expect(element.parentElement).toBe(handle.element);
+    }
+    expect(onNodeRendered.mock.calls[0][1].textContent).toContain('First nested');
+    expect(onNodeRendered.mock.calls[1][1].textContent).toContain('Editable text');
+    handle.dispose();
+  });
+
+  it('does not report failed nodes as successfully rendered', () => {
+    const pres = makeMinimalPres();
+    const broken = makeShape('broken', 'Broken shape');
+    const failure = new Error('broken source');
+    Object.defineProperty(broken, 'source', {
+      get: () => {
+        throw failure;
+      },
+    });
+    const slide: SlideData = {
+      index: 0,
+      nodes: [broken, makeShape('valid', 'Valid shape')],
+      rels: new Map(),
+      showMasterSp: true,
+    };
+    const onNodeRendered = vi.fn();
+    const onNodeError = vi.fn();
+
+    const handle = renderSlide(pres, slide, { onNodeRendered, onNodeError });
+
+    expect(onNodeError).toHaveBeenCalledWith('broken', failure);
+    expect(onNodeRendered.mock.calls.map(([id]) => id)).toEqual(['valid']);
+    expect(handle.element.querySelector('[title*="broken"]')).not.toBeNull();
+    handle.dispose();
+  });
+
+  it('isolates node callback errors without replacing successful content or stopping rendering', () => {
+    const pres = makeMinimalPres();
+    const slide: SlideData = {
+      index: 0,
+      nodes: [makeShape('first', 'First'), makeShape('second', 'Second')],
+      rels: new Map(),
+      showMasterSp: true,
+    };
+    const failure = new Error('host callback failed');
+    const onNodeRendered = vi.fn().mockImplementationOnce(() => {
+      throw failure;
+    });
+    const onNodeError = vi.fn();
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    try {
+      const handle = renderSlide(pres, slide, { onNodeRendered, onNodeError });
+
+      expect(onNodeRendered.mock.calls.map(([id]) => id)).toEqual(['first', 'second']);
+      expect(onNodeError).not.toHaveBeenCalled();
+      expect(handle.element.textContent).not.toContain('Render Error');
+      expect(warning).toHaveBeenCalledWith(
+        'onNodeRendered callback failed for node first',
+        failure,
+      );
+      handle.dispose();
+    } finally {
+      warning.mockRestore();
+    }
+  });
+
   it('creates container with correct dimensions', () => {
     const pres = makeMinimalPres();
     const slide: SlideData = {
@@ -212,6 +335,18 @@ describe('renderSlide', () => {
 
     expect(slide.nodes).toHaveLength(1);
     expect(handle.element.textContent).toContain('Deferred label');
+  });
+
+  it('renders multiple selected children inside nested groups in source order', () => {
+    const pres = buildPresentation(makeNestedCompatibleGroupFiles());
+
+    const handle = renderSlide(pres, pres.slides[0]);
+    const text = handle.element.textContent ?? '';
+
+    expect(text.indexOf('First nested')).toBeGreaterThanOrEqual(0);
+    expect(text.indexOf('Second nested')).toBeGreaterThan(text.indexOf('First nested'));
+    expect(text.match(/First nested/g)).toHaveLength(1);
+    expect(text.match(/Second nested/g)).toHaveLength(1);
   });
 
   it('renders shape nodes', () => {
@@ -430,6 +565,39 @@ describe('renderSlide', () => {
     const { element: el } = renderSlide(pres, slide);
 
     expect(el.querySelector('img')).not.toBeNull();
+  });
+
+  it('renders compatible AlternateContent shapes from master and layout in draw order', () => {
+    const pres = makeMinimalPres();
+    const alternateTree = (choiceName: string, fallbackName: string) =>
+      parseXml(`
+      <p:spTree xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+                xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main">
+        <mc:AlternateContent>
+          <mc:Choice Requires="p">
+            <p:sp><p:nvSpPr><p:cNvPr id="31" name="${choiceName}"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="914400"/></a:xfrm><a:prstGeom prst="rect"/></p:spPr></p:sp>
+          </mc:Choice>
+          <mc:Fallback>
+            <p:sp><p:nvSpPr><p:cNvPr id="32" name="${fallbackName}"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="914400"/></a:xfrm><a:prstGeom prst="rect"/></p:spPr></p:sp>
+          </mc:Fallback>
+        </mc:AlternateContent>
+      </p:spTree>
+    `);
+    pres.masters.values().next().value!.spTree = alternateTree('Master choice', 'Master fallback');
+    pres.layouts.values().next().value!.spTree = alternateTree('Layout choice', 'Layout fallback');
+    const slide: SlideData = {
+      index: 0,
+      nodes: [],
+      rels: new Map(),
+      slidePath: 'ppt/slides/slide1.xml',
+      showMasterSp: true,
+    };
+
+    const { element } = renderSlide(pres, slide);
+
+    expect(element.querySelectorAll('svg')).toHaveLength(2);
   });
 
   it('skips placeholder shapes from master/layout spTree', () => {

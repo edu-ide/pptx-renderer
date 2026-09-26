@@ -3,6 +3,11 @@
  * (themes, masters, layouts, slides) into a single PresentationData structure.
  */
 
+import {
+  findMatchingLayoutPlaceholder,
+  findMatchingMasterPlaceholder,
+  getPlaceholderInfo,
+} from './placeholderMatching';
 import { PptxFiles } from '../parser/ZipParser';
 import type { MediaResolver } from '../utils/media';
 import { parseXml, SafeXmlNode } from '../parser/XmlParser';
@@ -12,12 +17,14 @@ import { ThemeData, parseTheme } from './Theme';
 import { MasterData, parseMaster } from './Master';
 import { LayoutData, parseLayout, PlaceholderEntry } from './Layout';
 import { SlideData, SlideNode, createLazySlide, materializeSlideData, parseSlide } from './Slide';
-import { BaseNodeData, PlaceholderInfo, Position, Size } from './nodes/BaseNode';
+import { BaseNodeData, PlaceholderInfo, Position, Size, findXfrm } from './nodes/BaseNode';
 import type { GroupNodeData } from './nodes/GroupNode';
 
 export interface PresentationData {
   width: number;
   height: number;
+  /** Presentation slide-number offset. Library-built models always set this; older manual models may omit it. */
+  firstSlideNum?: number;
   slides: SlideData[];
   layouts: Map<string, LayoutData>;
   masters: Map<string, MasterData>;
@@ -27,6 +34,9 @@ export interface PresentationData {
   masterToTheme: Map<string, string>;
   media: Map<string, Uint8Array>;
   mediaResolver?: MediaResolver;
+  /** Embedded font faces, isolated behind a presentation-specific CSS family. */
+  embeddedFonts?: EmbeddedFontFaceData[];
+  embeddedFontFamilies?: Map<string, string>;
   tableStyles?: SafeXmlNode;
   /** Presentation-wide default text style from ppt/presentation.xml. */
   defaultTextStyle?: SafeXmlNode;
@@ -40,6 +50,14 @@ export interface PresentationData {
   /** Chart color style parts keyed by chart part path. */
   chartColorStyles?: Map<string, SafeXmlNode>;
   isWps: boolean;
+}
+
+export interface EmbeddedFontFaceData {
+  family: string;
+  renderFamily: string;
+  data: Uint8Array;
+  weight: '400' | '700';
+  style: 'normal' | 'italic';
 }
 
 export interface BuildPresentationOptions {
@@ -122,6 +140,45 @@ function findRelsByType(rels: Map<string, RelEntry>, typeSubstring: string): [st
   return results;
 }
 
+let embeddedFontNamespace = 0;
+
+function parseEmbeddedFonts(
+  presRoot: SafeXmlNode,
+  presRels: Map<string, RelEntry>,
+  files: PptxFiles,
+): { faces: EmbeddedFontFaceData[]; families: Map<string, string> } {
+  const faces: EmbeddedFontFaceData[] = [];
+  const families = new Map<string, string>();
+  const namespace = ++embeddedFontNamespace;
+  const faceTypes = [
+    ['regular', '400', 'normal'],
+    ['bold', '700', 'normal'],
+    ['italic', '400', 'italic'],
+    ['boldItalic', '700', 'italic'],
+  ] as const;
+
+  for (const embeddedFont of presRoot.child('embeddedFontLst').children('embeddedFont')) {
+    const family = embeddedFont.child('font').attr('typeface')?.trim();
+    if (!family) continue;
+
+    const renderFamily = `__pptx_embedded_${namespace}_${families.size}`;
+    let foundFace = false;
+    for (const [elementName, weight, style] of faceTypes) {
+      const face = embeddedFont.child(elementName);
+      const rId = face.attr('id') ?? face.attr('r:id');
+      const rel = rId ? presRels.get(rId) : undefined;
+      if (!rel) continue;
+      const data = files.fonts?.get(resolveRelTarget('ppt', rel.target));
+      if (!data) continue;
+      faces.push({ family, renderFamily, data, weight, style });
+      foundFace = true;
+    }
+    if (foundFace) families.set(family.toLowerCase(), renderFamily);
+  }
+
+  return { faces, families };
+}
+
 /**
  * Build the complete PresentationData from extracted PPTX files.
  *
@@ -142,12 +199,14 @@ export function buildPresentation(
   const sldSz = presRoot.child('sldSz');
   const width = emuToPx(sldSz.numAttr('cx') ?? 9144000); // default 10 inches
   const height = emuToPx(sldSz.numAttr('cy') ?? 6858000); // default 7.5 inches
+  const firstSlideNum = presRoot.numAttr('firstSlideNum') ?? 1;
 
   // --- WPS detection ---
   const isWps = detectWps(files.presentation);
 
   // --- Presentation default text style ---
   const defaultTextStyle = presRoot.child('defaultTextStyle');
+  const embeddedFonts = parseEmbeddedFonts(presRoot, presRels, files);
 
   // --- Parse themes ---
   const themes = new Map<string, ThemeData>();
@@ -331,6 +390,7 @@ export function buildPresentation(
   const result: PresentationData = {
     width,
     height,
+    firstSlideNum,
     slides,
     layouts,
     masters,
@@ -340,6 +400,8 @@ export function buildPresentation(
     masterToTheme,
     media: files.media,
     mediaResolver: files.mediaResolver,
+    embeddedFonts: embeddedFonts.faces,
+    embeddedFontFamilies: embeddedFonts.families,
     tableStyles,
     defaultTextStyle: defaultTextStyle.exists() ? defaultTextStyle : undefined,
     charts,
@@ -363,28 +425,6 @@ export function buildPresentation(
 // ---------------------------------------------------------------------------
 
 /**
- * Extract placeholder info (type, idx) from a raw placeholder XML node
- * stored in layout/master.
- */
-function getPhInfo(phNode: SafeXmlNode): { type?: string; idx?: number } {
-  // Try nvSpPr > nvPr > ph, or nvPicPr > nvPr > ph
-  for (const wrapper of ['nvSpPr', 'nvPicPr', 'nvGrpSpPr', 'nvGraphicFramePr', 'nvCxnSpPr']) {
-    const nvWrapper = phNode.child(wrapper);
-    if (nvWrapper.exists()) {
-      const nvPr = nvWrapper.child('nvPr');
-      const ph = nvPr.child('ph');
-      if (ph.exists()) {
-        const type = ph.attr('type');
-        const idxStr = ph.attr('idx');
-        const idx = idxStr !== undefined ? Number(idxStr) : undefined;
-        return { type, idx: idx !== undefined && !isNaN(idx) ? idx : undefined };
-      }
-    }
-  }
-  return {};
-}
-
-/**
  * Extract xfrm position/size from a raw placeholder XML node.
  */
 function getPhXfrm(phNode: SafeXmlNode): { position: Position; size: Size } | undefined {
@@ -404,37 +444,6 @@ function getPhXfrm(phNode: SafeXmlNode): { position: Position; size: Size } | un
     }
   }
   return undefined;
-}
-
-/**
- * Find a matching layout placeholder (PlaceholderEntry); use entry.absoluteXfrm when present.
- */
-function findMatchingLayoutPlaceholder(
-  placeholders: PlaceholderEntry[],
-  type?: string,
-  idx?: number,
-): PlaceholderEntry | undefined {
-  let typeMatch: PlaceholderEntry | undefined;
-
-  for (const entry of placeholders) {
-    const info = getPhInfo(entry.node);
-
-    if (type !== undefined && info.type === type && idx !== undefined && info.idx === idx) {
-      return entry;
-    }
-    if (type !== undefined && info.type === type && !typeMatch) {
-      typeMatch = entry;
-    }
-    if (idx !== undefined && info.idx === idx && type === undefined && info.type === undefined) {
-      return entry;
-    }
-  }
-  if (type === undefined && idx !== undefined) {
-    for (const entry of placeholders) {
-      if (getPhInfo(entry.node).idx === idx) return entry;
-    }
-  }
-  return typeMatch;
 }
 
 function getMasterPlaceholderEntries(master: MasterData): PlaceholderEntry[] {
@@ -485,7 +494,7 @@ function getPhBodyPr(phNode: SafeXmlNode): SafeXmlNode | undefined {
 function inheritPlaceholderType(target: PlaceholderInfo, sourceNode: SafeXmlNode): void {
   if (target.type) return;
 
-  const source = getPhInfo(sourceNode);
+  const source = getPlaceholderInfo(sourceNode);
   if (source.type) {
     target.type = source.type;
   }
@@ -535,79 +544,50 @@ export function resolveNodePlaceholderInheritance(
 ): void {
   if (!node.placeholder) return;
 
-  const { type, idx } = node.placeholder;
-  const findMasterMatch = (): PlaceholderEntry | undefined =>
-    master
-      ? findMatchingLayoutPlaceholder(
-          getMasterPlaceholderEntries(master),
-          node.placeholder?.type ?? type,
-          idx,
-        )
-      : undefined;
-  const sizeIsEmpty = node.size.w === 0 && node.size.h === 0;
-  const positionLooksDefault = node.position.y < 5; // y=0 or near top → use layout position
+  const layoutMatch = layout
+    ? findMatchingLayoutPlaceholder(layout.placeholders, node.placeholder, (entry) =>
+        getPlaceholderInfo(entry.node),
+      )
+    : undefined;
+  if (layoutMatch) inheritPlaceholderType(node.placeholder, layoutMatch.node);
+  // Layout -> master uses type, never idx: master idx values may collide with unrelated types.
+  const masterMatch = master
+    ? findMatchingMasterPlaceholder(
+        getMasterPlaceholderEntries(master),
+        layoutMatch ? getPlaceholderInfo(layoutMatch.node).type : node.placeholder?.type,
+        (entry) => getPlaceholderInfo(entry.node),
+      )
+    : undefined;
 
-  if (layout) {
-    const layoutMatch = findMatchingLayoutPlaceholder(layout.placeholders, type, idx);
-    if (layoutMatch) {
-      inheritPlaceholderType(node.placeholder, layoutMatch.node);
-
-      const rawXfrm = layoutMatch.absoluteXfrm ?? getPhXfrm(layoutMatch.node);
-      if (rawXfrm) {
-        const xfrm = resolveInheritedXfrm(rawXfrm, options);
-        if (sizeIsEmpty) {
-          node.position = xfrm.position;
-          node.size = xfrm.size;
-        } else if (positionLooksDefault) {
-          node.position = xfrm.position;
-        }
-      }
-
-      // Inherit bodyPr from layout placeholder for text rendering (anchor, insets, etc.)
-      if ('textBody' in node && node.textBody) {
-        const layoutBodyPr = getPhBodyPr(layoutMatch.node);
-        if (layoutBodyPr) {
-          node.textBody.layoutBodyProperties = layoutBodyPr;
-        }
-      }
-
-      if (rawXfrm) {
-        const masterMatch = findMasterMatch();
-        if (masterMatch) {
-          inheritPlaceholderType(node.placeholder, masterMatch.node);
-          if ('textBody' in node && node.textBody && !node.textBody.layoutBodyProperties) {
-            const masterBodyPr = getPhBodyPr(masterMatch.node);
-            if (masterBodyPr) {
-              node.textBody.layoutBodyProperties = masterBodyPr;
-            }
-          }
-        }
-        return;
-      }
-    }
+  const ownXfrm = findXfrm(node.source);
+  const ownOff = ownXfrm.child('off');
+  const ownExt = ownXfrm.child('ext');
+  const inherited = [layoutMatch, masterMatch]
+    .map((entry) => entry && (entry.absoluteXfrm ?? getPhXfrm(entry.node)))
+    .find((xfrm) => xfrm !== undefined);
+  if (inherited) {
+    const xfrm = resolveInheritedXfrm(inherited, options);
+    // Presence, not numeric value, decides inheritance. Zero positions/extents are explicit.
+    if (ownOff.attr('x') === undefined) node.position.x = xfrm.position.x;
+    if (ownOff.attr('y') === undefined) node.position.y = xfrm.position.y;
+    if (ownExt.attr('cx') === undefined) node.size.w = xfrm.size.w;
+    if (ownExt.attr('cy') === undefined) node.size.h = xfrm.size.h;
   }
 
-  const masterMatch = findMasterMatch();
-  if (masterMatch) {
-    inheritPlaceholderType(node.placeholder, masterMatch.node);
-
-    const rawXfrm = masterMatch.absoluteXfrm ?? getPhXfrm(masterMatch.node);
-    if (rawXfrm) {
-      const xfrm = resolveInheritedXfrm(rawXfrm, options);
-      if (sizeIsEmpty) {
-        node.position = xfrm.position;
-        node.size = xfrm.size;
-      } else if (positionLooksDefault) {
-        node.position = xfrm.position;
+  if ('textBody' in node && node.textBody) {
+    const layoutBodyPr = layoutMatch && getPhBodyPr(layoutMatch.node);
+    const masterBodyPr = masterMatch && getPhBodyPr(masterMatch.node);
+    if (layoutBodyPr && masterBodyPr) {
+      // Placeholder attributes inherit independently through empty/partial layout bodyPr.
+      // Keep child-mode behavior unchanged; this evidence covers anchor and insets only.
+      const merged = layoutBodyPr.element!.cloneNode(true) as Element;
+      for (const attr of ['anchor', 'lIns', 'tIns', 'rIns', 'bIns']) {
+        const value = masterBodyPr.attr(attr);
+        if (!merged.hasAttribute(attr) && value !== undefined) merged.setAttribute(attr, value);
       }
-    }
-
-    // Inherit bodyPr from master placeholder as fallback
-    if ('textBody' in node && node.textBody && !node.textBody.layoutBodyProperties) {
-      const masterBodyPr = getPhBodyPr(masterMatch.node);
-      if (masterBodyPr) {
-        node.textBody.layoutBodyProperties = masterBodyPr;
-      }
+      node.textBody.layoutBodyProperties = new SafeXmlNode(merged);
+    } else {
+      node.textBody.layoutBodyProperties = layoutBodyPr ?? masterBodyPr;
     }
   }
 }

@@ -9,10 +9,14 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { renderGroup } from '../../../src/renderer/GroupRenderer';
+import { renderShape } from '../../../src/renderer/ShapeRenderer';
+import { renderTable } from '../../../src/renderer/TableRenderer';
 import { parseXml, SafeXmlNode } from '../../../src/parser/XmlParser';
 import { createMockRenderContext } from '../helpers/mockContext';
 import type { GroupNodeData } from '../../../src/model/nodes/GroupNode';
+import type { TableNodeData } from '../../../src/model/nodes/TableNode';
 import type { RenderContext } from '../../../src/renderer/RenderContext';
+import { parseShape3DProperties, type Shape3DProperties } from '../../../src/model/nodes/Shape3D';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -41,6 +45,7 @@ function makeGroup(
     flipH?: boolean;
     flipV?: boolean;
     source?: SafeXmlNode;
+    shape3d?: Shape3DProperties;
   } = {},
 ): GroupNodeData {
   const w = opts.w ?? 200;
@@ -55,6 +60,7 @@ function makeGroup(
     flipH: opts.flipH ?? false,
     flipV: opts.flipV ?? false,
     source: opts.source ?? emptyXml,
+    shape3d: opts.shape3d,
     childOffset: { x: opts.childOffsetX ?? 0, y: opts.childOffsetY ?? 0 },
     childExtent: { w: opts.childExtentW ?? w, h: opts.childExtentH ?? h },
     children,
@@ -87,6 +93,58 @@ function makeSpXml(id = '1', name = 'Shape'): SafeXmlNode {
         <a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="914400"/></a:xfrm>
         <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
       </p:spPr>
+    </p:sp>
+  `);
+}
+
+function makeDonutSpXml(): SafeXmlNode {
+  return xml(`
+    <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+          xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <p:nvSpPr>
+        <p:cNvPr id="18" name="Adjusted donut"/><p:cNvSpPr/><p:nvPr/>
+      </p:nvSpPr>
+      <p:spPr>
+        <a:xfrm><a:off x="0" y="0"/><a:ext cx="1905000" cy="952500"/></a:xfrm>
+        <a:prstGeom prst="donut">
+          <a:avLst><a:gd name="adj" fmla="val 10000"/></a:avLst>
+        </a:prstGeom>
+        <a:solidFill><a:srgbClr val="4472C4"/></a:solidFill>
+      </p:spPr>
+    </p:sp>
+  `);
+}
+
+function makeTextSpXml(opts: {
+  id?: string;
+  name?: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  text?: string;
+}): SafeXmlNode {
+  return xml(`
+    <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+          xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <p:nvSpPr>
+        <p:cNvPr id="${opts.id ?? 'txt1'}" name="${opts.name ?? 'Text Box'}"/>
+        <p:cNvSpPr txBox="1"/>
+        <p:nvPr/>
+      </p:nvSpPr>
+      <p:spPr>
+        <a:xfrm>
+          <a:off x="${opts.x}" y="${opts.y}"/>
+          <a:ext cx="${opts.w}" cy="${opts.h}"/>
+        </a:xfrm>
+        <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+        <a:noFill/>
+      </p:spPr>
+      <p:txBody>
+        <a:bodyPr/>
+        <a:lstStyle/>
+        <a:p><a:r><a:t>${opts.text ?? 'Readable text'}</a:t></a:r></a:p>
+      </p:txBody>
     </p:sp>
   `);
 }
@@ -215,7 +273,7 @@ function makeCxnSpXml(id = '2'): SafeXmlNode {
 /**
  * A minimal picture (p:pic) XML child.
  */
-function makePicXml(id = '3'): SafeXmlNode {
+function makePicXml(id = '3', opts: { blipEffect?: boolean } = {}): SafeXmlNode {
   return xml(`
     <p:pic xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
@@ -226,7 +284,7 @@ function makePicXml(id = '3'): SafeXmlNode {
         <p:nvPr/>
       </p:nvPicPr>
       <p:blipFill>
-        <a:blip r:embed="rId1"/>
+        <a:blip r:embed="rId1">${opts.blipEffect ? '<a:alphaModFix amt="50000"/>' : ''}</a:blip>
         <a:stretch><a:fillRect/></a:stretch>
       </p:blipFill>
       <p:spPr>
@@ -302,7 +360,22 @@ function makeNestedGrpFillXml(id = '40'): SafeXmlNode {
 /**
  * A graphicFrame containing a table (a:tbl).
  */
-function makeTableFrameXml(id = '5'): SafeXmlNode {
+function makeTableFrameXml(
+  id = '5',
+  opts: {
+    frameWidth?: number;
+    frameHeight?: number;
+    gridWidth?: number;
+    rowHeight?: number;
+    rotation?: number;
+  } = {},
+): SafeXmlNode {
+  const toEmu = (px: number) => Math.round(px * 9525);
+  const frameWidth = opts.frameWidth ?? 96;
+  const frameHeight = opts.frameHeight ?? 48;
+  const gridWidth = opts.gridWidth ?? frameWidth;
+  const rowHeight = opts.rowHeight ?? frameHeight;
+  const rotation = opts.rotation ? ` rot="${opts.rotation * 60000}"` : '';
   return xml(`
     <p:graphicFrame xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
                    xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
@@ -311,15 +384,15 @@ function makeTableFrameXml(id = '5'): SafeXmlNode {
         <p:cNvGraphicFramePr/>
         <p:nvPr/>
       </p:nvGraphicFramePr>
-      <p:xfrm>
-        <a:off x="0" y="0"/><a:ext cx="914400" cy="457200"/>
+      <p:xfrm${rotation}>
+        <a:off x="0" y="0"/><a:ext cx="${toEmu(frameWidth)}" cy="${toEmu(frameHeight)}"/>
       </p:xfrm>
       <a:graphic>
         <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">
           <a:tbl>
             <a:tblPr/>
-            <a:tblGrid><a:gridCol w="914400"/></a:tblGrid>
-            <a:tr h="457200">
+            <a:tblGrid><a:gridCol w="${toEmu(gridWidth)}"/></a:tblGrid>
+            <a:tr h="${toEmu(rowHeight)}">
               <a:tc><a:txBody><a:p/></a:txBody></a:tc>
             </a:tr>
           </a:tbl>
@@ -499,9 +572,170 @@ function makeCtxWithDiagram(): RenderContext {
 // ---------------------------------------------------------------------------
 
 describe('renderGroup — wrapper element', () => {
+  it('projects a bounded two-picture group through one group-local camera layer', () => {
+    const groupSource = xml(`
+      <p:grpSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+               xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvGrpSpPr><p:cNvPr id="1" name="G"/><p:nvPr/></p:nvGrpSpPr>
+        <p:grpSpPr>
+          <a:xfrm>
+            <a:off x="0" y="0"/><a:ext cx="1905000" cy="952500"/>
+            <a:chOff x="0" y="0"/><a:chExt cx="1905000" cy="952500"/>
+          </a:xfrm>
+          <a:scene3d>
+            <a:camera prst="perspectiveLeft" fov="5700000">
+              <a:rot lat="0" lon="1500000" rev="0"/>
+            </a:camera>
+            <a:lightRig rig="threePt" dir="t"/>
+          </a:scene3d>
+        </p:grpSpPr>
+      </p:grpSp>
+    `);
+    const shape3d = parseShape3DProperties(groupSource.child('grpSpPr'));
+    const group = makeGroup([makePicXml('30'), makePicXml('31')], {
+      source: groupSource,
+      shape3d,
+      x: 40,
+      y: 50,
+      w: 200,
+      h: 100,
+    });
+
+    const el = renderGroup(
+      group,
+      createMockRenderContext({ groupDepth: 3, groupTransformHasRotationOrFlip: false }),
+      stubRenderNode,
+    );
+    const layer = el.querySelector<HTMLElement>('[data-pptx-shape3d-projected-group-plane]');
+
+    expect(el.style.left).toBe('40px');
+    expect(el.style.top).toBe('50px');
+    expect(el.style.transform).toBe('');
+    expect(el.children).toHaveLength(1);
+    const content = layer?.querySelector<HTMLElement>('[data-pptx-shape3d-group-content]');
+    const lighting = layer?.querySelector<HTMLElement>('[data-pptx-shape3d-group-lighting]');
+    expect(content?.children).toHaveLength(2);
+    expect(content?.style.filter).toMatch(/^brightness\(/);
+    expect(lighting?.style.backgroundColor).toBe('rgba(255, 255, 255, 0.02)');
+    expect(layer?.lastElementChild).toBe(lighting);
+    expect(layer?.style.transform).toMatch(/^matrix3d\(/);
+  });
+
+  it('leaves an unsupported group flat and exposes the fallback reason', () => {
+    const groupSource = xml(`
+      <p:grpSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+               xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvGrpSpPr><p:cNvPr id="1" name="G"/><p:nvPr/></p:nvGrpSpPr>
+        <p:grpSpPr>
+          <a:xfrm/>
+          <a:scene3d>
+            <a:camera prst="perspectiveLeft" fov="5700000">
+              <a:rot lat="0" lon="1500000" rev="0"/>
+            </a:camera>
+            <a:lightRig rig="threePt" dir="t"/>
+          </a:scene3d>
+        </p:grpSpPr>
+      </p:grpSp>
+    `);
+    const group = makeGroup([makePicXml('30')], {
+      source: groupSource,
+      shape3d: parseShape3DProperties(groupSource.child('grpSpPr')),
+    });
+
+    const el = renderGroup(group, createMockRenderContext(), stubRenderNode);
+
+    expect(el.dataset.pptxShape3dFallback).toBe('group-child-profile');
+    expect(el.querySelector('[data-pptx-shape3d-projected-group-plane]')).toBeNull();
+    expect(el.children).toHaveLength(1);
+  });
+
+  it('keeps a two-picture group flat when a child has an unverified blip effect', () => {
+    const groupSource = xml(`
+      <p:grpSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+               xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvGrpSpPr><p:cNvPr id="1" name="G"/><p:nvPr/></p:nvGrpSpPr>
+        <p:grpSpPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="1905000" cy="952500"/>
+            <a:chOff x="0" y="0"/><a:chExt cx="1905000" cy="952500"/>
+          </a:xfrm>
+          <a:scene3d><a:camera prst="perspectiveLeft" fov="5700000">
+            <a:rot lat="0" lon="1500000" rev="0"/>
+          </a:camera><a:lightRig rig="threePt" dir="t"/></a:scene3d>
+        </p:grpSpPr>
+      </p:grpSp>
+    `);
+    const group = makeGroup([makePicXml('30', { blipEffect: true }), makePicXml('31')], {
+      source: groupSource,
+      shape3d: parseShape3DProperties(groupSource.child('grpSpPr')),
+    });
+
+    const el = renderGroup(group, createMockRenderContext(), stubRenderNode);
+
+    expect(el.dataset.pptxShape3dFallback).toBe('group-child-profile');
+    expect(el.querySelector('[data-pptx-shape3d-projected-group-plane]')).toBeNull();
+  });
+
+  it('marks descendants when the current group declares a 3D scene', () => {
+    const groupSource = xml(`
+      <p:grpSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+               xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvGrpSpPr><p:cNvPr id="1" name="G"/><p:nvPr/></p:nvGrpSpPr>
+        <p:grpSpPr><a:xfrm/><a:scene3d>
+          <a:camera prst="perspectiveLeft" fov="5700000">
+            <a:rot lat="0" lon="1500000" rev="0"/>
+          </a:camera><a:lightRig rig="threePt" dir="t"/>
+        </a:scene3d></p:grpSpPr>
+      </p:grpSp>
+    `);
+    const group = makeGroup([makePicXml('30'), makePicXml('31')], {
+      source: groupSource,
+      shape3d: parseShape3DProperties(groupSource.child('grpSpPr')),
+    });
+    const observed: boolean[] = [];
+
+    renderGroup(group, createMockRenderContext(), (_node, childCtx) => {
+      observed.push(Boolean(childCtx.groupAncestorHas3dScene));
+      return document.createElement('div');
+    });
+
+    expect(observed).toEqual([true, true]);
+  });
+
+  it('marks child render contexts as grouped for bounded renderer lanes', () => {
+    const group = makeGroup([makeSpXml()]);
+    let observedDepth: number | undefined;
+
+    renderGroup(group, createMockRenderContext(), (_childNode, childCtx) => {
+      observedDepth = childCtx.groupDepth;
+      return document.createElement('div');
+    });
+
+    expect(observedDepth).toBe(1);
+  });
+
+  it('reports the child coordinate scale after a non-identity group transform', () => {
+    const group = makeGroup([makeSpXml()], {
+      w: 160,
+      h: 280,
+      childExtentW: 200,
+      childExtentH: 200,
+    });
+    let observedScale: RenderContext['groupChildScale'];
+
+    renderGroup(group, createMockRenderContext(), (_childNode, childCtx) => {
+      observedScale = childCtx.groupChildScale;
+      return document.createElement('div');
+    });
+
+    expect(observedScale?.x).toBeCloseTo(0.8, 8);
+    expect(observedScale?.y).toBeCloseTo(1.4, 8);
+  });
+
   it('returns an absolutely positioned div with correct position and size', () => {
     const group = makeGroup([], { x: 50, y: 30, w: 300, h: 150 });
-    const el = renderGroup(group, createMockRenderContext(), stubRenderNode);
+    const el = renderGroup(group, createMockRenderContext(), (childNode, childCtx) =>
+      renderShape(childNode as any, childCtx),
+    );
 
     expect(el.tagName.toLowerCase()).toBe('div');
     expect(el.style.position).toBe('absolute');
@@ -524,25 +758,159 @@ describe('renderGroup — wrapper element', () => {
     expect(el.style.transformOrigin).toBe('center center');
   });
 
-  it('applies scaleX(-1) when flipH is true', () => {
+  it('does not mirror an empty group wrapper when flipH is true', () => {
     const group = makeGroup([], { flipH: true });
     const el = renderGroup(group, createMockRenderContext(), stubRenderNode);
-    expect(el.style.transform).toContain('scaleX(-1)');
+    expect(el.style.transform).toBe('');
   });
 
-  it('applies scaleY(-1) when flipV is true', () => {
+  it('mirrors child geometry for flipH without flipping the group text container (issue #3)', () => {
+    const child = makeTextSpXml({
+      x: 10 * 9525,
+      y: 20 * 9525,
+      w: 60 * 9525,
+      h: 30 * 9525,
+      text: '请输入标题',
+    });
+    const group = makeGroup([child], {
+      w: 200,
+      h: 100,
+      childExtentW: 200,
+      childExtentH: 100,
+      flipH: true,
+    });
+
+    let capturedChild: any;
+    const el = renderGroup(group, createMockRenderContext(), (childNode, childCtx) => {
+      capturedChild = childNode;
+      return renderShape(childNode as any, childCtx);
+    });
+    const renderedChild = el.firstElementChild as HTMLElement;
+
+    expect(el.style.transform).not.toContain('scaleX(-1)');
+    expect(capturedChild.flipH).toBe(true);
+    expect(renderedChild.style.left).toBe('130px');
+    expect(renderedChild.textContent).toContain('请输入标题');
+  });
+
+  it('mirrors child geometry for flipV and lets shape text stay vertically flipped', () => {
+    const child = makeTextSpXml({
+      x: 10 * 9525,
+      y: 20 * 9525,
+      w: 60 * 9525,
+      h: 30 * 9525,
+      text: 'Vertical flip text',
+    });
+    const group = makeGroup([child], {
+      w: 200,
+      h: 100,
+      childExtentW: 200,
+      childExtentH: 100,
+      flipV: true,
+    });
+
+    let capturedChild: any;
+    const el = renderGroup(group, createMockRenderContext(), (childNode, childCtx) => {
+      capturedChild = childNode;
+      return renderShape(childNode as any, childCtx);
+    });
+    const renderedChild = el.firstElementChild as HTMLElement;
+
+    expect(el.style.transform).not.toContain('scaleY(-1)');
+    expect(capturedChild.flipV).toBe(true);
+    expect(renderedChild.style.top).toBe('50px');
+    expect(renderedChild.textContent).toContain('Vertical flip text');
+    const textContainer = Array.from(renderedChild.querySelectorAll('div')).find((div) =>
+      div.textContent?.includes('Vertical flip text'),
+    ) as HTMLElement | undefined;
+    expect(textContainer?.style.transform ?? '').toContain('scaleX(-1)');
+    expect(textContainer?.style.transform ?? '').not.toContain('scaleY(-1)');
+  });
+
+  it('mirrors child geometry for flipH and flipV together', () => {
+    const child = makeTextSpXml({
+      x: 10 * 9525,
+      y: 20 * 9525,
+      w: 60 * 9525,
+      h: 30 * 9525,
+      text: 'Double flip text',
+    });
+    const group = makeGroup([child], {
+      w: 200,
+      h: 100,
+      childExtentW: 200,
+      childExtentH: 100,
+      flipH: true,
+      flipV: true,
+    });
+
+    let capturedChild: any;
+    const el = renderGroup(group, createMockRenderContext(), (childNode, childCtx) => {
+      capturedChild = childNode;
+      return renderShape(childNode as any, childCtx);
+    });
+    const renderedChild = el.firstElementChild as HTMLElement;
+
+    expect(el.style.transform).not.toContain('scaleX(-1)');
+    expect(el.style.transform).not.toContain('scaleY(-1)');
+    expect(capturedChild.flipH).toBe(true);
+    expect(capturedChild.flipV).toBe(true);
+    expect(renderedChild.style.left).toBe('130px');
+    expect(renderedChild.style.top).toBe('50px');
+    expect(renderedChild.textContent).toContain('Double flip text');
+    const textContainer = Array.from(renderedChild.querySelectorAll('div')).find((div) =>
+      div.textContent?.includes('Double flip text'),
+    ) as HTMLElement | undefined;
+    expect(textContainer?.style.transform ?? '').toContain('scaleX(-1)');
+    expect(textContainer?.style.transform ?? '').not.toContain('scaleY(-1)');
+  });
+
+  it('does not mirror an empty group wrapper when flipV is true', () => {
     const group = makeGroup([], { flipV: true });
     const el = renderGroup(group, createMockRenderContext(), stubRenderNode);
-    expect(el.style.transform).toContain('scaleY(-1)');
+    expect(el.style.transform).toBe('');
   });
 
-  it('combines rotation and flip transforms', () => {
+  it('keeps rotation on the group wrapper while child remapping handles flips', () => {
     const group = makeGroup([], { rotation: 90, flipH: true, flipV: true });
     const el = renderGroup(group, createMockRenderContext(), stubRenderNode);
     const t = el.style.transform;
     expect(t).toContain('rotate(90deg)');
-    expect(t).toContain('scaleX(-1)');
-    expect(t).toContain('scaleY(-1)');
+    expect(t).not.toContain('scaleX(-1)');
+    expect(t).not.toContain('scaleY(-1)');
+  });
+
+  it('marks descendants when an ancestor group rotates or flips', () => {
+    const cases = [
+      makeGroup([makeSpXml()], { rotation: 45 }),
+      makeGroup([makeSpXml()], { flipH: true }),
+      makeGroup([makeSpXml()], { flipV: true }),
+    ];
+
+    for (const group of cases) {
+      let observed: RenderContext['groupTransformHasRotationOrFlip'];
+      renderGroup(group, createMockRenderContext(), (_childNode, childCtx) => {
+        observed = childCtx.groupTransformHasRotationOrFlip;
+        return document.createElement('div');
+      });
+      expect(observed).toBe(true);
+    }
+  });
+
+  it('preserves a transformed-ancestor marker through an untransformed nested group', () => {
+    const group = makeGroup([makeSpXml()]);
+    let observed: RenderContext['groupTransformHasRotationOrFlip'];
+
+    renderGroup(
+      group,
+      createMockRenderContext({ groupTransformHasRotationOrFlip: true }),
+      (_childNode, childCtx) => {
+        observed = childCtx.groupTransformHasRotationOrFlip;
+        return document.createElement('div');
+      },
+    );
+
+    expect(observed).toBe(true);
   });
 
   it('renders no children when children array is empty', () => {
@@ -557,6 +925,29 @@ describe('renderGroup — wrapper element', () => {
 // ---------------------------------------------------------------------------
 
 describe('renderGroup — group-level effects', () => {
+  it('builds a group reflection from the completed child subtree', () => {
+    const groupSource = xml(`
+      <p:grpSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+               xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvGrpSpPr><p:cNvPr id="1" name="G"/><p:nvPr/></p:nvGrpSpPr>
+        <p:grpSpPr>
+          <a:xfrm>
+            <a:off x="0" y="0"/><a:ext cx="914400" cy="914400"/>
+            <a:chOff x="0" y="0"/><a:chExt cx="914400" cy="914400"/>
+          </a:xfrm>
+          <a:effectLst><a:reflection/></a:effectLst>
+        </p:grpSpPr>
+      </p:grpSp>
+    `);
+    const group = makeGroup([makeSpXml('42')], { source: groupSource });
+
+    const el = renderGroup(group, createMockRenderContext(), stubRenderNode);
+    const reflectedSource = el.querySelector<HTMLElement>('[data-pptx-reflection-source="true"]');
+
+    expect(reflectedSource?.querySelector('[data-node-id="42"]')).toBeTruthy();
+    expect(el.querySelector(':scope > [data-node-id="42"]')).toBeTruthy();
+  });
+
   it('applies grpSpPr outerShdw to the group wrapper', () => {
     const groupSource = xml(`
       <p:grpSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
@@ -608,7 +999,7 @@ describe('renderGroup — group-level effects', () => {
     expect(el.style.filter).toBe('');
   });
 
-  it('applies grpSpPr reflection to the group wrapper', () => {
+  it('renders grpSpPr reflection as an explicit mirrored layer', () => {
     const groupSource = xml(`
       <p:grpSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
                xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
@@ -629,11 +1020,14 @@ describe('renderGroup — group-level effects', () => {
 
     const el = renderGroup(group, createMockRenderContext(), stubRenderNode);
 
-    expect((el.style as any).webkitBoxReflect).toContain('linear-gradient');
-    expect((el.style as any).webkitBoxReflect).toContain('below');
+    const reflection = el.querySelector<HTMLElement>('[data-pptx-reflection-layer="true"]');
+    expect((el.style as any).webkitBoxReflect ?? '').toBe('');
+    expect(reflection?.style.top).toBe('100px');
+    expect(reflection?.style.filter).toContain('blur(1.3333px)');
+    expect(reflection?.style.maskImage).toContain('180deg');
   });
 
-  it('uses reflection defaults when optional alpha and position attributes are omitted', () => {
+  it('uses ECMA-376 defaults for an attribute-empty group reflection', () => {
     const groupSource = xml(`
       <p:grpSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
                xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
@@ -653,9 +1047,11 @@ describe('renderGroup — group-level effects', () => {
 
     const el = renderGroup(group, createMockRenderContext(), stubRenderNode);
 
-    expect((el.style as any).webkitBoxReflect).toContain('below 0.0px');
-    expect((el.style as any).webkitBoxReflect).toContain('0.500');
-    expect((el.style as any).webkitBoxReflect).toContain('100.0%');
+    const reflection = el.querySelector<HTMLElement>('[data-pptx-reflection-layer="true"]');
+    const source = reflection?.querySelector<HTMLElement>('[data-pptx-reflection-source="true"]');
+    expect(reflection?.style.maskImage).toContain('1.000');
+    expect(reflection?.style.maskImage).toContain('100.0%');
+    expect(source?.style.transform).toContain('matrix(1, 0, 0, 1');
   });
 });
 
@@ -686,8 +1082,30 @@ describe('renderGroup — parseGroupChild dispatch for sp', () => {
     expect(child.getAttribute('data-node-id')).toBe('42');
   });
 
+  it('preserves adjusted donut geometry through non-uniform group remapping', () => {
+    const group = makeGroup([makeDonutSpXml()], {
+      w: 200,
+      h: 200,
+      childExtentW: 400,
+      childExtentH: 100,
+    });
+
+    const el = renderGroup(group, createMockRenderContext(), (childNode, childCtx) =>
+      renderShape(childNode as any, childCtx),
+    );
+    const child = el.firstElementChild as HTMLElement;
+    const path = child.querySelector('svg > path');
+
+    expect(child.style.width).toBe('100px');
+    expect(child.style.height).toBe('200px');
+    expect(path?.getAttribute('d')).toContain('M10,100 A40,90');
+    expect(path?.getAttribute('d')?.match(/M/g)).toHaveLength(2);
+  });
+
   it('resolves layout placeholder inheritance for lazy group children before remapping coordinates', () => {
-    const group = makeGroup([makePlaceholderSpXml()], {
+    const placeholder = makePlaceholderSpXml();
+    placeholder.child('spPr').child('xfrm').element!.remove();
+    const group = makeGroup([placeholder], {
       x: 50,
       y: 30,
       w: 200,
@@ -729,6 +1147,49 @@ describe('renderGroup — parseGroupChild dispatch for sp', () => {
     expect(child.style.height).toBe('20px');
     expect(child.dataset.anchor).toBe('ctr');
   });
+  it('preserves explicit zero placeholder coordinates and extents inside a group', () => {
+    const group = makeGroup([makePlaceholderSpXml()], {
+      x: 50,
+      y: 30,
+      w: 200,
+      h: 100,
+      childOffsetX: 0,
+      childOffsetY: 0,
+      childExtentW: 400,
+      childExtentH: 200,
+    });
+    const layout = createMockRenderContext().layout;
+    layout.placeholders = [
+      {
+        node: makeLayoutPlaceholderXml(),
+        absoluteXfrm: {
+          position: { x: 100, y: 60 },
+          size: { w: 40, h: 20 },
+        },
+      },
+    ];
+    const ctx = createMockRenderContext({ layout });
+    const renderNode = vi.fn((node) => {
+      const el = document.createElement('div');
+      el.style.position = 'absolute';
+      el.style.left = `${node.position.x}px`;
+      el.style.top = `${node.position.y}px`;
+      el.style.width = `${node.size.w}px`;
+      el.style.height = `${node.size.h}px`;
+      el.dataset.anchor = node.textBody?.layoutBodyProperties?.attr('anchor') ?? '';
+      return el;
+    });
+
+    const el = renderGroup(group, ctx, renderNode);
+    const child = el.firstElementChild as HTMLElement;
+
+    expect(renderNode).toHaveBeenCalledOnce();
+    expect(child.style.left).toBe('0px');
+    expect(child.style.top).toBe('0px');
+    expect(child.style.width).toBe('0px');
+    expect(child.style.height).toBe('0px');
+    expect(child.dataset.anchor).toBe('ctr');
+  });
 
   it('remaps child textBoxBounds with group scale for diagram-like shapes', () => {
     const group = makeGroup([makeTxXfrmSpXml()], {
@@ -759,14 +1220,17 @@ describe('renderGroup — parseGroupChild dispatch for sp', () => {
   });
 
   it('remaps child textBoxBounds with swapped scale axes for quarter-turn children', () => {
-    const group = makeGroup([makeTxXfrmSpXml('103', 'Rotated Grouped Diagram Shape', { rot: 5400000 })], {
-      w: 200,
-      h: 100,
-      childOffsetX: 0,
-      childOffsetY: 0,
-      childExtentW: 400,
-      childExtentH: 100,
-    });
+    const group = makeGroup(
+      [makeTxXfrmSpXml('103', 'Rotated Grouped Diagram Shape', { rot: 5400000 })],
+      {
+        w: 200,
+        h: 100,
+        childOffsetX: 0,
+        childOffsetY: 0,
+        childExtentW: 400,
+        childExtentH: 100,
+      },
+    );
     const renderNode = vi.fn((node) => {
       const el = document.createElement('div');
       el.dataset.textBoxBounds = JSON.stringify(node.textBoxBounds);
@@ -868,6 +1332,24 @@ describe('renderGroup — parseGroupChild dispatch for grpSp (nested group)', ()
     expect(innerShape.style.width).toBe('96px');
     expect(innerShape.style.height).toBe('96px');
   });
+
+  it('passes parent flipH into nested groups after mirroring their position', () => {
+    const group = makeGroup([makeNestedGrpSpXml('57')], {
+      w: 200,
+      h: 100,
+      childExtentW: 200,
+      childExtentH: 100,
+      flipH: true,
+    });
+    const renderNode = vi.fn(stubRenderNode);
+
+    renderGroup(group, createMockRenderContext(), renderNode);
+
+    const nestedGroup = renderNode.mock.calls[0][0];
+    expect(nestedGroup.nodeType).toBe('group');
+    expect(nestedGroup.position.x).toBe(104);
+    expect(nestedGroup.flipH).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -890,6 +1372,92 @@ describe('renderGroup — parseGroupChild dispatch for graphicFrame (table)', ()
     const child = el.children[0] as HTMLElement;
     expect(child.getAttribute('data-node-id')).toBe('51');
   });
+
+  it('mirrors table frame position for parent flipH without flipping table content', () => {
+    const group = makeGroup([makeTableFrameXml('52')], {
+      w: 200,
+      h: 100,
+      childExtentW: 200,
+      childExtentH: 100,
+      flipH: true,
+    });
+    const renderNode = vi.fn(stubRenderNode);
+
+    renderGroup(group, createMockRenderContext(), renderNode);
+
+    const tableNode = renderNode.mock.calls[0][0];
+    expect(tableNode.nodeType).toBe('table');
+    expect(tableNode.position.x).toBe(104);
+    expect(tableNode.flipH).toBe(false);
+  });
+
+  it('renders a table at its final non-1:1 group-scaled DOM size', () => {
+    const group = makeGroup([makeTableFrameXml('53')], {
+      w: 384,
+      h: 144,
+      childExtentW: 192,
+      childExtentH: 96,
+    });
+
+    const el = renderGroup(group, createMockRenderContext(), (childNode, ctx) =>
+      renderTable(childNode as TableNodeData, ctx),
+    );
+    const table = el.firstElementChild as HTMLElement;
+
+    expect(table.style.width).toBe('192px');
+    expect(table.style.height).toBe('72px');
+  });
+
+  it('positions a stale-frame table from its normalized grid size when the group is flipped', () => {
+    const group = makeGroup(
+      [makeTableFrameXml('54', { frameWidth: 96, frameHeight: 48, gridWidth: 192, rowHeight: 96 })],
+      {
+        w: 400,
+        h: 200,
+        childExtentW: 400,
+        childExtentH: 200,
+        flipH: true,
+      },
+    );
+
+    const el = renderGroup(group, createMockRenderContext(), (childNode, ctx) =>
+      renderTable(childNode as TableNodeData, ctx),
+    );
+    const table = el.firstElementChild as HTMLElement;
+
+    expect(table.style.left).toBe('208px');
+    expect(table.style.width).toBe('192px');
+  });
+
+  it('positions and scales a quarter-turn stale-frame table with non-uniform group scaling', () => {
+    const group = makeGroup(
+      [
+        makeTableFrameXml('55', {
+          frameWidth: 96,
+          frameHeight: 48,
+          gridWidth: 192,
+          rowHeight: 96,
+          rotation: 90,
+        }),
+      ],
+      {
+        w: 400,
+        h: 200,
+        childExtentW: 200,
+        childExtentH: 200,
+      },
+    );
+
+    const el = renderGroup(group, createMockRenderContext(), (childNode, ctx) =>
+      renderTable(childNode as TableNodeData, ctx),
+    );
+    const table = el.firstElementChild as HTMLElement;
+
+    expect(Number.parseFloat(table.style.left)).toBeCloseTo(96);
+    expect(Number.parseFloat(table.style.top)).toBeCloseTo(-48);
+    expect(table.style.width).toBe('192px');
+    expect(table.style.height).toBe('192px');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -907,6 +1475,26 @@ describe('renderGroup — parseGroupChild dispatch for graphicFrame (chart)', ()
     expect(el.children.length).toBe(1);
     const child = el.children[0] as HTMLElement;
     expect(child.getAttribute('data-node-type')).toBe('chart');
+  });
+
+  it('mirrors chart frame position for parent flipH without flipping chart content', () => {
+    const rId = 'rId10';
+    const ctx = makeCtxWithChart(rId);
+    const group = makeGroup([makeChartFrameXml(rId, '61')], {
+      w: 200,
+      h: 100,
+      childExtentW: 200,
+      childExtentH: 100,
+      flipH: true,
+    });
+    const renderNode = vi.fn(stubRenderNode);
+
+    renderGroup(group, ctx, renderNode);
+
+    const chartNode = renderNode.mock.calls[0][0];
+    expect(chartNode.nodeType).toBe('chart');
+    expect(chartNode.position.x).toBe(104);
+    expect(chartNode.flipH).toBe(false);
   });
 
   it('silently skips chart graphicFrame when chart relationship is missing', () => {
@@ -966,9 +1554,14 @@ describe('renderGroup — child coordinate remapping', () => {
   it('remaps child position from child space to group space (1:1 scale)', () => {
     // childExtent == groupSize → scale factor = 1, no position shift
     const group = makeGroup([makeSpXml()], {
-      x: 0, y: 0, w: 200, h: 100,
-      childOffsetX: 0, childOffsetY: 0,
-      childExtentW: 200, childExtentH: 100,
+      x: 0,
+      y: 0,
+      w: 200,
+      h: 100,
+      childOffsetX: 0,
+      childOffsetY: 0,
+      childExtentW: 200,
+      childExtentH: 100,
     });
 
     let capturedNode: any;
@@ -986,9 +1579,14 @@ describe('renderGroup — child coordinate remapping', () => {
   it('scales child position by the ratio groupSize/childExtent', () => {
     // Group is 400x200 px but child space is 800x400 → scale = 0.5
     const group = makeGroup([makeSpXml()], {
-      x: 0, y: 0, w: 400, h: 200,
-      childOffsetX: 0, childOffsetY: 0,
-      childExtentW: 800, childExtentH: 400,
+      x: 0,
+      y: 0,
+      w: 400,
+      h: 200,
+      childOffsetX: 0,
+      childOffsetY: 0,
+      childExtentW: 800,
+      childExtentH: 400,
     });
 
     let capturedNode: any;
@@ -1009,9 +1607,14 @@ describe('renderGroup — child coordinate remapping', () => {
     // Remapping: (childPos.x - chOff.x) / chExt.w * groupW
     //            = (0 - 50) / 200 * 200 = -50
     const group = makeGroup([makeSpXml()], {
-      x: 0, y: 0, w: 200, h: 100,
-      childOffsetX: 50, childOffsetY: 25,
-      childExtentW: 200, childExtentH: 100,
+      x: 0,
+      y: 0,
+      w: 200,
+      h: 100,
+      childOffsetX: 50,
+      childOffsetY: 25,
+      childExtentW: 200,
+      childExtentH: 100,
     });
 
     let capturedNode: any;
@@ -1072,13 +1675,47 @@ describe('renderGroup — child coordinate remapping', () => {
     expect(capturedNode.size.h).toBeCloseTo(500);
   });
 
-  it('skips coordinate remapping when childExtent is 0 in either dimension', () => {
+  it('skips coordinate remapping when childExtent is 0 in both dimensions', () => {
     const group = makeGroup([makeSpXml()], {
-      childExtentW: 0, childExtentH: 0,
+      childExtentW: 0,
+      childExtentH: 0,
     });
-    // When chExt is zero the remapping block is skipped — no crash expected
+    // A fully degenerate child space has no usable mapping — the remap block is
+    // skipped and children keep their raw coordinates. No crash expected.
     const el = renderGroup(group, createMockRenderContext(), stubRenderNode);
     expect(el.children.length).toBe(1);
+  });
+
+  it('remaps children along the non-degenerate axis when a group is flat (childExtent.h = 0)', () => {
+    // Regression: layout divider/underline lines live in a zero-height group
+    // (ext.cy = chExt.cy = 0). The child-space → group-space remap must still
+    // subtract childOffset and scale the non-degenerate (X) axis; skipping the
+    // whole block left the line displaced by (chOffX, chOffY).
+    const group = makeGroup([makeSpXml()], {
+      x: 0,
+      y: 0,
+      w: 400,
+      h: 0,
+      childOffsetX: 50,
+      childOffsetY: 25,
+      childExtentW: 200,
+      childExtentH: 0, // flat group: no vertical child extent (a horizontal line)
+    });
+
+    let capturedNode: any;
+    const capture = (childNode: any, ctx: RenderContext): HTMLElement => {
+      capturedNode = childNode;
+      return stubRenderNode(childNode, ctx);
+    };
+
+    renderGroup(group, createMockRenderContext(), capture);
+
+    // X axis: scale = groupW / chExtW = 400 / 200 = 2, position = (0 - 50) * 2 = -100
+    expect(capturedNode.position.x).toBeCloseTo(-100);
+    expect(capturedNode.size.w).toBeCloseTo(192); // 96px child * 2
+    // Y axis is degenerate (chExtH = 0): scale falls back to 1 (no NaN), still subtract chOffY
+    expect(capturedNode.position.y).toBeCloseTo(-25); // (0 - 25) * 1
+    expect(Number.isNaN(capturedNode.size.h)).toBe(false);
   });
 });
 
@@ -1279,12 +1916,7 @@ describe('renderGroup — group fill propagation via grpSpPr', () => {
 
 describe('renderGroup — mixed child types', () => {
   it('renders sp, cxnSp, pic, and grpSp children in the same group', () => {
-    const children = [
-      makeSpXml('1'),
-      makeCxnSpXml('2'),
-      makePicXml('3'),
-      makeNestedGrpSpXml('4'),
-    ];
+    const children = [makeSpXml('1'), makeCxnSpXml('2'), makePicXml('3'), makeNestedGrpSpXml('4')];
     const group = makeGroup(children);
     const el = renderGroup(group, createMockRenderContext(), stubRenderNode);
 
@@ -1334,17 +1966,17 @@ describe('renderGroup — mixed child types', () => {
       return stubRenderNode(childNode, childCtx);
     });
 
-    const text = capturedNode?.children?.[0]?.child('txBody').child('p').child('r').child('t').text();
+    const text = capturedNode?.children?.[0]
+      ?.child('txBody')
+      .child('p')
+      .child('r')
+      .child('t')
+      .text();
     expect(text).toBe('Matched diagram drawing');
   });
 
   it('skips unknown children while rendering known ones in the same group', () => {
-    const children = [
-      makeUnknownTagXml(),
-      makeSpXml('10'),
-      makeUnknownTagXml(),
-      makePicXml('11'),
-    ];
+    const children = [makeUnknownTagXml(), makeSpXml('10'), makeUnknownTagXml(), makePicXml('11')];
     const group = makeGroup(children);
     const el = renderGroup(group, createMockRenderContext(), stubRenderNode);
 
@@ -1391,7 +2023,15 @@ describe('renderGroup — cycle diagram (3 pie + 3 circularArrow reordering)', (
    * childXml.child('spPr').child('prstGeom').attr('prst') directly on
    * the raw SafeXmlNode children, not on the parsed node.
    */
-  function makeSpWithPreset(prst: string, id: string): SafeXmlNode {
+  function makeSpWithPreset(
+    prst: string,
+    id: string,
+    opts: { x?: number; y?: number; w?: number; h?: number } = {},
+  ): SafeXmlNode {
+    const x = opts.x ?? 0;
+    const y = opts.y ?? 0;
+    const w = opts.w ?? 914400;
+    const h = opts.h ?? 914400;
     return xml(`
       <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
             xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
@@ -1401,7 +2041,7 @@ describe('renderGroup — cycle diagram (3 pie + 3 circularArrow reordering)', (
           <p:nvPr/>
         </p:nvSpPr>
         <p:spPr>
-          <a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="914400"/></a:xfrm>
+          <a:xfrm><a:off x="${x}" y="${y}"/><a:ext cx="${w}" cy="${h}"/></a:xfrm>
           <a:prstGeom prst="${prst}"><a:avLst/></a:prstGeom>
         </p:spPr>
       </p:sp>
@@ -1419,11 +2059,15 @@ describe('renderGroup — cycle diagram (3 pie + 3 circularArrow reordering)', (
     ];
 
     const group = makeGroup(children, {
-      w: 200, h: 200,
-      childOffsetX: 0, childOffsetY: 0,
-      childExtentW: 200, childExtentH: 200,
+      w: 200,
+      h: 200,
+      childOffsetX: 0,
+      childOffsetY: 0,
+      childExtentW: 200,
+      childExtentH: 200,
     });
 
+    group.diagramLayoutId = 'urn:microsoft.com/office/officeart/2005/8/layout/cycle8';
     const renderOrder: string[] = [];
     const trackingRender = (childNode: any, ctx: RenderContext): HTMLElement => {
       renderOrder.push(childNode.id);
@@ -1452,11 +2096,15 @@ describe('renderGroup — cycle diagram (3 pie + 3 circularArrow reordering)', (
     const firstPie = children[0].child('spPr').child('prstGeom');
     firstPie.element?.setAttribute('prst', 'pie');
     const group = makeGroup(children, {
-      w: 200, h: 200,
-      childOffsetX: 0, childOffsetY: 0,
-      childExtentW: 200, childExtentH: 200,
+      w: 200,
+      h: 200,
+      childOffsetX: 0,
+      childOffsetY: 0,
+      childExtentW: 200,
+      childExtentH: 200,
     });
 
+    group.diagramLayoutId = 'urn:microsoft.com/office/officeart/2005/8/layout/cycle8';
     let capturedPie: any;
     renderGroup(group, createMockRenderContext(), (childNode, ctx) => {
       if (childNode.id === '1') capturedPie = childNode;
@@ -1471,6 +2119,44 @@ describe('renderGroup — cycle diagram (3 pie + 3 circularArrow reordering)', (
     });
   });
 
+  it('preserves subtle pie offsets so SmartArt cycle separators keep their Office spacing', () => {
+    const px = 9525;
+    const children = [
+      makeSpWithPreset('pie', '1', { x: 55 * px, y: 45 * px, w: 100 * px, h: 100 * px }),
+      makeSpWithPreset('pie', '2', { x: 50 * px, y: 55 * px, w: 100 * px, h: 100 * px }),
+      makeSpWithPreset('pie', '3', { x: 45 * px, y: 45 * px, w: 100 * px, h: 100 * px }),
+      makeSpWithPreset('circularArrow', '4'),
+      makeSpWithPreset('circularArrow', '5'),
+      makeSpWithPreset('circularArrow', '6'),
+    ];
+    const group = makeGroup(children, {
+      w: 200,
+      h: 200,
+      childOffsetX: 0,
+      childOffsetY: 0,
+      childExtentW: 200,
+      childExtentH: 200,
+    });
+
+    group.diagramLayoutId = 'urn:microsoft.com/office/officeart/2005/8/layout/cycle8';
+    const el = renderGroup(group, createMockRenderContext(), stubRenderNode);
+    const piePositions = Array.from(
+      el.querySelectorAll('[data-node-id="1"], [data-node-id="2"], [data-node-id="3"]'),
+    )
+      .map((child) => ({
+        id: child.getAttribute('data-node-id'),
+        left: (child as HTMLElement).style.left,
+        top: (child as HTMLElement).style.top,
+      }))
+      .sort((a, b) => Number(a.id) - Number(b.id));
+
+    expect(piePositions).toEqual([
+      { id: '1', left: '55px', top: '45px' },
+      { id: '2', left: '50px', top: '55px' },
+      { id: '3', left: '45px', top: '45px' },
+    ]);
+  });
+
   it('does not reorder children when pattern is not 3-pie + 3-circularArrow', () => {
     // Only 2 pies + 1 circularArrow — no cycle diagram special case
     const children = [
@@ -1479,11 +2165,15 @@ describe('renderGroup — cycle diagram (3 pie + 3 circularArrow reordering)', (
       makeSpWithPreset('circularArrow', '3'),
     ];
     const group = makeGroup(children, {
-      w: 200, h: 200,
-      childOffsetX: 0, childOffsetY: 0,
-      childExtentW: 200, childExtentH: 200,
+      w: 200,
+      h: 200,
+      childOffsetX: 0,
+      childOffsetY: 0,
+      childExtentW: 200,
+      childExtentH: 200,
     });
 
+    group.diagramLayoutId = 'urn:microsoft.com/office/officeart/2005/8/layout/cycle8';
     const renderOrder: string[] = [];
     renderGroup(group, createMockRenderContext(), (childNode, ctx) => {
       renderOrder.push(childNode.id);

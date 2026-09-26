@@ -1,0 +1,63 @@
+{
+  "name": "oracle-pypptx-shape3d-0014-scene-only-plane-matrix",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "p:sp.prstGeom=rect",
+      "geometry.aspect=square|wide|tall",
+      "surface=solidPlane|noFillTextPlane",
+      "text.bodyPr=wrap-none|anchor-ctr|spAutoFit",
+      "a:scene3d.camera=perspectiveRelaxedModerately|perspectiveContrastingRightFacing",
+      "a:scene3d.camera.rot=18590633,0,0|0,19532225,0",
+      "a:scene3d.camera.fov=7200000|5100000",
+      "a:scene3d.lightRig=threePt:t",
+      "a:sp3d=absent",
+      "effects=absent"
+    ]
+  }
+}

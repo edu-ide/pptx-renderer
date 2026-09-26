@@ -39,6 +39,8 @@ def _resize_to_common_max(img1: np.ndarray, img2: np.ndarray) -> tuple[np.ndarra
 
 # Canny thresholds used for edge_iou (shared by compute_edge_iou and edge_analysis).
 EDGE_CANNY_LOW, EDGE_CANNY_HIGH = 60, 120
+VISUALLY_BLANK_INK_COVERAGE = 0.0001
+HISTOGRAM_BIN_SHIFT_TOLERANCE = 1
 
 
 def compute_edge_iou(img1: np.ndarray, img2: np.ndarray) -> float:
@@ -107,7 +109,10 @@ def compute_color_histogram_correlation(img1: np.ndarray, img2: np.ndarray) -> f
     if fg1_count == 0 and fg2_count == 0:
         return 1.0
     if fg1_count == 0 or fg2_count == 0:
-        return 0.0
+        nonempty = a if fg1_count else b
+        nonempty_gray = cv2.cvtColor(nonempty, cv2.COLOR_RGB2GRAY)
+        ink_coverage = float(np.mean((255.0 - nonempty_gray.astype(np.float32)) / 255.0))
+        return 1.0 if ink_coverage <= VISUALLY_BLANK_INK_COVERAGE else 0.0
 
     # For sparse foreground (thin strokes, outlines), histograms are unreliable
     # because anti-aliasing differences dominate.  If both images have < 1.5%
@@ -133,8 +138,19 @@ def compute_color_histogram_correlation(img1: np.ndarray, img2: np.ndarray) -> f
         h2 = cv2.calcHist([hsv2], [ch], mask2, [nbins], [lo, hi])
         cv2.normalize(h1, h1)
         cv2.normalize(h2, h2)
-        corr = cv2.compareHist(h1, h2, cv2.HISTCMP_CORREL)
-        correlations.append(float(corr))
+        shifted_correlations = []
+        for shift in range(-HISTOGRAM_BIN_SHIFT_TOLERANCE, HISTOGRAM_BIN_SHIFT_TOLERANCE + 1):
+            shifted = np.roll(h2, shift, axis=0)
+            if ch != 0:
+                if shift > 0:
+                    shifted[:shift] = 0
+                elif shift < 0:
+                    shifted[shift:] = 0
+            cv2.normalize(shifted, shifted)
+            shifted_correlations.append(
+                float(cv2.compareHist(h1, shifted, cv2.HISTCMP_CORREL))
+            )
+        correlations.append(max(shifted_correlations))
 
     return sum(correlations) / len(correlations)
 

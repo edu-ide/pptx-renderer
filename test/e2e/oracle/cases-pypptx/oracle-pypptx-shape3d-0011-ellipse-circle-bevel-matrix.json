@@ -1,0 +1,40 @@
+{
+  "name": "oracle-pypptx-shape3d-0011-ellipse-circle-bevel-matrix",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "p:sp.prstGeom=ellipse",
+      "geometry.aspect=square|wide|tall",
+      "container=standalone|nonIdentityGroup",
+      "paint=explicitSolid|themeStyleReference",
+      "a:scene3d.camera=orthographicFront",
+      "a:scene3d.lightRig=threePt:t",
+      "a:sp3d.extrusionH=0",
+      "a:sp3d.bevelT=circle"
+    ]
+  }
+}

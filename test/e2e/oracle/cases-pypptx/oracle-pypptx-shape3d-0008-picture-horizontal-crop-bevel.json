@@ -1,0 +1,23 @@
+{
+  "name": "oracle-pypptx-shape3d-0008-picture-horizontal-crop-bevel",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "p:pic",
+      "a:srcRect=22%,0%,8%,0%",
+      "crop.axis=horizontal",
+      "a:scene3d.lightRig=twoPt:t",
+      "a:sp3d.bevelT=circle"
+    ]
+  }
+}

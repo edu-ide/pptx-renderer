@@ -297,6 +297,52 @@ describe('buildTextIndex', () => {
     expect(entry?.bounds).toMatchObject({ x: 176, y: 108, w: 192, h: 48 });
   });
 
+  it('matches renderer bounds along the populated axis of a horizontal flat group', () => {
+    const group: GroupNodeData = {
+      id: 'horizontal-flat-group',
+      name: 'horizontal-flat-group',
+      nodeType: 'group',
+      position: { x: 10, y: 20 },
+      size: { w: 400, h: 0 },
+      rotation: 0,
+      flipH: false,
+      flipV: false,
+      childOffset: { x: 50, y: 25 },
+      childExtent: { w: 200, h: 0 },
+      children: [parseXml(templateShape('53', 'horizontal-flat-label', 'Horizontal flat label'))],
+      source: emptySource,
+    };
+    const pres = presentation();
+    pres.slides[0].nodes = [group];
+
+    const entry = buildTextIndex(pres).find((item) => item.text === 'Horizontal flat label');
+
+    expect(entry?.bounds).toMatchObject({ x: 102, y: 43, w: 384, h: 48 });
+  });
+
+  it('matches renderer bounds along the populated axis of a vertical flat group', () => {
+    const group: GroupNodeData = {
+      id: 'vertical-flat-group',
+      name: 'vertical-flat-group',
+      nodeType: 'group',
+      position: { x: 10, y: 20 },
+      size: { w: 0, h: 400 },
+      rotation: 0,
+      flipH: false,
+      flipV: false,
+      childOffset: { x: 50, y: 25 },
+      childExtent: { w: 0, h: 200 },
+      children: [parseXml(templateShape('54', 'vertical-flat-label', 'Vertical flat label'))],
+      source: emptySource,
+    };
+    const pres = presentation();
+    pres.slides[0].nodes = [group];
+
+    const entry = buildTextIndex(pres).find((item) => item.text === 'Vertical flat label');
+
+    expect(entry?.bounds).toMatchObject({ x: 56, y: 66, w: 192, h: 96 });
+  });
+
   it('ignores shapes without a text body while continuing to index later nodes', () => {
     const noTextShape: ShapeNodeData = {
       ...shape('empty-shape', ''),
@@ -311,7 +357,14 @@ describe('buildTextIndex', () => {
     expect(index.map((entry) => entry.nodeId)).not.toContain('empty-shape');
   });
 
-  it('indexes inherited placeholder bounds for lazy group children', () => {
+  it.each([
+    ['omitted transform inherits layout bounds', '', { x: 100, y: 60, w: 40, h: 20 }],
+    [
+      'explicit zero transform preserves zero size at group origin',
+      '<a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></a:xfrm>',
+      { x: 50, y: 30, w: 0, h: 0 },
+    ],
+  ] as const)('indexes lazy group placeholder: %s', (_label, transform, expectedBounds) => {
     const child = parseXml(`
       <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
             xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
@@ -321,7 +374,7 @@ describe('buildTextIndex', () => {
           <p:nvPr><p:ph type="body" idx="1"/></p:nvPr>
         </p:nvSpPr>
         <p:spPr>
-          <a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></a:xfrm>
+          ${transform}
           <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
         </p:spPr>
         <p:txBody>
@@ -381,7 +434,7 @@ describe('buildTextIndex', () => {
       (entry) => entry.text === 'Inherited grouped placeholder',
     );
 
-    expect(result?.bounds).toEqual({ x: 100, y: 60, w: 40, h: 20 });
+    expect(result?.bounds).toEqual(expectedBounds);
   });
 
   it('matches renderer bounds for quarter-turn rotated group children', () => {

@@ -35,6 +35,13 @@ function renderToContainer(textBody: TextBody, placeholder?: any, options?: any)
   return container;
 }
 
+function renderToContainerWithTasks(textBody: TextBody) {
+  const ctx = createMockRenderContext({ asyncTasks: [] });
+  const container = document.createElement('div');
+  renderTextBody(textBody, undefined, ctx, container);
+  return { container, ctx };
+}
+
 describe('TextRenderer — branch coverage (uncovered paths)', () => {
   // ============================================================================
   // Run-level gradient fill (textGradientCss)
@@ -204,6 +211,138 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
       // 2286000 EMU ≈ 240px
       expect(parseFloat(para.style.paddingLeft)).toBeGreaterThan(200);
       expect(para.style.marginLeft).toBe('');
+    });
+  });
+
+  // ============================================================================
+  // East Asian line breaking (eaLnBrk)
+  // ============================================================================
+  describe('East Asian line breaking (eaLnBrk)', () => {
+    it('allows a break at any typographic boundary when eaLnBrk is false', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            properties: xmlNode('<pPr eaLnBrk="0"/>'),
+            runs: [{ text: '“两个维护”' }],
+            level: 0,
+          },
+        ],
+      });
+
+      const paragraph = renderToContainer(body).children[0] as HTMLElement;
+      expect(paragraph.style.lineBreak).toBe('anywhere');
+    });
+
+    it.each([
+      ['true', '<pPr eaLnBrk="1"/>'],
+      ['omitted', '<pPr/>'],
+    ])('keeps East Asian line-breaking rules when eaLnBrk is %s', (_name, properties) => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            properties: xmlNode(properties),
+            runs: [{ text: '“两个维护”' }],
+            level: 0,
+          },
+        ],
+      });
+
+      const paragraph = renderToContainer(body).children[0] as HTMLElement;
+      expect(paragraph.style.lineBreak).toBe('auto');
+    });
+
+    it('lets paragraph properties override inherited list-style line breaking', () => {
+      const body = makeTextBody({
+        listStyle: '<lstStyle><lvl1pPr eaLnBrk="1"/></lstStyle>',
+        paragraphs: [
+          {
+            properties: xmlNode('<pPr eaLnBrk="0"/>'),
+            runs: [{ text: '“两个维护”' }],
+            level: 0,
+          },
+        ],
+      });
+
+      const paragraph = renderToContainer(body).children[0] as HTMLElement;
+      expect(paragraph.style.lineBreak).toBe('anywhere');
+    });
+  });
+
+  // ============================================================================
+  // Hanging punctuation (hangingPunct)
+  // ============================================================================
+  describe('hanging punctuation (hangingPunct)', () => {
+    it('schedules inherited hanging punctuation for browser layout without changing text', async () => {
+      const body = makeTextBody({
+        listStyle: '<lstStyle><lvl1pPr hangingPunct="1"/></lstStyle>',
+        paragraphs: [
+          {
+            runs: [{ text: '为民用权(价值导向)' }],
+            level: 0,
+          },
+        ],
+      });
+
+      const { container, ctx } = renderToContainerWithTasks(body);
+      const paragraph = container.children[0] as HTMLElement;
+      expect(ctx.asyncTasks).toHaveLength(1);
+      await Promise.all(ctx.asyncTasks ?? []);
+      expect(paragraph.textContent).toBe('为民用权(价值导向)');
+      expect(paragraph.querySelector('[data-pptx-hanging-punctuation]')).toBeNull();
+    });
+
+    it.each([
+      ['false', '<pPr hangingPunct="0"/>'],
+      ['omitted', '<pPr/>'],
+    ])('does not synthesize hanging punctuation when hangingPunct is %s', (_name, properties) => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            properties: xmlNode(properties),
+            runs: [{ text: '为民用权(价值导向)' }],
+            level: 0,
+          },
+        ],
+      });
+
+      const { container, ctx } = renderToContainerWithTasks(body);
+      const paragraph = container.children[0] as HTMLElement;
+      expect(ctx.asyncTasks).toHaveLength(0);
+      expect(paragraph.querySelector('[data-pptx-hanging-punctuation]')).toBeNull();
+      expect(paragraph.textContent).toBe('为民用权(价值导向)');
+    });
+
+    it('lets paragraph properties disable inherited hanging punctuation', () => {
+      const body = makeTextBody({
+        listStyle: '<lstStyle><lvl1pPr hangingPunct="1"/></lstStyle>',
+        paragraphs: [
+          {
+            properties: xmlNode('<pPr hangingPunct="0"/>'),
+            runs: [{ text: '为民用权(价值导向)' }],
+            level: 0,
+          },
+        ],
+      });
+
+      const { container, ctx } = renderToContainerWithTasks(body);
+      const paragraph = container.children[0] as HTMLElement;
+      expect(ctx.asyncTasks).toHaveLength(0);
+      expect(paragraph.querySelector('[data-pptx-hanging-punctuation]')).toBeNull();
+    });
+
+    it('does not apply the closing-mark fallback to sentence punctuation', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            properties: xmlNode('<pPr hangingPunct="1"/>'),
+            runs: [{ text: '不收敛、不收手。' }],
+            level: 0,
+          },
+        ],
+      });
+
+      const { ctx } = renderToContainerWithTasks(body);
+      expect(ctx.asyncTasks).toHaveLength(0);
     });
   });
 
@@ -1402,8 +1541,8 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
       });
       const container = renderToContainer(body);
       const para = container.children[0] as HTMLElement;
-      // 100% of default 12pt = 12pt
-      expect(para.style.marginTop).toBe('12pt');
+      // 100% of one Office line at 12pt = 14.28pt
+      expect(para.style.marginTop).toBe('14.28pt');
     });
 
     it('applies percentage-based space after', () => {
@@ -1418,8 +1557,8 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
       });
       const container = renderToContainer(body);
       const para = container.children[0] as HTMLElement;
-      // 200% of 12pt = 24pt
-      expect(para.style.marginBottom).toBe('24pt');
+      // 200% of one Office line at 12pt = 28.56pt
+      expect(para.style.marginBottom).toBe('28.56pt');
     });
   });
 
@@ -1521,6 +1660,62 @@ describe('TextRenderer — branch coverage (uncovered paths)', () => {
       const span = container.querySelector('span');
       // Green (explicit) not red (fontRef)
       expect(span!.style.color).toContain('0'); // green
+    });
+
+    it('prefers paragraph defRPr srgb color over fontRefColor', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            properties: xmlNode(
+              '<pPr><defRPr><solidFill><srgbClr val="C00000"/></solidFill></defRPr></pPr>',
+            ),
+            runs: [{ text: 'Paragraph default wins' }],
+            level: 0,
+          },
+        ],
+      });
+      const container = renderToContainer(body, undefined, { fontRefColor: '#4472C4' });
+
+      expect(container.querySelector('span')!.style.color).toBe('rgb(192, 0, 0)');
+    });
+
+    it('resolves paragraph defRPr scheme color before fontRefColor', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            properties: xmlNode(
+              '<pPr><defRPr><solidFill><schemeClr val="accent2"/></solidFill></defRPr></pPr>',
+            ),
+            runs: [{ text: 'Scheme default wins' }],
+            level: 0,
+          },
+        ],
+      });
+      const container = renderToContainer(body, undefined, { fontRefColor: '#4472C4' });
+
+      expect(container.querySelector('span')!.style.color).toBe('rgb(237, 125, 49)');
+    });
+
+    it('keeps explicit run color above paragraph defRPr and fontRefColor', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            properties: xmlNode(
+              '<pPr><defRPr><solidFill><schemeClr val="accent2"/></solidFill></defRPr></pPr>',
+            ),
+            runs: [
+              {
+                text: 'Run wins',
+                properties: xmlNode('<rPr><solidFill><srgbClr val="7030A0"/></solidFill></rPr>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
+      });
+      const container = renderToContainer(body, undefined, { fontRefColor: '#4472C4' });
+
+      expect(container.querySelector('span')!.style.color).toBe('rgb(112, 48, 160)');
     });
 
     it('applies fontRefColor when run has no explicit color', () => {

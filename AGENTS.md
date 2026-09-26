@@ -7,6 +7,17 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 ## Attention
 
 - Temporary plan files and any other analysis output should be written to `docs/agent-tmp/` unless a specific path is given.
+- Repo-local workflow skills live under `.agents/skills/`. For renderer review, oracle evaluation, and chart forensics, prefer the project skills below before copying long runbook steps into chat.
+
+## Repo-Local Skills
+
+Use these tracked project skills for recurring PPTX renderer workflows:
+
+| Skill                  | Use when                                                                                                                     |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `pptx-render-review`   | Reviewing visual fidelity, failed/needs-review oracle cases, PDF/PNG vs HTML screenshots, or manual verdicts.                |
+| `pptx-oracle-eval`     | Running or summarizing shape, SmartArt, chart, table, connector, fillstroke, python-pptx, or windows oracle eval reports.    |
+| `pptx-chart-forensics` | Diagnosing or fixing chart oracle failures, ECharts option drift, OOXML chart XML parsing gaps, axis/legend/plotArea issues. |
 
 TypeScript library that parses Office Open XML (.pptx) files and renders them as HTML/SVG in the browser.
 
@@ -14,8 +25,8 @@ TypeScript library that parses Office Open XML (.pptx) files and renders them as
 
 - **Runtime:** TypeScript + Vite (ESM)
 - **Dependencies:** jszip (zip extraction), echarts (charts). **Optional peer dep:** pdfjs-dist (SmartArt PDF fallback rendering)
-- **E2E Tests:** Python (pytest + Playwright + scikit-image), not bundled with the library
-- **Build:** `pnpm build` → `dist/aiden0z-pptx-renderer.{es,cjs}.js`
+- **Tests:** Vitest unit tests, Playwright browser-package tests, and Python visual E2E tests
+- **Build:** cross-platform `pnpm build` → ESM, CJS, standalone browser ESM, and types
 
 ## Architecture
 
@@ -117,11 +128,24 @@ Three-step: `schemeClr` → master `colorMap` remap (e.g. "tx1"→"dk1") → the
 
 ### What's NOT Supported
 
-3D effects, animations/transitions, equations, EMF/WMF images, pattern fills, shadow/reflection/glow, combo charts, secondary axes, embedded OLE objects, slide notes.
+General DrawingML 3D outside the verified static top-bevel, bounded preset/custom zero-depth
+camera-plane, and edge-on bottom-front-material tuples, true 3D chart perspective/depth/surface meshes,
+animations/transitions, OMML constructs and per-token formula styles outside the bounded direct
+MathML subset, full EMF/WMF vector rendering, effect combinations outside the
+bounded ordinary-shape outer-shadow and reflection lanes, unverified text/picture/group reflection
+or glow fidelity,
+executing/editing embedded OLE objects, and slide notes rendering.
 
 Notes:
 
-- SmartArt/diagram fallback is partially supported and under active oracle-driven regression expansion.
+- Pattern fills, supported combo-chart combinations, and secondary axes are implemented; do not treat them as blanket exclusions.
+- OLE picture previews and EMF bitmap/embedded-PDF previews are supported paths, not full OLE or EMF/WMF engines. PDF previews require PDF.js.
+- Compatible content selects one supported Choice or Fallback, including supported SVG preview Choices; eager/lazy slide and group paths must preserve branch order.
+- Recognized `a14:m` runs, fractions, radicals, scripts, delimiters, n-ary operators, matrices, and functions render as Presentation MathML; any unknown semantic OMML node keeps the package-authored fallback.
+- Color inheritance is slide → layout → master, with explicit identity/reset semantics. Chart-local maps take precedence only inside the derived chart context.
+- Placeholder parent inheritance follows actual layout type/category, even when slide-local type differs. Preserve explicit zero values and exclusive autofit choices.
+- Sparse chart caches, literal sources, conditional/merged table borders, and clipped image effects have scoped regression coverage; this is not a full-corpus native parity claim.
+- SmartArt/diagram fallback is partially supported and under active oracle-driven regression expansion. Diagram-specific geometry compensation requires matching layout provenance.
 - Do not assume full PowerPoint parity for all SmartArt layouts.
 
 ## Dev Server Pages
@@ -161,6 +185,15 @@ cd test/e2e && source .venv/bin/activate && python server.py
 ## Test Data
 
 Case directories under `test/e2e/testdata/cases/{stem}/` each contain `source.pptx`, `ground-truth.pdf`, and optionally `slides/slide{N}.png`. E2E tests discover all such cases automatically.
+
+The binary corpus under `test/e2e/testdata/` is local and ignored. Keep reproducible case
+definitions, coverage metadata, generators, and runbook changes tracked. Never commit licensed
+font binaries; use an ignored testdata font profile and local file/symlink instead.
+`pnpm capability:inventory` treats aliases containing `oracle-` as validation fixtures and other
+default-case aliases as representative documents. Preserve that distinction when adding local
+ground-truth matrices so generated case volume cannot raise its own capability rank.
+Broad residual capability selectors must use `planningMode: observation-only`. Keep their counts in
+the ledger for discovery, and define a bounded `ranked` capability before generating a work packet.
 
 ## E2E Test Suite (`test/e2e/`)
 
@@ -227,7 +260,17 @@ Oracle case naming:
 
 Case JSON (VBA pipeline): `test/e2e/oracle/cases-full/*.json`. Each declares `kind: “shape”` or `kind: “smartart”` with layout/dimensions.
 
-Python-pptx pipeline cases: `test/e2e/oracle/cases-pypptx/*.json` (100 cases). Prefix `oracle-pypptx-{category}-{NNNN}-{slug}` where category is `text`, `shape-adj`, `composite`, or `chart`. Generated by `test/e2e/scripts/generate_pypptx_cases.py`.
+Python-pptx pipeline cases: `test/e2e/oracle/cases-pypptx/*.json` (205 cases: 63 text,
+31 shape-adjustment, 28 zero-adjustment flowchart, 2 shape-effect, 1 text-effect, 20 static 3D,
+8 table, 8 formula, 20 composite, and 24 chart).
+Prefix `oracle-pypptx-{category}-{NNNN}-{slug}` where category is `text`, `shape-adj`,
+`flowchart`, `shape-effect`, `text-effect`, `shape3d`, `table`, `formula`, `composite`, or `chart`. Generated by
+`test/e2e/scripts/generate_pypptx_cases.py`; `--case` accepts repeatable exact/glob filters. Text
+IDs 0040-0055 are the CJK wrap/autofit/spacing interaction matrix; IDs 0056-0059 cover
+`defRPr`/`fontRef` text-color precedence; ID 0060 covers styled soft breaks; ID 0061 covers the
+native tab-stop matrix; ID 0062 covers every non-horizontal DrawingML vertical mode, anchors,
+stacked-character advance, and mixed CJK/Hangul fallback; ID 0063 covers duplicate unlinked
+placeholder indices and type-based layout inheritance.
 
 ### Step 2: Identify the Shape
 
@@ -557,6 +600,27 @@ Examples of effective assertions:
 
 This is faster and more stable than relying only on end-to-end screenshots.
 
+When a fix changes browser layout behavior, build a small interaction matrix before editing
+production code. Do not test only the leaf renderer that changed. For each source XML feature
+involved, add at least:
+
+- the positive case that reproduces the user-visible bug
+- the inverse/opt-out case that must keep old behavior
+- the parent-container case that can expose CSS side effects
+- a browser-level screenshot or DOM check when scrollbars, clipping, wrapping, scaling, or
+  overflow visibility is involved
+
+Text fixes are especially cross-layer. If the change touches wrapping, whitespace, font metrics,
+paragraph layout, or compact tokens, inspect `a:bodyPr` first and cover relevant combinations of
+`wrap`, `horzOverflow`, `vertOverflow`, `spAutoFit`, `normAutofit`, `noAutofit`, insets, vertical
+text, bullets, multi-paragraph text, and adjacent runs. A `TextRenderer` unit test is not enough
+when the observable bug depends on the `ShapeRenderer` text container.
+
+PowerPoint percentage line/paragraph spacing is based on an Office line unit rather than CSS's
+raw font-size multiplier. Keep the native CJK cases `oracle-pypptx-text-0040` through `0051`
+together when changing this conversion. Preserve first/last paragraph edge trimming and test both
+single- and multi-paragraph containers; browser line boxes differ for those two structures.
+
 #### 9. Verify the metric source before trusting a reported regression
 
 There are multiple report surfaces:
@@ -574,6 +638,21 @@ If a user reports a metric that conflicts with local evaluation:
 4. only then conclude whether it is a real regression or stale data
 
 This avoids chasing ghosts caused by outdated `windows-all-eval.json` or old screenshot artifacts.
+
+Every new API evaluation must retain `provenance`: source/ground-truth hashes, renderer Git state,
+actual browser version, raster capture density, and optional font-profile/font hashes. PDF-backed
+evaluation must capture the browser at `PDF DPI / 96`; direct PNG oracles retain scale `1`. Compare scores only when the
+relevant provenance matches. Use `PPTX_E2E_VITE_SERVER_URL` to point the API at the intended
+worktree and `PPTX_E2E_BROWSER_CHANNEL`/`PPTX_E2E_FONT_PROFILE` for explicit runtime inputs.
+On macOS, native PowerPoint export requires an unlocked interactive session; `-9074` under a
+locked session is an environment failure and must not be recorded as renderer evidence.
+Stage ordinary PPTX input/output and macro sinks in `test/e2e/testdata/oracle-runtime` so the
+PowerPoint sandbox needs one stable directory grant. AppleScript must resolve the opened
+presentation by exact `full name`, never by `active presentation`, and must close only that object.
+Qualify VBA procedures as `<macro-host-filename>!<macro-name>`; an unqualified name can fail with
+PowerPoint error `-18` when another user presentation is open. Export and macro timeouts should
+stop immediately and prompt inspection for an unlock state, **Grant File Access**, or macro-security
+dialog.
 
 ### One-Shot Large Baseline Generation
 
@@ -601,12 +680,13 @@ Report: `test/e2e/reports/oracle-failures/full-ground-truth-one-shot.json`
 
 ### E2E Scripts Reference
 
-| Script                                  | Usage                               | Purpose                                                         |
-| --------------------------------------- | ----------------------------------- | --------------------------------------------------------------- |
-| `scripts/run_all_shapes_eval.py`        | `--shape-id-min N --shape-id-max N` | Batch evaluate shapes via POST `/api/evaluate/{case}`           |
-| `scripts/analyze_edge.py`               | `<case> [--slide N]`                | Canny edge IoU analysis with visual overlay output              |
-| `scripts/one_shot_full_ground_truth.py` | `--macro-host ... --cases-dir ...`  | Bulk generate PPTX+PDF ground truth from oracle cases           |
-| `scripts/generate_pypptx_cases.py`      | (no args)                           | Generate 100 python-pptx cases (text/shape-adj/composite/chart) |
+| Script                                  | Usage                               | Purpose                                                       |
+| --------------------------------------- | ----------------------------------- | ------------------------------------------------------------- |
+| `scripts/run_all_shapes_eval.py`        | `--shape-id-min N --shape-id-max N` | Batch evaluate shapes via POST `/api/evaluate/{case}`         |
+| `scripts/analyze_edge.py`               | `<case> [--slide N]`                | Canny edge IoU analysis with visual overlay output            |
+| `scripts/one_shot_full_ground_truth.py` | `--macro-host ... --cases-dir ...`  | Bulk generate PPTX+PDF ground truth from oracle cases         |
+| `scripts/generate_pypptx_cases.py`      | `[--case PATTERN]`                  | Generate 205 python-pptx cases across the documented matrices |
+| `scripts/reflection_metrics.py`         | `--case-report PATH`                | Validate local reflection fields and erasure sensitivity      |
 
 Key mechanics:
 
@@ -626,7 +706,9 @@ pnpm format:check        # prettier --check (CI)
 pnpm typecheck           # tsc --noEmit
 pnpm knip                # dead code / unused exports detection
 pnpm publint             # package.json exports correctness
-pnpm size                # size-limit check (gzip ≤ 1400 kB)
+pnpm test:browser        # Chromium standalone/ECharts/PDF.js compatibility
+pnpm test:package        # ESM/CJS/standalone package entry checks
+pnpm size                # gzip budgets for primary and standalone entries
 ```
 
 **Git hooks** (husky + lint-staged): `pre-commit` runs `eslint --fix` + `prettier --write` on staged `src/**/*.ts`; `commit-msg` enforces [Conventional Commits](https://www.conventionalcommits.org/) via commitlint.

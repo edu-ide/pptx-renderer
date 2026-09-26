@@ -1,10 +1,24 @@
 import { defineConfig } from 'vite';
-import { resolve } from 'path';
+import { createRequire } from 'module';
+import { dirname, resolve } from 'path';
 import fs from 'fs';
+
+const require = createRequire(import.meta.url);
+
+function resolvePdfjsDistDir(): string | undefined {
+  if (process.env.PDFJS_DIST_DIR) return resolve(process.env.PDFJS_DIST_DIR);
+  try {
+    return dirname(dirname(require.resolve('pdfjs-dist/build/pdf.min.mjs')));
+  } catch {
+    return undefined;
+  }
+}
+
+const pdfjsDistDir = resolvePdfjsDistDir();
 
 export default defineConfig({
   define: {
-    'process.env.NODE_ENV': JSON.stringify('production'),
+    'process.env.NODE_ENV': '"production"',
   },
   resolve: {
     alias: {
@@ -13,7 +27,7 @@ export default defineConfig({
   },
   server: {
     fs: {
-      allow: ['..'],
+      allow: ['..', ...(pdfjsDistDir ? [pdfjsDistDir] : [])],
     },
     proxy: {
       '/api': {
@@ -37,10 +51,11 @@ export default defineConfig({
             res.end('[]');
             return;
           }
-          const dirs = fs.readdirSync(casesDir, { withFileTypes: true })
-            .filter(d => d.isDirectory())
-            .map(d => d.name)
-            .filter(name => fs.existsSync(resolve(casesDir, name, 'source.pptx')))
+          const dirs = fs
+            .readdirSync(casesDir, { withFileTypes: true })
+            .filter((d) => d.isDirectory())
+            .map((d) => d.name)
+            .filter((name) => fs.existsSync(resolve(casesDir, name, 'source.pptx')))
             .sort();
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify(dirs));
@@ -52,9 +67,18 @@ export default defineConfig({
           if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
             const ext = filePath.split('.').pop()?.toLowerCase();
             const mimeTypes: Record<string, string> = {
-              png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
-              pdf: 'application/pdf', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-              json: 'application/json', xml: 'text/xml',
+              png: 'image/png',
+              jpg: 'image/jpeg',
+              jpeg: 'image/jpeg',
+              pdf: 'application/pdf',
+              pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+              ttf: 'font/ttf',
+              ttc: 'font/collection',
+              otf: 'font/otf',
+              woff: 'font/woff',
+              woff2: 'font/woff2',
+              json: 'application/json',
+              xml: 'text/xml',
             };
             if (ext && mimeTypes[ext]) res.setHeader('Content-Type', mimeTypes[ext]);
             const stream = fs.createReadStream(filePath);
@@ -71,12 +95,14 @@ export default defineConfig({
       entry: resolve(__dirname, 'src/index.ts'),
       name: 'PptxRenderer',
       formats: ['es', 'cjs'],
-      fileName: (format) => format === 'es' ? 'aiden0z-pptx-renderer.es.js' : 'aiden0z-pptx-renderer.cjs',
+      fileName: (format) =>
+        format === 'es' ? 'aiden0z-pptx-renderer.es.js' : 'aiden0z-pptx-renderer.cjs',
     },
     rollupOptions: {
-      external: ['pdfjs-dist'],
+      external: (id) =>
+        id === 'echarts' || id.startsWith('echarts/') || id === 'jszip' || id === 'pdfjs-dist',
       output: {
-        globals: { 'pdfjs-dist': 'pdfjsLib' },
+        globals: { echarts: 'echarts', jszip: 'JSZip', 'pdfjs-dist': 'pdfjsLib' },
       },
     },
   },

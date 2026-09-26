@@ -1,0 +1,91 @@
+{
+  "name": "oracle-pypptx-shape-effect-0001-outer-shadow-matrix",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "p:sp/p:spPr/a:effectLst/a:outerShdw",
+      "semantics=inverse|defaults|offset|direction|uniformScale|colorModifiers",
+      "geometry=rect|roundRect|ellipse",
+      "geometry.aspect=square|wide|tall",
+      "container=standalone|singleLevelUniformUnrotatedGroup",
+      "paint=explicitSolid|simpleGradient",
+      "shadow.color=srgbClr|schemeClr+lumMod+lumOff+alpha",
+      "shadow.skew=absent",
+      "shape.transform=rotation0|flipHFalse|flipVFalse",
+      "shape3d=absent"
+    ]
+  },
+  "assertions": {
+    "inverseSlideIndices": [
+      0
+    ],
+    "positiveShadowSlideIndices": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ]
+  }
+}

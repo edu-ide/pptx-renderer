@@ -1,0 +1,22 @@
+{
+  "name": "oracle-pypptx-table-0004-horizontal-vertical-merges",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "a:tc.gridSpan",
+      "a:tc.rowSpan",
+      "a:tc.hMerge",
+      "a:tc.vMerge"
+    ]
+  }
+}

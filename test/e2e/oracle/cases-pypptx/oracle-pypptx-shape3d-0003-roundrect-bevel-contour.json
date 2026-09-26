@@ -1,0 +1,25 @@
+{
+  "name": "oracle-pypptx-shape3d-0003-roundrect-bevel-contour",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "p:sp.prstGeom=roundRect",
+      "a:scene3d.camera=orthographicFront",
+      "a:scene3d.lightRig=threePt:t",
+      "a:sp3d.extrusionH=0",
+      "a:sp3d.bevelT=circle",
+      "a:sp3d.contourW=12700",
+      "a:sp3d.contourClr=FFFFFF"
+    ]
+  }
+}

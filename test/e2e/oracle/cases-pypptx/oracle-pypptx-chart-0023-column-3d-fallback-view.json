@@ -1,0 +1,26 @@
+{
+  "name": "oracle-pypptx-chart-0023-column-3d-fallback-view",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "chart.bar3DChart",
+      "chart.view3D.rotX",
+      "chart.view3D.hPercent",
+      "chart.view3D.rotY",
+      "chart.view3D.depthPercent",
+      "chart.view3D.rAngAx",
+      "chart.view3D.perspective",
+      "chart.fallback.2d-readable"
+    ]
+  }
+}

@@ -117,12 +117,13 @@ Three-step: `schemeClr` → master `colorMap` remap (e.g. "tx1"→"dk1") → the
 
 ### What's NOT Supported
 
-3D effects, animations/transitions, equations, EMF/WMF images, pattern fills, shadow/reflection/glow, combo charts, secondary axes, embedded OLE objects, slide notes.
+General DrawingML 3D outside the bounded verified static subsets, true 3D chart perspective/depth/surface meshes, animations/transitions, OMML constructs and per-token formula styles outside the bounded direct MathML subset, full EMF/WMF vector rendering, effect combinations outside the bounded ordinary-shape shadow/reflection subsets, executing/editing embedded OLE objects, and slide notes rendering.
 
 Notes:
 
 - SmartArt/diagram fallback is partially supported and under active oracle-driven regression expansion.
 - Do not assume full PowerPoint parity for all SmartArt layouts.
+- Pattern fills, supported combo-chart combinations, secondary axes, and bounded OMML-to-MathML formulas are implemented; do not treat them as blanket exclusions.
 
 ## Dev Server Pages
 

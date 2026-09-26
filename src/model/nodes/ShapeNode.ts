@@ -5,9 +5,21 @@
 import { SafeXmlNode } from '../../parser/XmlParser';
 import { emuToPx, angleToDeg } from '../../parser/units';
 import { BaseNodeData, parseBaseProps } from './BaseNode';
+import { parseShape3DProperties, Shape3DProperties } from './Shape3D';
+import {
+  DRAWINGML_MATH_NAMESPACE,
+  firstMathRunProperties,
+  mathFormulaText,
+  parseDrawingmlMath,
+  type MathFormula,
+} from './MathNode';
 
 export interface TextRun {
   text: string;
+  /** Parsed Presentation MathML source when this run originated from `a14:m`. */
+  math?: MathFormula;
+  /** OOXML dynamic field type, for example `slidenum`. */
+  fieldType?: string;
   /** @internal Raw XML node — opaque to consumers. Use serializePresentation() for JSON-safe data. */
   properties?: SafeXmlNode;
 }
@@ -56,6 +68,7 @@ export interface ShapeNodeData extends BaseNodeData {
   fill?: SafeXmlNode;
   /** @internal Raw XML node — opaque to consumers. Use serializePresentation() for JSON-safe data. */
   line?: SafeXmlNode;
+  shape3d?: Shape3DProperties;
   headEnd?: LineEndInfo;
   tailEnd?: LineEndInfo;
   textBody?: TextBody;
@@ -118,8 +131,18 @@ function parseParagraph(pNode: SafeXmlNode): TextParagraph {
       const tNode = child.child('t');
       orderedRuns.push({
         text: tNode.text(),
+        fieldType: child.attr('type'),
         properties: rPr.exists() ? rPr : undefined,
       });
+    } else if (ln === 'm' && child.element?.namespaceURI === DRAWINGML_MATH_NAMESPACE) {
+      const math = parseDrawingmlMath(child);
+      if (math) {
+        orderedRuns.push({
+          text: mathFormulaText(math),
+          math,
+          properties: firstMathRunProperties(child),
+        });
+      }
     }
   }
 
@@ -171,7 +194,7 @@ function findFill(spPr: SafeXmlNode): SafeXmlNode | undefined {
  * Parse adjustment values from `a:avLst > a:gd` elements.
  * Each guide has a `name` attribute and a `fmla` attribute like "val 50000".
  */
-function parseAdjustments(avLst: SafeXmlNode): Map<string, number> {
+export function parseAdjustments(avLst: SafeXmlNode): Map<string, number> {
   const adjustments = new Map<string, number>();
   for (const gd of avLst.children('gd')) {
     const name = gd.attr('name');
@@ -216,6 +239,7 @@ export function parseShapeNode(spNode: SafeXmlNode): ShapeNodeData {
   // --- Line ---
   const ln = spPr.child('ln');
   const line = ln.exists() ? ln : undefined;
+  const shape3d = parseShape3DProperties(spPr);
 
   // --- Line end markers (arrowheads) ---
   let headEnd: LineEndInfo | undefined;
@@ -285,6 +309,7 @@ export function parseShapeNode(spNode: SafeXmlNode): ShapeNodeData {
     customGeometry,
     fill,
     line,
+    shape3d,
     headEnd,
     tailEnd,
     textBody,

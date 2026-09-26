@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderImage } from '../../../src/renderer/ImageRenderer';
+import { parsePicNode } from '../../../src/model/nodes/PicNode';
 import { createMockRenderContext } from '../helpers/mockContext';
 import { xmlNode } from '../helpers/xmlNode';
 import type { PicNodeData } from '../../../src/model/nodes/PicNode';
@@ -70,6 +71,183 @@ describe('renderImage', () => {
 
       expect(el.style.transform).toContain('scaleX(-1)');
       expect(el.style.transform).toContain('scaleY(-1)');
+    });
+
+    it('clips custom-geometry pictures with mirrored bitmap pixels when flipH is set (issue #3)', () => {
+      const ctx = createCtxWithMedia();
+      const source = xmlNode(
+        `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <nvPicPr><cNvPr id="1" name="custom clipped picture"/><nvPr/></nvPicPr>
+          <blipFill><blip r:embed="rId1"/><stretch><fillRect/></stretch></blipFill>
+          <spPr>
+            <xfrm flipH="1"><off x="0" y="0"/><ext cx="1905000" cy="952500"/></xfrm>
+            <custGeom>
+              <avLst/><gdLst/><ahLst/><cxnLst/>
+              <rect l="l" t="t" r="r" b="b"/>
+              <pathLst>
+                <path w="1905000" h="952500">
+                  <moveTo><pt x="1905000" y="0"/></moveTo>
+                  <lnTo><pt x="0" y="0"/></lnTo>
+                  <lnTo><pt x="0" y="952500"/></lnTo>
+                  <close/>
+                </path>
+              </pathLst>
+            </custGeom>
+          </spPr>
+        </pic>`,
+      );
+      const node = createPicNode({ flipH: true, source });
+
+      const el = renderImage(node, ctx);
+
+      expect(el.style.transform).not.toContain('scaleX(-1)');
+      const image = el.querySelector('svg image');
+      expect(image).toBeTruthy();
+      expect(image?.getAttribute('clip-path')).toBeNull();
+      expect(image?.parentElement?.getAttribute('clip-path') ?? '').toContain('picture-clip-');
+      expect(image?.getAttribute('transform') ?? '').toContain('scale(-1 1)');
+      expect(el.querySelector('clipPath path')?.getAttribute('d')).toContain('M');
+    });
+
+    it('combines custom-geometry clipping, srcRect crop, and flipH with bitmap mirroring', () => {
+      const ctx = createCtxWithMedia();
+      const source = xmlNode(
+        `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <nvPicPr><cNvPr id="1" name="custom cropped picture"/><nvPr/></nvPicPr>
+          <blipFill>
+            <blip r:embed="rId1"/>
+            <srcRect l="10000" t="20000" r="10000" b="20000"/>
+            <stretch><fillRect/></stretch>
+          </blipFill>
+          <spPr>
+            <xfrm flipH="1"><off x="0" y="0"/><ext cx="1905000" cy="952500"/></xfrm>
+            <custGeom>
+              <avLst/><gdLst/><ahLst/><cxnLst/>
+              <rect l="l" t="t" r="r" b="b"/>
+              <pathLst>
+                <path w="1905000" h="952500">
+                  <moveTo><pt x="1905000" y="0"/></moveTo>
+                  <lnTo><pt x="0" y="0"/></lnTo>
+                  <lnTo><pt x="0" y="952500"/></lnTo>
+                  <close/>
+                </path>
+              </pathLst>
+            </custGeom>
+          </spPr>
+        </pic>`,
+      );
+      const node = createPicNode({
+        flipH: true,
+        source,
+        size: { w: 200, h: 100 },
+        crop: { left: 0.1, right: 0.1, top: 0.2, bottom: 0.2 },
+      });
+
+      const el = renderImage(node, ctx);
+      const image = el.querySelector('svg image')!;
+      const clipPath = el.querySelector('clipPath path')!;
+
+      expect(el.style.transform).not.toContain('scaleX(-1)');
+      expect(clipPath.getAttribute('transform')).toContain('scale(-1 1)');
+      expect(image.getAttribute('clip-path')).toBeNull();
+      expect(image.parentElement?.getAttribute('clip-path') ?? '').toContain('picture-clip-');
+      expect(image.getAttribute('transform') ?? '').toContain('scale(-1 1)');
+      expect(Number(image.getAttribute('x'))).toBeCloseTo(-25, 1);
+      expect(Number(image.getAttribute('y'))).toBeCloseTo(-33.333, 1);
+      expect(Number(image.getAttribute('width'))).toBeCloseTo(250, 1);
+      expect(Number(image.getAttribute('height'))).toBeCloseTo(166.667, 1);
+    });
+
+    it('clips a preset-geometry picture with the deterministic OOXML subset path', () => {
+      const ctx = createCtxWithMedia();
+      const source = xmlNode(
+        `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <nvPicPr><cNvPr id="1" name="Terminator picture"/><nvPr/></nvPicPr>
+          <blipFill><blip r:embed="rId1"/><stretch><fillRect/></stretch></blipFill>
+          <spPr>
+            <xfrm><off x="0" y="0"/><ext cx="1905000" cy="952500"/></xfrm>
+            <prstGeom prst="flowChartTerminator"><avLst/></prstGeom>
+          </spPr>
+        </pic>`,
+      );
+
+      const el = renderImage(parsePicNode(source), ctx);
+
+      expect(el.querySelector('clipPath path')?.getAttribute('d')).toBe(
+        'M32.175926,0 L167.824074,0 A32.175926,50 0 0,1 167.824074,100 L32.175926,100 A32.175926,50 0 0,1 32.175926,0 Z',
+      );
+      expect(el.querySelector('svg image')).toBeTruthy();
+    });
+
+    it('clips a picture with generated cubic flowchart document geometry', () => {
+      const ctx = createCtxWithMedia();
+      const source = xmlNode(
+        `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <nvPicPr><cNvPr id="1" name="Document picture"/><nvPr/></nvPicPr>
+          <blipFill><blip r:embed="rId1"/><stretch><fillRect/></stretch></blipFill>
+          <spPr>
+            <xfrm><off x="0" y="0"/><ext cx="1905000" cy="952500"/></xfrm>
+            <prstGeom prst="flowChartDocument"><avLst/></prstGeom>
+          </spPr>
+        </pic>`,
+      );
+
+      const el = renderImage(createPicNode({ source }), ctx);
+      const path = el.querySelector('clipPath path')?.getAttribute('d');
+
+      expect(path).toContain('C');
+      expect(path).not.toMatch(/NaN|Infinity/);
+      expect(el.querySelector('svg image')).toBeTruthy();
+    });
+
+    it('clips a multi-path flowchart picture to its generated normal-fill silhouette', () => {
+      const ctx = createCtxWithMedia();
+      const source = xmlNode(
+        `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <nvPicPr><cNvPr id="1" name="Predefined process picture"/><nvPr/></nvPicPr>
+          <blipFill><blip r:embed="rId1"/><stretch><fillRect/></stretch></blipFill>
+          <spPr>
+            <xfrm><off x="0" y="0"/><ext cx="1905000" cy="952500"/></xfrm>
+            <prstGeom prst="flowChartPredefinedProcess"><avLst/></prstGeom>
+          </spPr>
+        </pic>`,
+      );
+
+      const el = renderImage(createPicNode({ source }), ctx);
+      const path = el.querySelector('clipPath path')?.getAttribute('d');
+
+      expect(path).toBe('M0,0 L200,0 L200,100 L0,100 Z');
+      expect(path).not.toContain('M25,0');
+      expect(el.querySelector('svg image')).toBeTruthy();
+    });
+
+    it('clips a donut picture with its explicit OOXML adjustment', () => {
+      const ctx = createCtxWithMedia();
+      const source = xmlNode(
+        `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <nvPicPr><cNvPr id="1" name="Adjusted donut picture"/><nvPr/></nvPicPr>
+          <blipFill><blip r:embed="rId1"/><stretch><fillRect/></stretch></blipFill>
+          <spPr>
+            <xfrm><off x="0" y="0"/><ext cx="1905000" cy="952500"/></xfrm>
+            <prstGeom prst="donut">
+              <avLst><gd name="adj" fmla="val 10000"/></avLst>
+            </prstGeom>
+          </spPr>
+        </pic>`,
+      );
+
+      const el = renderImage(parsePicNode(source), ctx);
+      const path = el.querySelector('clipPath path')?.getAttribute('d');
+
+      expect(path).toContain('M10,50 A90,40');
+      expect(path).not.toContain('M25,50');
+      expect(el.querySelector('svg image')).toBeTruthy();
     });
   });
 
@@ -492,6 +670,39 @@ describe('renderImage', () => {
       expect(renderImage(createPicNode({ source: transparent }), ctx).style.filter).toBe('');
     });
 
+    it('applies picture softEdge from spPr effectLst as an edge fade mask', () => {
+      const ctx = createCtxWithMedia();
+      const source = xmlNode(
+        `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <nvPicPr><cNvPr id="1" name="pic"/><nvPr/></nvPicPr>
+          <blipFill><blip r:embed="rId1"/></blipFill>
+          <spPr>
+            <xfrm><off x="0" y="0"/><ext cx="0" cy="0"/></xfrm>
+            <effectLst><softEdge rad="127000"/></effectLst>
+          </spPr>
+        </pic>`,
+      );
+
+      const el = renderImage(createPicNode({ source }), ctx);
+      const style = el.style as CSSStyleDeclaration & {
+        webkitMaskImage?: string;
+        webkitMaskComposite?: string;
+        maskImage?: string;
+      };
+
+      expect(el.style.getPropertyValue('--pptx-soft-edge-radius')).toBe('13.3333px');
+      expect(el.style.getPropertyValue('-webkit-mask-image') || style.webkitMaskImage).toContain(
+        'linear-gradient',
+      );
+      expect(el.style.getPropertyValue('mask-image') || style.maskImage).toContain(
+        'linear-gradient',
+      );
+      expect(
+        el.style.getPropertyValue('-webkit-mask-composite') || style.webkitMaskComposite,
+      ).toContain('source-in');
+    });
+
     it('ignores picture hyperlinks when navigation is unavailable or unsafe', () => {
       const noNavigation = createCtxWithMedia();
       const missingRid = createCtxWithMedia();
@@ -512,10 +723,7 @@ describe('renderImage', () => {
         createPicNode({ hlinkClick: { rId: 'rIdMissing' } }),
         missingRid,
       );
-      const unsafeEl = renderImage(
-        createPicNode({ hlinkClick: { rId: 'rIdUnsafe' } }),
-        unsafe,
-      );
+      const unsafeEl = renderImage(createPicNode({ hlinkClick: { rId: 'rIdUnsafe' } }), unsafe);
 
       noNavigationEl.click();
       missingRidEl.click();
@@ -716,6 +924,24 @@ describe('renderImage', () => {
       const node = createPicNode({ source });
       const el = renderImage(node, ctx);
       expect(el.style.opacity).toBe('0.35');
+    });
+
+    it('applies grayscale filter from grayscl blip effect (xcloud-intro slide 10)', () => {
+      const ctx = createCtxWithMedia();
+      const source = xmlNode(
+        `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <nvPicPr><cNvPr id="1" name="grayscale icon"/><nvPr/></nvPicPr>
+          <blipFill><blip r:embed="rId1"><grayscl/></blip></blipFill>
+          <spPr><xfrm><off x="0" y="0"/><ext cx="0" cy="0"/></xfrm></spPr>
+        </pic>`,
+      );
+      const node = createPicNode({ source });
+
+      const el = renderImage(node, ctx);
+      const img = el.querySelector('img');
+
+      expect(img?.style.filter ?? '').toContain('grayscale(1)');
     });
 
     it('attaches load listener for lum effect', () => {
@@ -1508,6 +1734,8 @@ describe('renderImage', () => {
       expect(img).not.toBeNull();
       expect(img.style.width).toBe('100%');
       expect(img.style.height).toBe('100%');
+      expect(img.style.maxWidth).toBe('none');
+      expect(img.style.maxHeight).toBe('none');
       expect(img.style.objectFit).toBe('fill');
       expect(img.style.display).toBe('block');
       expect(img.draggable).toBe(false);
@@ -3216,10 +3444,51 @@ describe('renderImage', () => {
         node.size.w,
         node.size.h,
         ctx.pdfjs,
+        undefined,
       );
 
       emfSpy.mockRestore();
       pdfSpy.mockRestore();
+    });
+
+    it('drops and revokes a late PDF result after the render context is aborted', async () => {
+      const emfModule = await import('../../../src/utils/emfParser');
+      const pdfModule = await import('../../../src/utils/pdfRenderer');
+      const emfSpy = vi.spyOn(emfModule, 'parseEmfContent').mockReturnValue({
+        type: 'pdf',
+        data: new Uint8Array([0x25, 0x50, 0x44, 0x46]),
+      });
+      let resolvePdf!: (url: string | null) => void;
+      const pdfSpy = vi.spyOn(pdfModule, 'renderPdfToImage').mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolvePdf = resolve;
+          }),
+      );
+      const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+      const controller = new AbortController();
+      const ctx = createEmfCtx();
+      ctx.signal = controller.signal;
+
+      const el = renderImage(createPicNode({ blipEmbed: 'rId1' }), ctx);
+      controller.abort();
+      resolvePdf('blob:late-pdf-url');
+      await Promise.all(ctx.asyncTasks ?? []);
+
+      expect(pdfSpy).toHaveBeenCalledWith(
+        expect.any(Uint8Array),
+        expect.any(Number),
+        expect.any(Number),
+        undefined,
+        controller.signal,
+      );
+      expect(revokeSpy).toHaveBeenCalledWith('blob:late-pdf-url');
+      expect(ctx.mediaUrlCache.has('ppt/media/image1.emf:emf-pdf')).toBe(false);
+      expect(el.querySelector('img')).toBeNull();
+
+      emfSpy.mockRestore();
+      pdfSpy.mockRestore();
+      revokeSpy.mockRestore();
     });
 
     it('leaves wrapper empty when renderPdfToImage returns null', async () => {
@@ -3495,6 +3764,122 @@ describe('renderImage', () => {
       expect(img.draggable).toBe(false);
 
       spy.mockRestore();
+    });
+  });
+
+  describe('bounded static DrawingML 3D', () => {
+    it('combines a valid asymmetric srcRect crop with the bounded picture bevel', () => {
+      const ctx = createCtxWithMedia();
+      const source = xmlNode(
+        `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <nvPicPr><cNvPr id="90" name="Cropped 3D picture"/><nvPr/></nvPicPr>
+          <blipFill>
+            <blip r:embed="rId1"/>
+            <srcRect l="22000" t="18000" r="8000" b="12000"/>
+            <stretch><fillRect/></stretch>
+          </blipFill>
+          <spPr>
+            <xfrm><off x="0" y="0"/><ext cx="1905000" cy="952500"/></xfrm>
+            <prstGeom prst="rect"><avLst/></prstGeom>
+            <scene3d><camera prst="orthographicFront"/><lightRig rig="twoPt" dir="t"/></scene3d>
+            <sp3d extrusionH="0"><bevelT w="127000" h="127000" prst="circle"/></sp3d>
+          </spPr>
+        </pic>`,
+      );
+
+      const el = renderImage(parsePicNode(source), ctx);
+      const image = el.querySelector('svg image');
+
+      expect(el.querySelector('[data-pptx-shape3d-bevel]')).toBeTruthy();
+      expect(Number(image?.getAttribute('x'))).toBeCloseTo(-62.857, 2);
+      expect(Number(image?.getAttribute('y'))).toBeCloseTo(-25.714, 2);
+      expect(Number(image?.getAttribute('width'))).toBeCloseTo(285.714, 2);
+      expect(Number(image?.getAttribute('height'))).toBeCloseTo(142.857, 2);
+    });
+
+    it('keeps a degenerate srcRect crop on the ordinary flat picture path', () => {
+      const ctx = createCtxWithMedia();
+      const source = xmlNode(
+        `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <nvPicPr><cNvPr id="90" name="Degenerate cropped 3D picture"/><nvPr/></nvPicPr>
+          <blipFill>
+            <blip r:embed="rId1"/>
+            <srcRect l="60000" r="50000"/>
+            <stretch><fillRect/></stretch>
+          </blipFill>
+          <spPr>
+            <xfrm><off x="0" y="0"/><ext cx="1905000" cy="952500"/></xfrm>
+            <prstGeom prst="rect"><avLst/></prstGeom>
+            <scene3d><camera prst="orthographicFront"/><lightRig rig="twoPt" dir="t"/></scene3d>
+            <sp3d extrusionH="0"><bevelT w="127000" h="127000" prst="circle"/></sp3d>
+          </spPr>
+        </pic>`,
+      );
+
+      const el = renderImage(parsePicNode(source), ctx);
+
+      expect(el.querySelector(':scope > img')).toBeTruthy();
+      expect(el.querySelector('[data-pptx-shape3d-bevel]')).toBeNull();
+    });
+
+    it('renders a rect picture through SVG so bevel, outline, and outer shadow coexist', () => {
+      const ctx = createCtxWithMedia();
+      const source = xmlNode(
+        `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <nvPicPr><cNvPr id="91" name="Real picture bevel slice"/><nvPr/></nvPicPr>
+          <blipFill><blip r:embed="rId1"/><stretch><fillRect/></stretch></blipFill>
+          <spPr>
+            <xfrm><off x="0" y="0"/><ext cx="3048000" cy="1714500"/></xfrm>
+            <prstGeom prst="rect"><avLst/></prstGeom>
+            <solidFill><srgbClr val="FFFFFF"><shade val="85000"/></srgbClr></solidFill>
+            <ln w="88900" cap="sq"><solidFill><srgbClr val="FFFFFF"/></solidFill><miter lim="800000"/></ln>
+            <effectLst>
+              <outerShdw blurRad="55000" dist="18000" dir="5400000" algn="tl" rotWithShape="0">
+                <srgbClr val="000000"><alpha val="40000"/></srgbClr>
+              </outerShdw>
+            </effectLst>
+            <scene3d>
+              <camera prst="orthographicFront"/>
+              <lightRig rig="twoPt" dir="t"><rot lat="0" lon="0" rev="7200000"/></lightRig>
+            </scene3d>
+            <sp3d><bevelT w="25400" h="19050"/><contourClr><srgbClr val="FFFFFF"/></contourClr></sp3d>
+          </spPr>
+        </pic>`,
+      );
+
+      const el = renderImage(parsePicNode(source), ctx);
+
+      expect(el.style.overflow).toBe('visible');
+      expect(el.style.border).toBe('');
+      expect(el.style.filter).toContain('drop-shadow');
+      expect(el.querySelector('svg image')).toBeTruthy();
+      expect(el.querySelector('[data-pptx-shape3d-bevel]')).toBeTruthy();
+      expect(el.querySelector('[data-pptx-shape3d-contour]')).toBeNull();
+      const outline = el.querySelector('path[data-pptx-picture-outline]');
+      expect(outline?.getAttribute('stroke')).toBe('#FFFFFF');
+      expect(Number(outline?.getAttribute('stroke-width'))).toBeCloseTo(9.3333, 3);
+      expect(outline?.hasAttribute('filter')).toBe(false);
+    });
+
+    it('keeps a picture without supported 3D on the ordinary img path', () => {
+      const ctx = createCtxWithMedia();
+      const source = xmlNode(
+        `<pic xmlns="http://schemas.openxmlformats.org/drawingml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <nvPicPr><cNvPr id="92" name="Flat picture"/><nvPr/></nvPicPr>
+          <blipFill><blip r:embed="rId1"/><stretch><fillRect/></stretch></blipFill>
+          <spPr><xfrm><off x="0" y="0"/><ext cx="1905000" cy="952500"/></xfrm><prstGeom prst="rect"><avLst/></prstGeom></spPr>
+        </pic>`,
+      );
+
+      const el = renderImage(parsePicNode(source), ctx);
+
+      expect(el.style.overflow).toBe('hidden');
+      expect(el.querySelector(':scope > img')).toBeTruthy();
+      expect(el.querySelector('[data-pptx-shape3d-bevel]')).toBeNull();
     });
   });
 });

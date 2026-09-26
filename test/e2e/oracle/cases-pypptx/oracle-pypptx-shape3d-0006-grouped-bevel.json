@@ -1,0 +1,22 @@
+{
+  "name": "oracle-pypptx-shape3d-0006-grouped-bevel",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "p:grpSp/p:sp",
+      "group.nonIdentityScale",
+      "a:scene3d.camera=orthographicFront",
+      "a:sp3d.bevelT=circle"
+    ]
+  }
+}

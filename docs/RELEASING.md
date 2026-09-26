@@ -5,6 +5,8 @@
 - [ ] Update changelog/release notes
 - [ ] Verify tests pass: `pnpm test`
 - [ ] Verify build passes: `pnpm build`
+- [ ] Verify package entries, packlist/notices, and real browser paths: `pnpm test:package && pnpm test:browser`
+- [ ] Verify PDF.js contracts: `pnpm test:pdfjs-contract` and the CI PDF.js 6 matrix job
 - [ ] Verify lint/types/exports: `pnpm lint && pnpm typecheck && pnpm knip && pnpm publint`
 - [ ] Verify bundle size: `pnpm size`
 - [ ] Confirm `README` and docs are up to date
@@ -22,7 +24,7 @@ Use semantic versioning:
 
 1. Create release branch or prepare release commit on `main`.
 2. Bump version in `package.json`.
-3. Run full verification (`pnpm test`, `pnpm build`).
+3. Run the full pre-release checklist above.
 4. Tag release (`vX.Y.Z`).
 5. Publish release notes with migration notes if needed.
 
@@ -33,19 +35,20 @@ Use this sequence for an actual release:
 1. Verify and build:
    - `pnpm test`
    - `pnpm build`
+   - `pnpm test:package`
+   - `pnpm test:browser`
+   - `pnpm size`
 2. Commit release metadata:
    - `git add -A`
    - `git commit -m "chore: release vX.Y.Z"`
-3. (Optional) Flatten history to one initial commit:
-   - `/bin/zsh -lc 'NEW_ROOT=$(git commit-tree HEAD^{tree} -m "First commit") && git reset --hard "$NEW_ROOT"'`
-4. Create annotated tag:
+3. Create annotated tag:
    - `git tag -a vX.Y.Z -m "vX.Y.Z"`
-5. Push branch and tag:
+4. Push branch and tag:
    - `git push origin main`
    - `git push origin vX.Y.Z`
-6. Create GitHub Release:
+5. Create GitHub Release:
    - `gh release create vX.Y.Z --title "vX.Y.Z" --notes-file CHANGELOG.md`
-7. Publish npm package:
+6. Publish npm package:
    - `npm whoami`
    - `npm publish --access public`
 

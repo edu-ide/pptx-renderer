@@ -75,6 +75,75 @@ describe('TextRenderer — renderTextBody', () => {
       expect(container.textContent).toContain('Hello World');
     });
 
+    it('keeps compact numeric percentage tokens on one line (issue #4)', () => {
+      for (const text of ['80%', '15 %']) {
+        const body = makeTextBody({
+          paragraphs: [
+            {
+              runs: [
+                {
+                  text,
+                  properties: xmlNode('<rPr lang="en-US" sz="4800"/>'),
+                },
+              ],
+              level: 0,
+            },
+          ],
+        });
+
+        const container = renderToContainer(body);
+        const span = container.querySelector('span');
+
+        expect(span?.textContent).toBe(text);
+        expect(span?.style.whiteSpace).toBe('nowrap');
+      }
+    });
+
+    it('keeps only the compact numeric token nowrap while leaving trailing space breakable', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: '80% ',
+                properties: xmlNode('<rPr lang="en-US" sz="4800"/>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
+      });
+
+      const container = renderToContainer(body);
+      const outerRun = container.querySelector('div > span');
+      const token = outerRun?.querySelector('span');
+
+      expect(outerRun?.textContent).toBe('80% ');
+      expect(outerRun?.style.whiteSpace).not.toBe('nowrap');
+      expect(token?.textContent).toBe('80%');
+      expect(token?.style.whiteSpace).toBe('nowrap');
+    });
+
+    it('does not create arbitrary wrap points between adjacent numeric percentage runs', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            runs: [{ text: '80' }, { text: '%' }],
+            level: 0,
+          },
+        ],
+      });
+
+      const container = renderToContainer(body);
+      const paragraph = container.querySelector('div');
+      const group = paragraph?.querySelector(':scope > span');
+
+      expect(container.textContent).toBe('80%');
+      expect(paragraph?.style.overflowWrap).toBe('anywhere');
+      expect(group?.textContent).toBe('80%');
+      expect(group?.style.whiteSpace).toBe('nowrap');
+    });
+
     it('parses OOXML boolean aliases for paragraph rtl direction', () => {
       const body = makeTextBody({
         paragraphs: [
@@ -829,8 +898,8 @@ describe('TextRenderer — renderTextBody', () => {
       };
       const container = renderToContainer(body);
       const para = container.children[0] as HTMLElement;
-      // 1.5 * (1 - 0.2) = 1.2
-      expect(parseFloat(para.style.lineHeight)).toBeCloseTo(1.2, 3);
+      // OOXML subtracts the reduction before converting the 1.3 Office lines to CSS em.
+      expect(parseFloat(para.style.lineHeight)).toBeCloseTo(1.547, 3);
     });
   });
 
@@ -961,13 +1030,56 @@ describe('TextRenderer — renderTextBody', () => {
       expect(container.textContent).toContain('Line 2');
     });
 
-    it('renders empty paragraph with <br>', () => {
-      const body = makeTextBody({
-        paragraphs: [{ runs: [], level: 0 }],
-      });
-      const container = renderToContainer(body);
-      const br = container.querySelector('br');
-      expect(br).not.toBeNull();
+    it('renders empty paragraphs with <br>, including explicit empty runs', () => {
+      for (const runs of [[], [{ text: '' }]]) {
+        const body = makeTextBody({ paragraphs: [{ runs, level: 0 }] });
+        expect(renderToContainer(body).querySelector('br')).not.toBeNull();
+      }
+    });
+
+    it('renders slide number fields with the default starting number', () => {
+      const ctx = createMockRenderContext();
+      ctx.slide.index = 19;
+      const container = document.createElement('div');
+      renderTextBody(
+        makeTextBody({
+          paragraphs: [{ runs: [{ text: '‹#›', fieldType: 'slidenum' }], level: 0 }],
+        }),
+        undefined,
+        ctx,
+        container,
+      );
+      expect(container.textContent).toBe('20');
+    });
+
+    it('renders slide number fields with a non-default starting number', () => {
+      const ctx = createMockRenderContext();
+      ctx.presentation.firstSlideNum = 10;
+      ctx.slide.index = 1;
+      const container = document.createElement('div');
+      renderTextBody(
+        makeTextBody({ paragraphs: [{ runs: [{ text: '2', fieldType: 'slidenum' }], level: 0 }] }),
+        undefined,
+        ctx,
+        container,
+      );
+      expect(container.textContent).toBe('11');
+    });
+
+    it('treats slide number fields with empty cached text as visible', () => {
+      const ctx = createMockRenderContext();
+      ctx.presentation.firstSlideNum = 10;
+      ctx.slide.index = 1;
+      const container = document.createElement('div');
+      renderTextBody(
+        makeTextBody({ paragraphs: [{ runs: [{ text: '', fieldType: 'slidenum' }], level: 0 }] }),
+        undefined,
+        ctx,
+        container,
+      );
+
+      expect(container.textContent).toBe('11');
+      expect(container.querySelector('br')).toBeNull();
     });
   });
 
@@ -1293,7 +1405,7 @@ describe('TextRenderer — renderTextBody', () => {
       expect(span!.style.fontFamily).toContain('sans-serif');
     });
 
-    it('adds sans-serif fallbacks for Calibri when the Office font is unavailable (xcloud-intro slide 8)', () => {
+    it('prefers system-ui before Arial for missing Office default Latin fonts (line-spacing oracle)', () => {
       const body = makeTextBody({
         paragraphs: [
           {
@@ -1311,8 +1423,12 @@ describe('TextRenderer — renderTextBody', () => {
       const span = container.querySelector('span');
 
       expect(span!.style.fontFamily).toContain('Calibri');
-      expect(span!.style.fontFamily).toContain('Arial');
-      expect(span!.style.fontFamily).toContain('sans-serif');
+      expect(span!.style.fontFamily).toContain('Aptos');
+      expect(span!.style.fontFamily).toContain('Carlito');
+      expect(span!.style.fontFamily).toContain('system-ui');
+      expect(span!.style.fontFamily.indexOf('system-ui')).toBeLessThan(
+        span!.style.fontFamily.indexOf('Arial'),
+      );
       expect(span!.style.fontFamily).not.toContain('PingFang SC');
     });
 
@@ -1344,7 +1460,7 @@ describe('TextRenderer — renderTextBody', () => {
       });
       const container = renderToContainer(body);
       const para = container.children[0] as HTMLElement;
-      expect(parseFloat(para.style.lineHeight)).toBeCloseTo(1.2, 2);
+      expect(parseFloat(para.style.lineHeight)).toBeCloseTo(1.428, 2);
     });
 
     it('applies spcPts line height', () => {
@@ -1545,6 +1661,43 @@ describe('TextRenderer — renderTextBody', () => {
       expect(span.textContent).toBe('Gradient text');
       expect(span.style.background).toContain('linear-gradient');
       expect(span.style.color).toBe('transparent');
+      expect(span.style.webkitBackgroundClip).toBe('text');
+    });
+
+    it('keeps compact numeric gradient runs unsplit so background-clip still paints text', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: '80% ',
+                properties: xmlNode(`
+                  <rPr>
+                    <gradFill>
+                      <gsLst>
+                        <gs pos="0"><srgbClr val="FFFFFF"/></gs>
+                        <gs pos="100000"><srgbClr val="0070C0"/></gs>
+                      </gsLst>
+                      <lin ang="2700000"/>
+                    </gradFill>
+                  </rPr>
+                `),
+              },
+            ],
+            level: 0,
+          },
+        ],
+      });
+
+      const container = renderToContainer(body);
+      const span = container.querySelector('div > span') as HTMLElement & {
+        style: CSSStyleDeclaration & { webkitBackgroundClip?: string };
+      };
+
+      expect(span.textContent).toBe('80% ');
+      expect(span.querySelector('span')).toBeNull();
+      expect(span.style.whiteSpace).toBe('nowrap');
+      expect(span.style.background).toContain('linear-gradient');
       expect(span.style.webkitBackgroundClip).toBe('text');
     });
 
@@ -1823,6 +1976,90 @@ describe('TextRenderer — renderTextBody', () => {
       expect(para.style.textAlign).toBe('center');
     });
 
+    it('matches a max-idx layout placeholder by type instead of the first idx collision', () => {
+      const body = makeTextBody({
+        paragraphs: [{ runs: [{ text: 'Visible body text' }], level: 0 }],
+      });
+      const ctx = createMockRenderContext();
+      const panelPlaceholder = xmlNode(`
+        <sp xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <nvSpPr><cNvPr id="2" name="Panel"/><nvPr><ph idx="4294967295"/></nvPr></nvSpPr>
+          <txBody>
+            <lstStyle><lvl1pPr algn="r"><defRPr><solidFill><srgbClr val="FFFFFF"/></solidFill></defRPr></lvl1pPr></lstStyle>
+            <p><r><t>Panel</t></r></p>
+          </txBody>
+        </sp>
+      `);
+      const bodyPlaceholder = xmlNode(`
+        <sp xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <nvSpPr><cNvPr id="3" name="Body"/><nvPr><ph type="body" idx="4294967295"/></nvPr></nvSpPr>
+          <txBody>
+            <lstStyle><lvl1pPr algn="ctr"><defRPr><solidFill><srgbClr val="000000"/></solidFill></defRPr></lvl1pPr></lstStyle>
+            <p><r><t>Body</t></r></p>
+          </txBody>
+        </sp>
+      `);
+      ctx.layout.placeholders = [{ node: panelPlaceholder }, { node: bodyPlaceholder }];
+
+      const container = document.createElement('div');
+      renderTextBody(body, { type: 'body', idx: 4294967295 }, ctx, container);
+
+      const paragraph = container.children[0] as HTMLElement;
+      const span = container.querySelector('span') as HTMLElement;
+      expect(paragraph.style.textAlign).toBe('center');
+      expect(span.style.color).toBe('rgb(0, 0, 0)');
+    });
+
+    it('matches a placeholder without idx by type', () => {
+      const body = makeTextBody({
+        paragraphs: [{ runs: [{ text: 'Unindexed body text' }], level: 0 }],
+      });
+      const ctx = createMockRenderContext();
+      const objectPlaceholder = xmlNode(`
+        <sp xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <nvSpPr><cNvPr id="2" name="Object"/><nvPr><ph/></nvPr></nvSpPr>
+          <txBody><lstStyle><lvl1pPr algn="r"/></lstStyle><p><r><t>Object</t></r></p></txBody>
+        </sp>
+      `);
+      const bodyPlaceholder = xmlNode(`
+        <sp xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <nvSpPr><cNvPr id="3" name="Body"/><nvPr><ph type="body"/></nvPr></nvSpPr>
+          <txBody><lstStyle><lvl1pPr algn="ctr"/></lstStyle><p><r><t>Body</t></r></p></txBody>
+        </sp>
+      `);
+      ctx.layout.placeholders = [{ node: objectPlaceholder }, { node: bodyPlaceholder }];
+
+      const container = document.createElement('div');
+      renderTextBody(body, { type: 'body' }, ctx, container);
+
+      expect((container.children[0] as HTMLElement).style.textAlign).toBe('center');
+    });
+
+    it('keeps an ordinary explicit idx authoritative over placeholder type', () => {
+      const body = makeTextBody({
+        paragraphs: [{ runs: [{ text: 'Indexed text' }], level: 0 }],
+      });
+      const ctx = createMockRenderContext();
+      const sameTypePlaceholder = xmlNode(`
+        <sp xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <nvSpPr><cNvPr id="2" name="Body 1"/><nvPr><ph type="body" idx="1"/></nvPr></nvSpPr>
+          <txBody><lstStyle><lvl1pPr algn="l"/></lstStyle><p><r><t>Body</t></r></p></txBody>
+        </sp>
+      `);
+      const sameIdxPlaceholder = xmlNode(`
+        <sp xmlns="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <nvSpPr><cNvPr id="3" name="Object 7"/><nvPr><ph type="obj" idx="7"/></nvPr></nvSpPr>
+          <txBody><lstStyle><lvl1pPr algn="r"/></lstStyle><p><r><t>Object</t></r></p></txBody>
+        </sp>
+      `);
+      ctx.layout.placeholders = [{ node: sameTypePlaceholder }, { node: sameIdxPlaceholder }];
+
+      const container = document.createElement('div');
+      renderTextBody(body, { type: 'body', idx: 7 }, ctx, container);
+
+      expect((container.children[0] as HTMLElement).style.textAlign).toBe('right');
+    });
+
     it('layout placeholder lstStyle overrides master placeholder lstStyle', () => {
       const body = makeTextBody({
         paragraphs: [
@@ -2045,12 +2282,75 @@ describe('TextRenderer — renderTextBody', () => {
       const placeholder = { type: 'title' };
       renderTextBody(body, placeholder, ctx, container);
       const paraDiv = container.children[0] as HTMLElement;
-      // Should have 75% line spacing = 0.75 line-height
-      expect(parseFloat(paraDiv.style.lineHeight)).toBeCloseTo(0.75, 2);
+      // 75% of one Office line maps to 0.8925 CSS em.
+      expect(parseFloat(paraDiv.style.lineHeight)).toBeCloseTo(0.8925, 2);
     });
   });
 
   describe('endParaRPr trailing line height', () => {
+    it('preserves soft-break run metrics without replacing the visible paragraph strut', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            properties: xmlNode('<pPr><lnSpc><spcPct val="100000"/></lnSpc></pPr>'),
+            runs: [
+              {
+                text: '\n',
+                properties: xmlNode('<rPr sz="3000"><latin typeface="Arial"/></rPr>'),
+              },
+              {
+                text: 'Visible',
+                properties: xmlNode('<rPr sz="1000"><latin typeface="Courier New"/></rPr>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
+      });
+
+      const container = renderToContainer(body);
+      const paragraph = container.firstElementChild as HTMLElement;
+      const breakElement = paragraph.querySelector('br')?.parentElement as HTMLElement | null;
+
+      expect(paragraph.style.fontSize).toBe('10pt');
+      expect(breakElement?.tagName).toBe('SPAN');
+      expect(breakElement?.style.fontSize).toBe('30pt');
+      expect(breakElement?.style.fontFamily).toContain('Arial');
+      expect(
+        Array.from(paragraph.querySelectorAll('span')).find(
+          (element) => element.textContent === 'Visible',
+        )?.style.fontFamily,
+      ).toContain('Courier New');
+    });
+
+    it('ignores a leading soft break when resolving bullet color from visible text', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            properties: xmlNode('<pPr><buChar char="•"/></pPr>'),
+            runs: [
+              {
+                text: '\n',
+                properties: xmlNode('<rPr><solidFill><srgbClr val="FF0000"/></solidFill></rPr>'),
+              },
+              {
+                text: 'Visible',
+                properties: xmlNode('<rPr><solidFill><srgbClr val="0000FF"/></solidFill></rPr>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
+      });
+
+      const container = renderToContainer(body);
+      const bullet = Array.from(container.querySelectorAll('span')).find((element) =>
+        element.textContent?.startsWith('•'),
+      );
+
+      expect(bullet?.style.color).toBe('rgb(0, 0, 255)');
+    });
+
     it('trailing <br> before endParaRPr at 72pt creates a line with matching font size', () => {
       // Simulates: "Hello" + <br/> + endParaRPr sz=7200 (72pt)
       // The trailing <br> should produce a line whose height matches 72pt
@@ -2182,6 +2482,141 @@ describe('TextRenderer — renderTextBody', () => {
       expect(paraDiv.style.tabSize).toBeTruthy();
     });
 
+    it('uses paragraph defTabSz instead of the OOXML default when rendering tabs', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            runs: [{ text: 'Before' }, { text: '\t' }, { text: 'After' }],
+            properties: xmlNode('<pPr defTabSz="1219200"/>'),
+            level: 0,
+          },
+        ],
+      });
+      const container = renderToContainer(body);
+      const paraDiv = container.children[0] as HTMLElement;
+      expect(paraDiv.style.tabSize).toBe('128px');
+    });
+
+    it('marks a leading explicit OOXML tab for post-layout alignment (issue #23)', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            runs: [
+              { text: '\t' },
+              { text: '配套保障：明确容错纠错、澄清正名机制，激励担当作为。' },
+            ],
+            properties: xmlNode(`
+              <pPr marL="424815">
+                <tabLst><tab pos="536575" algn="l"/></tabLst>
+              </pPr>
+            `),
+            level: 0,
+          },
+        ],
+      });
+
+      const container = renderToContainer(body);
+      const paraDiv = container.children[0] as HTMLElement;
+      const tabSpacer = paraDiv.querySelector('[data-pptx-tab-stop]') as HTMLElement | null;
+
+      expect(parseFloat(paraDiv.style.paddingLeft)).toBeCloseTo(424815 / 9525, 3);
+      expect(tabSpacer).not.toBeNull();
+      expect(tabSpacer!.getAttribute('aria-hidden')).toBe('true');
+    });
+
+    it('marks a non-leading explicit tab for post-layout alignment', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            runs: [{ text: 'Before' }, { text: '\t' }, { text: 'After' }],
+            properties: xmlNode('<pPr><tabLst><tab pos="536575" algn="l"/></tabLst></pPr>'),
+            level: 0,
+          },
+        ],
+      });
+
+      const container = renderToContainer(body);
+      expect(container.querySelectorAll('[data-pptx-tab-stop]')).toHaveLength(1);
+      expect(container.textContent).toBe('BeforeAfter');
+    });
+
+    it('marks an explicit tab after leading whitespace for post-layout alignment', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            runs: [{ text: ' ' }, { text: '\t' }, { text: 'After' }],
+            properties: xmlNode('<pPr><tabLst><tab pos="536575" algn="l"/></tabLst></pPr>'),
+            level: 0,
+          },
+        ],
+      });
+
+      const container = renderToContainer(body);
+      expect(container.querySelectorAll('[data-pptx-tab-stop]')).toHaveLength(1);
+      expect(container.textContent).toBe(' After');
+    });
+
+    it('keeps leading tabs in right-to-left text on the browser tab-size path', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            runs: [{ text: '\t' }, { text: 'After' }],
+            properties: xmlNode('<pPr rtl="1"><tabLst><tab pos="536575" algn="l"/></tabLst></pPr>'),
+            level: 0,
+          },
+        ],
+      });
+      const container = document.createElement('div');
+
+      renderTextBody(body, undefined, createMockRenderContext(), container);
+
+      expect(container.querySelector('[data-pptx-tab-stop]')).toBeNull();
+      expect(container.textContent).toContain('\t');
+    });
+
+    it('marks a vertical explicit tab for inline-axis post-layout alignment', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            runs: [{ text: '\t' }, { text: 'After' }],
+            properties: xmlNode('<pPr><tabLst><tab pos="1828800" algn="l"/></tabLst></pPr>'),
+            level: 0,
+          },
+        ],
+      });
+      const container = document.createElement('div');
+
+      renderTextBody(body, undefined, createMockRenderContext(), container, {
+        isVerticalText: true,
+      });
+
+      const marker = container.querySelector('[data-pptx-tab-stop]') as HTMLElement | null;
+      expect(marker).not.toBeNull();
+      expect(marker!.style.width).toBe('1px');
+      expect(marker!.style.height).toBe('0px');
+      expect(container.textContent).toBe('After');
+    });
+
+    it('keeps unverified vertical non-left tab alignment on the browser tab-size path', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            runs: [{ text: '\t' }, { text: 'After' }],
+            properties: xmlNode('<pPr><tabLst><tab pos="1828800" algn="ctr"/></tabLst></pPr>'),
+            level: 0,
+          },
+        ],
+      });
+      const container = document.createElement('div');
+
+      renderTextBody(body, undefined, createMockRenderContext(), container, {
+        isVerticalText: true,
+      });
+
+      expect(container.querySelector('[data-pptx-tab-stop]')).toBeNull();
+      expect(container.textContent).toContain('\t');
+    });
+
     it('renders tab characters between text with preserved whitespace', () => {
       const body = makeTextBody({
         paragraphs: [
@@ -2195,6 +2630,158 @@ describe('TextRenderer — renderTextBody', () => {
       const allText = container.textContent || '';
       // Tab character must be present in the output
       expect(allText).toContain('\t');
+    });
+  });
+
+  describe('picture text fill', () => {
+    it('clips an embedded stretched blipFill to the run glyphs (issue #23)', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: '一、权力观的核心内涵与要义',
+                properties: xmlNode(`
+                  <rPr xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+                    <blipFill>
+                      <blip r:embed="rId8"/>
+                      <stretch><fillRect/></stretch>
+                    </blipFill>
+                  </rPr>
+                `),
+              },
+            ],
+            level: 0,
+          },
+        ],
+      });
+      const ctx = createMockRenderContext();
+      ctx.slide.rels.set('rId8', {
+        type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image',
+        target: '../media/image3.jpeg',
+      });
+      ctx.presentation.media.set('ppt/media/image3.jpeg', new Uint8Array([0xff, 0xd8, 0xff]));
+      const container = document.createElement('div');
+
+      renderTextBody(body, undefined, ctx, container);
+      const span = container.querySelector('span') as HTMLElement & {
+        style: CSSStyleDeclaration & { webkitBackgroundClip?: string };
+      };
+
+      expect(span.style.backgroundImage).toContain('blob:');
+      expect(span.style.backgroundSize).toBe('100% 100%');
+      expect(span.style.backgroundRepeat).toBe('no-repeat');
+      expect(span.style.webkitBackgroundClip).toBe('text');
+      expect(span.style.color).toBe('transparent');
+    });
+
+    it('lets an explicit solidFill override an inherited picture text fill', () => {
+      const body = makeTextBody({
+        listStyle: `
+          <lstStyle xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+            <lvl1pPr><defRPr><blipFill><blip r:embed="rId8"/></blipFill></defRPr></lvl1pPr>
+          </lstStyle>
+        `,
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Solid',
+                properties: xmlNode('<rPr><solidFill><srgbClr val="B02020"/></solidFill></rPr>'),
+              },
+            ],
+            level: 0,
+          },
+        ],
+      });
+      const ctx = createMockRenderContext();
+      ctx.slide.rels.set('rId8', {
+        type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image',
+        target: '../media/image3.jpeg',
+      });
+      ctx.presentation.media.set('ppt/media/image3.jpeg', new Uint8Array([0xff, 0xd8, 0xff]));
+      const container = document.createElement('div');
+
+      renderTextBody(body, undefined, ctx, container);
+      const span = container.querySelector('span') as HTMLElement;
+
+      expect(span.style.color).toBe('rgb(176, 32, 32)');
+      expect(span.style.backgroundImage).toBe('');
+    });
+
+    it('applies a lazily resolved blipFill before the slide-ready tasks settle', async () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Lazy picture fill',
+                properties: xmlNode(`
+                  <rPr xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+                    <blipFill><blip r:embed="rIdLazy"/><stretch><fillRect/></stretch></blipFill>
+                  </rPr>
+                `),
+              },
+            ],
+            level: 0,
+          },
+        ],
+      });
+      const ctx = createMockRenderContext();
+      ctx.slide.rels.set('rIdLazy', {
+        type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image',
+        target: '../media/lazy.jpeg',
+      });
+      ctx.presentation.mediaResolver = {
+        resolve: async () => ({
+          mediaPath: 'ppt/media/lazy.jpeg',
+          data: new Uint8Array([0xff, 0xd8, 0xff]),
+        }),
+      };
+      ctx.asyncTasks = [];
+      const container = document.createElement('div');
+
+      renderTextBody(body, undefined, ctx, container);
+      expect(ctx.asyncTasks).toHaveLength(1);
+      await Promise.all(ctx.asyncTasks);
+
+      const span = container.querySelector('span') as HTMLElement;
+      expect(span.style.backgroundImage).toContain('blob:');
+      expect(span.style.color).toBe('transparent');
+    });
+
+    it('does not use package media for a disallowed external picture fill target', () => {
+      const body = makeTextBody({
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: 'Unsafe picture fill',
+                properties: xmlNode(`
+                  <rPr xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+                    <blipFill><blip r:link="rIdUnsafe"/></blipFill>
+                  </rPr>
+                `),
+              },
+            ],
+            level: 0,
+          },
+        ],
+      });
+      const ctx = createMockRenderContext();
+      ctx.slide.rels.set('rIdUnsafe', {
+        type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image',
+        target: 'file:///tmp/image3.jpeg',
+        targetMode: 'External',
+      });
+      ctx.presentation.media.set('ppt/media/image3.jpeg', new Uint8Array([0xff, 0xd8, 0xff]));
+      const container = document.createElement('div');
+
+      renderTextBody(body, undefined, ctx, container);
+      const span = container.querySelector('span') as HTMLElement;
+
+      expect(span.style.backgroundImage).toBe('');
+      expect(ctx.mediaUrlCache.has('ppt/media/image3.jpeg')).toBe(false);
     });
   });
 });

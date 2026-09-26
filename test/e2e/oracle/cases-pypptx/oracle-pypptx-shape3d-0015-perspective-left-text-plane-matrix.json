@@ -1,0 +1,43 @@
+{
+  "name": "oracle-pypptx-shape3d-0015-perspective-left-text-plane-matrix",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "p:sp.prstGeom=rect",
+      "geometry.aspect=square|wide|tall",
+      "surface=noFillTextPlane",
+      "text.content=CJK|latin|digits",
+      "text.bodyPr=wrap-none|anchor-absent|spAutoFit",
+      "a:scene3d.camera=perspectiveLeft",
+      "a:scene3d.camera.rot=absent",
+      "a:scene3d.camera.fov=7200000",
+      "a:scene3d.lightRig=threePt:t",
+      "a:sp3d=absent",
+      "effects=absent"
+    ]
+  }
+}

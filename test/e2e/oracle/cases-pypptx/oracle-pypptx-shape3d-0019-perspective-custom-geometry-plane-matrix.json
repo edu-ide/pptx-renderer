@@ -1,0 +1,64 @@
+{
+  "name": "oracle-pypptx-shape3d-0019-perspective-custom-geometry-plane-matrix",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "p:sp.custGeom=multiContourCubic",
+      "geometry.aspect=square|wide|tall",
+      "matrix=crossProduct(3x2)",
+      "container=standalone",
+      "paint=explicitSolidBlue|explicitSolidWhite",
+      "a:scene3d.camera=perspectiveRelaxedModerately",
+      "a:scene3d.camera.rot=18590633,0,0",
+      "a:scene3d.camera.fov=7200000",
+      "a:scene3d.lightRig=threePt:t",
+      "a:sp3d=absent",
+      "effects=absent"
+    ]
+  }
+}

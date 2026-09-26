@@ -66,8 +66,8 @@ def pytest_addoption(parser):
     )
     parser.addoption(
         "--oracle-macro-name",
-        default="GenerateProbeDeck_Default",
-        help="VBA macro name for oracle smoke tests",
+        default="ExportSmartArtLayouts_ToFile",
+        help="VBA catalog macro name for oracle smoke tests",
     )
 
 
@@ -124,11 +124,17 @@ def dev_server_url(request):
 # Playwright Fixtures
 # ---------------------------------------------------------------------------
 
-@pytest.fixture(scope="session")
+# sync_playwright owns an asyncio loop while its context is open. Module scope keeps browser reuse
+# within E2E modules without leaking that loop into later tests that call asyncio.run().
+@pytest.fixture(scope="module")
 def browser():
-    """Launch a Playwright Chromium browser for the test session."""
+    """Launch Chromium for one browser-backed test module."""
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        channel = os.getenv("PPTX_E2E_BROWSER_CHANNEL", "").strip()
+        launch_options = {"headless": True}
+        if channel:
+            launch_options["channel"] = channel
+        browser = p.chromium.launch(**launch_options)
         yield browser
         browser.close()
 

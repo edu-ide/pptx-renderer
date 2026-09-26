@@ -19,6 +19,15 @@ import { emuToPx } from '../parser/units';
 import { SafeXmlNode } from '../parser/XmlParser';
 import { isAllowedExternalMediaUrl, isAllowedExternalUrl } from '../utils/urlSafety';
 import { resolveSlideNavigationIndex, slideJumpTitle } from './navigation';
+import { renderCustomGeometry } from '../shapes/customGeometry';
+import { getPresetShapeClipPath } from '../shapes/presets';
+import { splitTiledPatternFillCss } from './cssValues';
+import {
+  applyStaticShape3DPicturePlane,
+  appendStaticShape3DEffects,
+  buildStaticShape3DPlan,
+  type StaticShape3DPlan,
+} from './Shape3DRenderer';
 
 /**
  * Check if a file extension is an unsupported legacy format (WMF only now; EMF is handled).
@@ -36,13 +45,30 @@ function isEmfFormat(path: string): boolean {
   return ext === 'emf';
 }
 
-function resolveImageRelUrl(rel: RelEntry, ctx: RenderContext): string | undefined {
+let pictureClipPathIdCounter = 0;
+
+function resolveImageRelUrl(
+  rel: RelEntry,
+  ctx: RenderContext,
+): string | undefined | Promise<string | undefined> {
   if (isExternalTargetMode(rel.targetMode)) {
     return isAllowedExternalMediaUrl(rel.target) ? rel.target : undefined;
   }
 
   const resolved = findMediaByTarget(rel.target, ctx.presentation.media);
-  if (!resolved) return undefined;
+  if (!resolved) {
+    if (!ctx.presentation.mediaResolver) return undefined;
+    return findMediaByTargetAsync(
+      rel.target,
+      ctx.presentation.media,
+      ctx.presentation.mediaResolver,
+    )
+      .then((value) => {
+        if (ctx.signal?.aborted || !value || isUnsupportedFormat(value.mediaPath)) return undefined;
+        return getOrCreateBlobUrl(value.mediaPath, value.data, ctx.mediaUrlCache);
+      })
+      .catch(() => undefined);
+  }
   const { mediaPath, data } = resolved;
   if (isUnsupportedFormat(mediaPath)) return undefined;
 
@@ -72,16 +98,17 @@ export function renderImage(node: PicNodeData, ctx: RenderContext): HTMLElement 
   wrapper.style.width = `${node.size.w}px`;
   wrapper.style.height = `${node.size.h}px`;
   wrapper.style.overflow = 'hidden';
+  const geometryClipPath = getPictureGeometryClipPath(node);
 
   // Apply transforms
   const transforms: string[] = [];
   if (node.rotation !== 0) {
     transforms.push(`rotate(${node.rotation}deg)`);
   }
-  if (node.flipH) {
+  if (node.flipH && !geometryClipPath) {
     transforms.push('scaleX(-1)');
   }
-  if (node.flipV) {
+  if (node.flipV && !geometryClipPath) {
     transforms.push('scaleY(-1)');
   }
   if (transforms.length > 0) {
@@ -135,15 +162,22 @@ export function renderImage(node: PicNodeData, ctx: RenderContext): HTMLElement 
             ctx.presentation.mediaResolver,
           )
             .then((lazyResolved) => {
+              if (ctx.signal?.aborted) return;
               if (!lazyResolved) {
                 renderPlaceholder(wrapper, 'Image not found');
                 return;
               }
 
-              renderResolvedImage(node, ctx, wrapper, lazyResolved.mediaPath, lazyResolved.data);
+              return renderResolvedImage(
+                node,
+                ctx,
+                wrapper,
+                lazyResolved.mediaPath,
+                lazyResolved.data,
+              );
             })
             .catch(() => {
-              renderPlaceholder(wrapper, 'Image not found');
+              if (!ctx.signal?.aborted) renderPlaceholder(wrapper, 'Image not found');
             });
           ctx.asyncTasks?.push(task);
           if (!ctx.asyncTasks) void task;
@@ -157,7 +191,17 @@ export function renderImage(node: PicNodeData, ctx: RenderContext): HTMLElement 
       return wrapper;
     }
   } else if (node.blipLink) {
-    url = resolveMediaUrl(node.blipLink, ctx);
+    const linked = resolveMediaUrl(node.blipLink, ctx);
+    if (linked instanceof Promise) {
+      const task = linked.then((linkedUrl) => {
+        if (ctx.signal?.aborted) return;
+        if (linkedUrl) renderImageUrl(node, ctx, wrapper, linkedUrl);
+        else renderPlaceholder(wrapper, 'Image not found');
+      });
+      ctx.asyncTasks?.push(task);
+      return wrapper;
+    }
+    url = linked;
     if (!url) {
       renderPlaceholder(wrapper, 'Image not found');
       return wrapper;
@@ -177,12 +221,12 @@ function renderResolvedImage(
   wrapper: HTMLElement,
   mediaPath: string,
   data: Uint8Array,
-): void {
+): void | Promise<void> {
+  if (ctx.signal?.aborted) return;
   // Handle EMF images — extract embedded PDF/bitmap content
   if (isEmfFormat(mediaPath)) {
     const emfData = data instanceof Uint8Array ? data : new Uint8Array(data);
-    renderEmf(emfData, node, ctx, wrapper, mediaPath);
-    return;
+    return renderEmf(emfData, node, ctx, wrapper, mediaPath);
   }
 
   const url = getOrCreateBlobUrl(mediaPath, data, ctx.mediaUrlCache);
@@ -200,10 +244,73 @@ function renderImageUrl(
   const blipOpacity = resolveBlipOpacity(blip);
 
   const tile = blipFill.child('tile');
+  const stretch = blipFill.child('stretch');
+  const fillRect = stretch.child('fillRect');
+  const pictureOutline = resolvePictureOutlineStyle(node, ctx);
+  const spPr = node.source.child('spPr');
+  const shape3dPlan = buildStaticShape3DPlan(
+    node.shape3d,
+    {
+      nodeType: 'picture',
+      presetGeometry: node.presetGeometry,
+      width: node.size.w,
+      height: node.size.h,
+      paintKind: 'picture',
+      isTiledPicture: tile.exists(),
+      hasStretchMode: stretch.exists(),
+      hasStretchFillRect: fillRect.exists(),
+      hasBlipEffects: blip.allChildren().length > 0,
+      hasPictureBackgroundFill: ['solidFill', 'gradFill', 'pattFill', 'blipFill', 'grpFill'].some(
+        (name) => spPr.child(name).exists(),
+      ),
+      hasCustomGeometry: node.customGeometry?.exists() ?? false,
+      hasStyleReference: node.source.child('style').exists(),
+      hasVisibleStroke: pictureOutline !== undefined,
+      rotation: node.rotation,
+      flipH: node.flipH,
+      flipV: node.flipV,
+      sourceCrop: node.crop,
+    },
+    ctx,
+  );
   if (tile.exists()) {
     wrapper.style.backgroundImage = `url("${url}")`;
     wrapper.style.backgroundRepeat = 'repeat';
     wrapper.style.backgroundSize = 'auto';
+    if (blipOpacity < 1) {
+      wrapper.style.opacity = `${Number(blipOpacity.toFixed(4))}`;
+    }
+    return;
+  }
+
+  const fillRectBox = fillRect.exists() ? getFillRectBox(fillRect) : undefined;
+  const geometryClipPath = getPictureGeometryClipPath(node);
+  const shape3dClipPath =
+    shape3dPlan.mode === 'orthographic-top-bevel'
+      ? (geometryClipPath ??
+        `M0,0 L${node.size.w},0 L${node.size.w},${node.size.h} L0,${node.size.h} Z`)
+      : geometryClipPath;
+  if (shape3dClipPath) {
+    const clippedPictureOutline =
+      shape3dPlan.mode === 'orthographic-top-bevel' ? pictureOutline : undefined;
+    if (shape3dPlan.mode === 'orthographic-top-bevel') {
+      wrapper.style.overflow = 'visible';
+      if (clippedPictureOutline) {
+        wrapper.style.border = '';
+        wrapper.style.boxSizing = '';
+      }
+    }
+    renderClippedSvgImage(
+      node,
+      wrapper,
+      url,
+      shape3dClipPath,
+      blip,
+      ctx,
+      fillRectBox,
+      shape3dPlan,
+      clippedPictureOutline,
+    );
     if (blipOpacity < 1) {
       wrapper.style.opacity = `${Number(blipOpacity.toFixed(4))}`;
     }
@@ -215,12 +322,12 @@ function renderImageUrl(
   img.src = url;
   img.style.width = '100%';
   img.style.height = '100%';
+  img.style.maxWidth = 'none';
+  img.style.maxHeight = 'none';
   img.style.objectFit = 'fill';
   img.style.display = 'block';
   img.draggable = false;
 
-  const fillRect = node.source.child('blipFill').child('stretch').child('fillRect');
-  const fillRectBox = fillRect.exists() ? getFillRectBox(fillRect) : undefined;
   if (fillRectBox) {
     applyImageFillRect(img, fillRectBox);
   }
@@ -257,6 +364,12 @@ function renderImageUrl(
     wrapper.style.opacity = `${Number(blipOpacity.toFixed(4))}`;
   }
 
+  // Grayscale: render the image luminance-only.
+  const grayscl = blip.child('grayscl');
+  if (grayscl.exists()) {
+    appendCssFilter(img, 'grayscale(1)');
+  }
+
   // Duotone: recolor image (dark→color1, light→color2)
   const duotone = blip.child('duotone');
   if (duotone.exists()) {
@@ -266,13 +379,37 @@ function renderImageUrl(
   // Luminance: brightness/contrast adjustment
   const lum = blip.child('lum');
   if (lum.exists()) {
-    applyLumEffect(lum, img);
+    applyLumEffect(lum, img, ctx.signal);
   }
 
   // BiLevel: threshold to black/white
   const biLevel = blip.child('biLevel');
   if (biLevel.exists()) {
-    applyBiLevelEffect(biLevel, img);
+    applyBiLevelEffect(biLevel, img, ctx.signal);
+  }
+
+  if (shape3dPlan.mode === 'camera-projected-picture-plane') {
+    const pictureStage = document.createElement('div');
+    pictureStage.style.position = 'absolute';
+    pictureStage.style.left = '0';
+    pictureStage.style.top = '0';
+    pictureStage.style.width = '100%';
+    pictureStage.style.height = '100%';
+    pictureStage.style.overflow = 'hidden';
+    if (applyStaticShape3DPicturePlane(pictureStage, shape3dPlan)) {
+      wrapper.style.overflow = 'visible';
+      img.style.filter = `brightness(${shape3dPlan.lighting.brightness})`;
+      pictureStage.appendChild(img);
+      const lighting = document.createElement('div');
+      lighting.dataset.pptxShape3dPictureLighting = 'threePt:t';
+      lighting.style.position = 'absolute';
+      lighting.style.inset = '0';
+      lighting.style.pointerEvents = 'none';
+      lighting.style.backgroundColor = `rgba(255, 255, 255, ${shape3dPlan.lighting.opacity})`;
+      pictureStage.appendChild(lighting);
+      wrapper.appendChild(pictureStage);
+      return;
+    }
   }
 
   wrapper.appendChild(img);
@@ -287,6 +424,15 @@ interface FillRectBox {
   top: number;
   width: number;
   height: number;
+}
+
+interface PictureOutlineStyle {
+  width: number;
+  color: string;
+  dash: string;
+  dashKind: string;
+  linecap?: 'butt' | 'round' | 'square';
+  linejoin?: 'miter' | 'round' | 'bevel';
 }
 
 function getFillRectBox(fillRect: SafeXmlNode): FillRectBox {
@@ -311,6 +457,210 @@ function applyImageFillRect(img: HTMLImageElement, fillRect: FillRectBox): void 
   img.style.height = `${fillRect.height}%`;
 }
 
+function getPictureGeometryClipPath(node: PicNodeData): string | undefined {
+  const sourceCustomGeometry = node.source.child('spPr').child('custGeom');
+  const customGeometry =
+    node.customGeometry ?? (sourceCustomGeometry.exists() ? sourceCustomGeometry : undefined);
+  if (customGeometry?.exists()) {
+    const extNode = node.source.child('spPr').child('xfrm').child('ext');
+    const sourceExtentEmu = {
+      w: extNode.numAttr('cx') ?? 0,
+      h: extNode.numAttr('cy') ?? 0,
+    };
+    const d = renderCustomGeometry(customGeometry, node.size.w, node.size.h, sourceExtentEmu);
+    return d || undefined;
+  }
+
+  const sourcePreset = node.source.child('spPr').child('prstGeom').attr('prst');
+  const preset = node.presetGeometry ?? sourcePreset;
+  if (!preset || preset === 'rect') return undefined;
+  const d = getPresetShapeClipPath(preset, node.size.w, node.size.h, node.geometryAdjustments);
+  return d || undefined;
+}
+
+function getClipTransform(node: PicNodeData): string | undefined {
+  if (node.flipH && node.flipV) return `translate(${node.size.w} ${node.size.h}) scale(-1 -1)`;
+  if (node.flipH) return `translate(${node.size.w} 0) scale(-1 1)`;
+  if (node.flipV) return `translate(0 ${node.size.h}) scale(1 -1)`;
+  return undefined;
+}
+
+function renderClippedSvgImage(
+  node: PicNodeData,
+  wrapper: HTMLElement,
+  url: string,
+  clipPathD: string,
+  blip: SafeXmlNode,
+  ctx: RenderContext,
+  fillRectBox?: FillRectBox,
+  shape3dPlan?: StaticShape3DPlan,
+  pictureOutline?: PictureOutlineStyle,
+): void {
+  const svgNs = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNs, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${node.size.w} ${node.size.h}`);
+  svg.setAttribute('width', '100%');
+  svg.setAttribute('height', '100%');
+  svg.style.display = 'block';
+  svg.style.overflow = shape3dPlan?.mode === 'orthographic-top-bevel' ? 'visible' : 'hidden';
+
+  const clipId = `picture-clip-${pictureClipPathIdCounter++}`;
+  const defs = document.createElementNS(svgNs, 'defs');
+  const clipPath = document.createElementNS(svgNs, 'clipPath');
+  clipPath.setAttribute('id', clipId);
+  clipPath.setAttribute('clipPathUnits', 'userSpaceOnUse');
+  const path = document.createElementNS(svgNs, 'path');
+  path.setAttribute('d', clipPathD);
+  const clipTransform = getClipTransform(node);
+  if (clipTransform) {
+    path.setAttribute('transform', clipTransform);
+  }
+  clipPath.appendChild(path);
+  defs.appendChild(clipPath);
+  svg.appendChild(defs);
+
+  const image = document.createElementNS(svgNs, 'image');
+  image.setAttribute('href', url);
+  image.setAttribute('preserveAspectRatio', 'none');
+  applyClippedBlipEffects(image, defs, blip, ctx, clipId);
+  if (clipTransform) {
+    image.setAttribute('transform', clipTransform);
+  }
+  const clippedImageGroup = document.createElementNS(svgNs, 'g');
+  clippedImageGroup.setAttribute('clip-path', `url(#${clipId})`);
+
+  let x = ((fillRectBox?.left ?? 0) / 100) * node.size.w;
+  let y = ((fillRectBox?.top ?? 0) / 100) * node.size.h;
+  let width = ((fillRectBox?.width ?? 100) / 100) * node.size.w;
+  let height = ((fillRectBox?.height ?? 100) / 100) * node.size.h;
+
+  if (node.crop) {
+    const { top, right, bottom, left } = node.crop;
+    const visibleW = 1 - left - right;
+    const visibleH = 1 - top - bottom;
+    if (visibleW > 0.001 && visibleH > 0.001) {
+      const scaleX = 1 / visibleW;
+      const scaleY = 1 / visibleH;
+      width *= scaleX;
+      height *= scaleY;
+      x += -left * scaleX * ((fillRectBox?.width ?? 100) / 100) * node.size.w;
+      y += -top * scaleY * ((fillRectBox?.height ?? 100) / 100) * node.size.h;
+    }
+  }
+
+  image.setAttribute('x', String(x));
+  image.setAttribute('y', String(y));
+  image.setAttribute('width', String(width));
+  image.setAttribute('height', String(height));
+  wrapper.appendChild(svg);
+  svg.appendChild(clippedImageGroup);
+  clippedImageGroup.appendChild(image);
+  if (shape3dPlan) {
+    appendStaticShape3DEffects({
+      svg,
+      defs,
+      pathD: clipPathD,
+      bounds: { width: node.size.w, height: node.size.h },
+      plan: shape3dPlan,
+      ctx,
+    });
+  }
+  if (pictureOutline) {
+    const outline = document.createElementNS(svgNs, 'path');
+    outline.dataset.pptxPictureOutline = 'true';
+    outline.setAttribute('d', clipPathD);
+    outline.setAttribute('fill', 'none');
+    outline.setAttribute('stroke', pictureOutline.color);
+    outline.setAttribute('stroke-width', String(pictureOutline.width));
+    if (pictureOutline.linecap) outline.setAttribute('stroke-linecap', pictureOutline.linecap);
+    if (pictureOutline.linejoin) outline.setAttribute('stroke-linejoin', pictureOutline.linejoin);
+    if (pictureOutline.dashKind !== 'solid') {
+      const unit = Math.max(1, pictureOutline.width);
+      const dashArray = pictureOutline.dashKind.includes('dot')
+        ? `${unit},${unit * 2}`
+        : `${unit * 4},${unit * 2}`;
+      outline.setAttribute('stroke-dasharray', dashArray);
+    }
+    outline.setAttribute('pointer-events', 'none');
+    svg.appendChild(outline);
+  }
+}
+
+/** Apply color effects to the existing SVG image, preserving one decoded media resource. */
+function applyClippedBlipEffects(
+  image: SVGImageElement,
+  defs: SVGDefsElement,
+  blip: SafeXmlNode,
+  ctx: RenderContext,
+  id: string,
+): void {
+  const ns = 'http://www.w3.org/2000/svg';
+  const filter = document.createElementNS(ns, 'filter');
+  filter.id = `${id}-effects`;
+  filter.setAttribute('color-interpolation-filters', 'sRGB');
+  const grayscale = () => {
+    const matrix = document.createElementNS(ns, 'feColorMatrix');
+    matrix.setAttribute('type', 'matrix');
+    matrix.setAttribute(
+      'values',
+      '0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0 0 0 1 0',
+    );
+    filter.appendChild(matrix);
+  };
+  const transfer = (values: Array<{ slope: number; intercept: number }>) => {
+    const component = document.createElementNS(ns, 'feComponentTransfer');
+    for (const [i, channel] of ['R', 'G', 'B'].entries()) {
+      const fn = document.createElementNS(ns, `feFunc${channel}`);
+      fn.setAttribute('type', 'linear');
+      fn.setAttribute('slope', String(values[i].slope));
+      fn.setAttribute('intercept', String(values[i].intercept));
+      component.appendChild(fn);
+    }
+    filter.appendChild(component);
+  };
+  if (blip.child('grayscl').exists()) grayscale();
+  const duotone = blip.child('duotone');
+  const colors = duotone.allChildren().map((color) => resolveColor(color, ctx).color);
+  if (colors.length >= 2 && colors[0] && colors[1]) {
+    const dark = hexToRgb(colors[0]);
+    const light = hexToRgb(colors[1]);
+    grayscale();
+    transfer(
+      (['r', 'g', 'b'] as const).map((channel) => ({
+        slope: (light[channel] - dark[channel]) / 255,
+        intercept: dark[channel] / 255,
+      })),
+    );
+  }
+  const lum = blip.child('lum');
+  if (lum.exists()) {
+    const contrast = (lum.numAttr('contrast') ?? 0) / 100000;
+    const bright = (lum.numAttr('bright') ?? 0) / 100000;
+    transfer(
+      Array.from({ length: 3 }, () => ({ slope: 1 + contrast, intercept: bright - contrast / 2 })),
+    );
+  }
+  const biLevel = blip.child('biLevel');
+  if (biLevel.exists()) {
+    grayscale();
+    const threshold = (biLevel.numAttr('thresh') ?? 50000) / 100000;
+    // First move the threshold to 0.5, then discretize into black/white.
+    transfer(Array.from({ length: 3 }, () => ({ slope: 1, intercept: 0.5 - threshold })));
+    const component = document.createElementNS(ns, 'feComponentTransfer');
+    for (const channel of ['R', 'G', 'B']) {
+      const fn = document.createElementNS(ns, `feFunc${channel}`);
+      fn.setAttribute('type', 'discrete');
+      fn.setAttribute('tableValues', '0 1');
+      component.appendChild(fn);
+    }
+    filter.appendChild(component);
+  }
+  if (filter.children.length) {
+    defs.appendChild(filter);
+    image.setAttribute('filter', `url(#${filter.id})`);
+  }
+}
+
 function applyPictureShapeProperties(
   wrapper: HTMLElement,
   node: PicNodeData,
@@ -333,13 +683,12 @@ function applyCssFillBackground(el: HTMLElement, fillCss: string): void {
   clearCssFillBackground(el);
 
   if (fillCss.includes('gradient') && fillCss.includes(' 0 0 / ')) {
-    const bgMatch = fillCss.match(/,\s*(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|[a-zA-Z]+)\s*$/);
-    if (bgMatch && bgMatch.index !== undefined) {
-      const imageLayers = fillCss.slice(0, bgMatch.index).replace(/\s+0 0\s*\/\s*8px 8px/g, '');
-      el.style.backgroundImage = imageLayers;
+    const tiled = splitTiledPatternFillCss(fillCss);
+    if (tiled) {
+      el.style.backgroundImage = tiled.imageLayers;
       el.style.backgroundSize = '8px 8px';
       el.style.backgroundRepeat = 'repeat';
-      el.style.backgroundColor = bgMatch[1];
+      el.style.backgroundColor = tiled.color;
       return;
     }
   }
@@ -363,10 +712,13 @@ function clearCssFillBackground(el: HTMLElement): void {
   el.style.backgroundSize = '';
 }
 
-function applyPictureOutline(wrapper: HTMLElement, node: PicNodeData, ctx: RenderContext): void {
+function resolvePictureOutlineStyle(
+  node: PicNodeData,
+  ctx: RenderContext,
+): PictureOutlineStyle | undefined {
   const lnRef = node.source.child('style').child('lnRef');
   const lineIsNoFill = node.line?.child('noFill').exists() ?? false;
-  if (lineIsNoFill) return;
+  if (lineIsNoFill) return undefined;
 
   const hasExplicitLine = node.line?.exists() ?? false;
   const themeLineFromLnRef =
@@ -377,10 +729,27 @@ function applyPictureOutline(wrapper: HTMLElement, node: PicNodeData, ctx: Rende
       ? ctx.theme.lineStyles![(lnRef.numAttr('idx') ?? 1) - 1]
       : undefined;
   const line = hasExplicitLine ? node.line! : themeLineFromLnRef;
-  if (!line?.exists()) return;
+  if (!line?.exists()) return undefined;
 
   const style = resolveLineStyle(line, ctx, lnRef);
-  if (style.width <= 0 || style.color === 'transparent') return;
+  if (style.width <= 0 || style.color === 'transparent') return undefined;
+
+  const cap = line.attr('cap');
+  const linecap =
+    cap === 'rnd' ? 'round' : cap === 'sq' ? 'square' : cap === 'flat' ? 'butt' : undefined;
+  const linejoin = line.child('round').exists()
+    ? 'round'
+    : line.child('bevel').exists()
+      ? 'bevel'
+      : line.child('miter').exists()
+        ? 'miter'
+        : undefined;
+  return { ...style, linecap, linejoin };
+}
+
+function applyPictureOutline(wrapper: HTMLElement, node: PicNodeData, ctx: RenderContext): void {
+  const style = resolvePictureOutlineStyle(node, ctx);
+  if (!style) return;
 
   wrapper.style.boxSizing = 'border-box';
   wrapper.style.border = `${style.width}px ${style.dash} ${style.color}`;
@@ -398,6 +767,11 @@ function applyPictureEffects(wrapper: HTMLElement, node: PicNodeData, ctx: Rende
   const glow = effectLst.child('glow');
   if (glow.exists()) {
     applyPictureGlow(wrapper, glow, ctx);
+  }
+
+  const softEdge = effectLst.child('softEdge');
+  if (softEdge.exists()) {
+    applyPictureSoftEdge(wrapper, node, softEdge);
   }
 
   const reflection = effectLst.child('reflection');
@@ -464,6 +838,44 @@ function applyPictureGlow(wrapper: HTMLElement, glow: SafeXmlNode, ctx: RenderCo
     wrapper,
     `drop-shadow(0px 0px ${radiusPx.toFixed(1)}px rgba(${r},${g},${b},${alpha.toFixed(3)}))`,
   );
+}
+
+function applyPictureSoftEdge(
+  wrapper: HTMLElement,
+  node: PicNodeData,
+  softEdge: SafeXmlNode,
+): void {
+  const radiusPx = emuToPx(softEdge.numAttr('rad') ?? 0);
+  if (!(radiusPx > 0)) return;
+
+  const maxRadius = Math.max(0, Math.min(node.size.w, node.size.h) / 2);
+  const clampedRadiusPx = maxRadius > 0 ? Math.min(radiusPx, maxRadius) : radiusPx;
+  const radiusCss = `${Number(clampedRadiusPx.toFixed(4))}px`;
+  const radiusVar = 'var(--pptx-soft-edge-radius)';
+  const maskImage = [
+    `linear-gradient(to right, transparent 0, black ${radiusVar}, black calc(100% - ${radiusVar}), transparent 100%)`,
+    `linear-gradient(to bottom, transparent 0, black ${radiusVar}, black calc(100% - ${radiusVar}), transparent 100%)`,
+  ].join(', ');
+
+  wrapper.style.setProperty('--pptx-soft-edge-radius', radiusCss);
+  wrapper.style.setProperty('-webkit-mask-image', maskImage);
+  wrapper.style.setProperty('mask-image', maskImage);
+  wrapper.style.setProperty('-webkit-mask-size', '100% 100%');
+  wrapper.style.setProperty('mask-size', '100% 100%');
+  wrapper.style.setProperty('-webkit-mask-repeat', 'no-repeat');
+  wrapper.style.setProperty('mask-repeat', 'no-repeat');
+  wrapper.style.setProperty('-webkit-mask-composite', 'source-in');
+  wrapper.style.setProperty('mask-composite', 'intersect');
+  const style = wrapper.style as CSSStyleDeclaration & {
+    webkitMaskImage?: string;
+    webkitMaskComposite?: string;
+    maskImage?: string;
+    maskComposite?: string;
+  };
+  style.webkitMaskImage = maskImage;
+  style.maskImage = maskImage;
+  style.webkitMaskComposite = 'source-in';
+  style.maskComposite = 'intersect';
 }
 
 function applyPictureReflection(wrapper: HTMLElement, reflection: SafeXmlNode): void {
@@ -539,113 +951,90 @@ function resolveBlipOpacity(blip: SafeXmlNode): number {
  * Render a video element inside the wrapper.
  */
 function renderVideo(node: PicNodeData, ctx: RenderContext, wrapper: HTMLElement): void {
-  // Try to get video URL from mediaRId
-  const videoUrl = resolveMediaUrl(node.mediaRId, ctx);
-
-  // Also try to show poster image from blipEmbed
-  let posterUrl: string | undefined;
-  if (node.blipEmbed) {
-    const rel = ctx.slide.rels.get(node.blipEmbed);
-    if (rel) {
-      posterUrl = resolveImageRelUrl(rel, ctx);
-    }
-  }
-
-  if (videoUrl) {
-    const video = document.createElement('video');
-    video.src = videoUrl;
-    video.preload = 'none';
-    video.controls = true;
-    video.style.width = '100%';
-    video.style.height = '100%';
-    video.style.objectFit = 'contain';
-    video.style.backgroundColor = '#000';
-    if (posterUrl) {
-      video.poster = posterUrl;
-    }
-    wrapper.appendChild(video);
-  } else if (posterUrl) {
-    // No video data available — show poster with play overlay
-    const img = document.createElement('img');
-    img.src = posterUrl;
-    img.style.width = '100%';
-    img.style.height = '100%';
-    img.style.objectFit = 'fill';
-    wrapper.appendChild(img);
-
-    const overlay = document.createElement('div');
-    overlay.style.position = 'absolute';
-    overlay.style.inset = '0';
-    overlay.style.display = 'flex';
-    overlay.style.alignItems = 'center';
-    overlay.style.justifyContent = 'center';
-    overlay.style.backgroundColor = 'rgba(0,0,0,0.3)';
-    overlay.style.color = '#fff';
-    overlay.style.fontSize = '24px';
-    overlay.textContent = '\u25B6'; // play symbol
-    wrapper.appendChild(overlay);
-  } else {
-    renderPlaceholder(wrapper, 'Video');
-  }
+  renderAudioVideo(node, ctx, wrapper, 'video');
 }
 
-/**
- * Render an audio element inside the wrapper.
- */
 function renderAudio(node: PicNodeData, ctx: RenderContext, wrapper: HTMLElement): void {
-  const audioUrl = resolveMediaUrl(node.mediaRId, ctx);
+  renderAudioVideo(node, ctx, wrapper, 'audio');
+}
 
-  if (audioUrl) {
-    // Show poster image if available
-    if (node.blipEmbed) {
-      const rel = ctx.slide.rels.get(node.blipEmbed);
-      if (rel) {
-        const cached = resolveImageRelUrl(rel, ctx);
-        if (cached) {
-          const img = document.createElement('img');
-          img.src = cached;
-          img.style.width = '100%';
+function renderAudioVideo(
+  node: PicNodeData,
+  ctx: RenderContext,
+  wrapper: HTMLElement,
+  kind: 'audio' | 'video',
+): void {
+  const media = resolveMediaUrl(node.mediaRId, ctx);
+  const poster = resolveMediaUrl(node.blipEmbed ?? node.blipLink, ctx);
+  const apply = (mediaUrl: string | undefined, posterUrl: string | undefined) => {
+    if (ctx.signal?.aborted) return;
+    if (mediaUrl) {
+      const element = document.createElement(kind);
+      element.src = mediaUrl;
+      element.preload = 'none';
+      element.controls = true;
+      element.style.width = '100%';
+      if (kind === 'video') {
+        element.style.height = '100%';
+        element.style.objectFit = 'contain';
+        element.style.backgroundColor = '#000';
+        if (posterUrl) (element as HTMLVideoElement).poster = posterUrl;
+      } else {
+        if (posterUrl) {
+          const img = createFillImage(posterUrl);
           img.style.height = 'calc(100% - 32px)';
           img.style.objectFit = 'contain';
           wrapper.appendChild(img);
         }
+        element.style.position = 'absolute';
+        element.style.bottom = '0';
+        element.style.left = '0';
       }
+      wrapper.appendChild(element);
+      ctx.signal?.addEventListener(
+        'abort',
+        () => {
+          element.pause();
+          element.removeAttribute('src');
+          element.load();
+        },
+        { once: true },
+      );
+    } else if (posterUrl && kind === 'video') {
+      wrapper.appendChild(createFillImage(posterUrl));
+      const overlay = document.createElement('div');
+      Object.assign(overlay.style, {
+        position: 'absolute',
+        inset: '0',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(0,0,0,0.3)',
+        color: '#fff',
+        fontSize: '24px',
+      });
+      overlay.textContent = '\u25B6';
+      wrapper.appendChild(overlay);
+    } else {
+      renderPlaceholder(wrapper, kind === 'video' ? 'Video' : 'Audio');
     }
-
-    const audio = document.createElement('audio');
-    audio.src = audioUrl;
-    audio.preload = 'none';
-    audio.controls = true;
-    audio.style.width = '100%';
-    audio.style.position = 'absolute';
-    audio.style.bottom = '0';
-    audio.style.left = '0';
-    wrapper.appendChild(audio);
-  } else {
-    renderPlaceholder(wrapper, 'Audio');
-  }
+  };
+  if (media instanceof Promise || poster instanceof Promise) {
+    const task = Promise.all([media, poster]).then(([mediaUrl, posterUrl]) =>
+      apply(mediaUrl, posterUrl),
+    );
+    ctx.asyncTasks?.push(task);
+  } else apply(media, poster);
 }
 
-/**
- * Resolve a media URL from a relationship ID.
- */
-function resolveMediaUrl(rId: string | undefined, ctx: RenderContext): string | undefined {
+/** Resolve embedded eager/lazy media and allowlisted external relationships alike. */
+function resolveMediaUrl(
+  rId: string | undefined,
+  ctx: RenderContext,
+): string | undefined | Promise<string | undefined> {
   if (!rId) return undefined;
-
   const rel = ctx.slide.rels.get(rId);
-  if (!rel) return undefined;
-
-  // Check if target is an external URL
-  if (isExternalTargetMode(rel.targetMode)) {
-    return isAllowedExternalMediaUrl(rel.target) ? rel.target : undefined;
-  }
-
-  // Resolve from embedded media
-  const resolved = findMediaByTarget(rel.target, ctx.presentation.media);
-  if (!resolved) return undefined;
-  const { mediaPath, data } = resolved;
-
-  return getOrCreateBlobUrl(mediaPath, data, ctx.mediaUrlCache);
+  return rel ? resolveImageRelUrl(rel, ctx) : undefined;
 }
 
 /**
@@ -709,16 +1098,14 @@ function renderEmf(
   ctx: RenderContext,
   wrapper: HTMLElement,
   mediaPath: string,
-): void {
+): void | Promise<void> {
   const content = parseEmfContent(data);
 
   switch (content.type) {
     case 'pdf':
-      renderEmfPdf(content.data, wrapper, node, ctx, mediaPath);
-      break;
+      return renderEmfPdf(content.data, wrapper, node, ctx, mediaPath);
     case 'bitmap':
-      renderEmfBitmap(content.imageData, wrapper, ctx, mediaPath);
-      break;
+      return renderEmfBitmap(content.imageData, wrapper, ctx, mediaPath);
     case 'empty':
       // Render nothing — transparent placeholder
       break;
@@ -740,7 +1127,7 @@ function renderEmfPdf(
   node: PicNodeData,
   ctx: RenderContext,
   mediaPath: string,
-): void {
+): void | Promise<void> {
   const cacheKey = `${mediaPath}:emf-pdf`;
   const cached = ctx.mediaUrlCache.get(cacheKey);
   if (cached) {
@@ -748,9 +1135,18 @@ function renderEmfPdf(
     return;
   }
 
-  const task = renderPdfToImage(pdfData, node.size.w, node.size.h, ctx.pdfjs)
+  const task = renderPdfToImage(pdfData, node.size.w, node.size.h, ctx.pdfjs, ctx.signal)
     .then((url) => {
-      if (url) {
+      if (!url) return;
+      if (ctx.signal?.aborted) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+      const existing = ctx.mediaUrlCache.get(cacheKey);
+      if (existing) {
+        URL.revokeObjectURL(url);
+        wrapper.appendChild(createFillImage(existing));
+      } else {
         ctx.mediaUrlCache.set(cacheKey, url);
         wrapper.appendChild(createFillImage(url));
       }
@@ -759,6 +1155,7 @@ function renderEmfPdf(
       // PDF rendering failed — leave wrapper empty (transparent)
     });
   ctx.asyncTasks?.push(task);
+  return task;
 }
 
 /**
@@ -769,7 +1166,7 @@ function renderEmfBitmap(
   wrapper: HTMLElement,
   ctx: RenderContext,
   mediaPath: string,
-): void {
+): void | Promise<void> {
   const cacheKey = `${mediaPath}:emf-bitmap`;
   const cached = ctx.mediaUrlCache.get(cacheKey);
   if (cached) {
@@ -786,8 +1183,8 @@ function renderEmfBitmap(
   canvasCtx.putImageData(imageData, 0, 0);
   const task = new Promise<void>((resolve) => {
     canvas.toBlob((blob) => {
-      if (blob) {
-        const url = URL.createObjectURL(blob);
+      if (blob && !ctx.signal?.aborted) {
+        const url = ctx.mediaUrlCache.get(cacheKey) ?? URL.createObjectURL(blob);
         ctx.mediaUrlCache.set(cacheKey, url);
         wrapper.appendChild(createFillImage(url));
       }
@@ -795,6 +1192,7 @@ function renderEmfBitmap(
     }, 'image/png');
   });
   ctx.asyncTasks?.push(task);
+  return task;
 }
 
 /**
@@ -842,6 +1240,7 @@ function applyDuotoneFilter(
 
   // After the image loads, redraw it through a canvas with duotone applied
   const apply = () => {
+    if (ctx.signal?.aborted) return;
     const w = img.naturalWidth;
     const h = img.naturalHeight;
     if (!w || !h) return;
@@ -888,13 +1287,14 @@ function applyDuotoneFilter(
  * and `contrast` (multiplicative contrast, -100000 to 100000).
  * e.g. bright="100000" makes the entire image white (preserving alpha).
  */
-function applyLumEffect(lum: SafeXmlNode, img: HTMLImageElement): void {
+function applyLumEffect(lum: SafeXmlNode, img: HTMLImageElement, signal?: AbortSignal): void {
   const bright = (lum.numAttr('bright') ?? 0) / 100000; // 0–1
   const contrast = (lum.numAttr('contrast') ?? 0) / 100000; // -1 to 1
 
   if (bright === 0 && contrast === 0) return;
 
   const apply = () => {
+    if (signal?.aborted) return;
     const w = img.naturalWidth;
     const h = img.naturalHeight;
     if (!w || !h) return;
@@ -946,10 +1346,15 @@ function applyLumEffect(lum: SafeXmlNode, img: HTMLImageElement): void {
  * Each pixel's luminance is compared to the threshold (0–100000 = 0–100%).
  * Pixels above become white, pixels below become black. Alpha is preserved.
  */
-function applyBiLevelEffect(biLevel: SafeXmlNode, img: HTMLImageElement): void {
+function applyBiLevelEffect(
+  biLevel: SafeXmlNode,
+  img: HTMLImageElement,
+  signal?: AbortSignal,
+): void {
   const thresh = (biLevel.numAttr('thresh') ?? 50000) / 100000; // 0–1
 
   const apply = () => {
+    if (signal?.aborted) return;
     const w = img.naturalWidth;
     const h = img.naturalHeight;
     if (!w || !h) return;

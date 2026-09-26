@@ -1,0 +1,27 @@
+{
+  "name": "oracle-pypptx-text-0059-fontref-fallback-no-defrpr",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "requiredFonts": [
+      "Microsoft YaHei"
+    ],
+    "features": [
+      "text.color.precedence",
+      "shape.style.fontRef=accent1",
+      "paragraph.defRPr.color=absent",
+      "run.rPr.color=absent",
+      "precedence.fontRef-fallback",
+      "precedence.inverse-opt-out"
+    ]
+  }
+}

@@ -8,7 +8,7 @@ import { ThemeData } from '../model/Theme';
 import { MasterData } from '../model/Master';
 import { LayoutData } from '../model/Layout';
 import { SafeXmlNode } from '../parser/XmlParser';
-import type { ECharts } from 'echarts';
+import type { EChartsType } from 'echarts/core';
 import type { PdfjsConfig } from '../utils/pdfRenderer';
 
 export interface RenderContext {
@@ -27,12 +27,25 @@ export interface RenderContext {
   colorCache: Map<string, { color: string; alpha: number }>;
   /** Async media/rendering work that callers may await before screenshot/export. */
   asyncTasks?: Promise<void>[];
+  /** Presentation-specific embedded CSS families referenced by this render. */
+  usedEmbeddedFontFamilies?: Set<string>;
+  /** Aborted when the owning slide is disposed; async renderers must stop late writes. */
+  signal?: AbortSignal;
   /** Optional pdfjs URLs for EMF-embedded PDF fallback rendering. */
   pdfjs?: PdfjsConfig;
   /** Shared set of live ECharts instances for explicit disposal. */
-  chartInstances?: Set<ECharts>;
+  chartInstances?: Set<EChartsType>;
   /** Fill node from parent group's grpSpPr, used to resolve `a:grpFill` in children. */
   groupFillNode?: SafeXmlNode;
+  /** Template provenance and group depth keep narrowly verified renderer lanes from overclaiming. */
+  nodeOrigin?: 'slide' | 'layout' | 'master';
+  groupDepth?: number;
+  /** Scale from the current group child's OOXML coordinate space into rendered slide pixels. */
+  groupChildScale?: { x: number; y: number };
+  /** True when any ancestor group rotates or flips this node's rendered coordinate space. */
+  groupTransformHasRotationOrFlip?: boolean;
+  /** True when an ancestor group declares a 3D scene, whether supported or kept flat. */
+  groupAncestorHas3dScene?: boolean;
   /** Connected root used for hidden text measurement while slide nodes are still detached. */
   measurementRoot?: HTMLElement;
   /** Template rendering skips placeholder descendants inside groups as well as top-level shapes. */
@@ -49,8 +62,9 @@ export function createRenderContext(
   presentation: PresentationData,
   slide: SlideData,
   mediaUrlCache?: Map<string, string>,
-  chartInstances?: Set<ECharts>,
+  chartInstances?: Set<EChartsType>,
   pdfjs?: PdfjsConfig,
+  signal?: AbortSignal,
 ): RenderContext {
   // Resolve the chain: slide -> layout -> master -> theme
   const layoutPath = presentation.slideToLayout.get(slide.index) || '';
@@ -95,7 +109,12 @@ export function createRenderContext(
     masterPath,
     mediaUrlCache: mediaUrlCache ?? new Map(),
     colorCache: new Map(),
+    nodeOrigin: 'slide',
+    groupDepth: 0,
+    groupAncestorHas3dScene: false,
+    usedEmbeddedFontFamilies: new Set(),
     pdfjs,
+    signal,
     chartInstances,
   };
 }

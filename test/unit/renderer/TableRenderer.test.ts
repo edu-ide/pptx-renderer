@@ -97,6 +97,26 @@ describe('renderTable', () => {
     expect(el.style.height).toBe('200px');
   });
 
+  it('uses the normalized node size after parent group remapping', () => {
+    const rows: TableRow[] = [
+      { height: 150, cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }] },
+      { height: 250, cells: [{ gridSpan: 1, rowSpan: 1, hMerge: false, vMerge: false }] },
+    ];
+    const node = makeTable({ columns: [200, 400], rows });
+    node.size = { w: 1200, h: 800 };
+    const el = renderTable(node, makeCtx());
+    expect(el.style.width).toBe('1200px');
+    expect(el.style.height).toBe('800px');
+  });
+
+  it('falls back to the frame size when the grid has no explicit widths/heights', () => {
+    const node = makeTable({ columns: [], rows: [] });
+    node.size = { w: 320, h: 240 };
+    const el = renderTable(node, makeCtx());
+    expect(el.style.width).toBe('320px');
+    expect(el.style.height).toBe('240px');
+  });
+
   it('creates inner table element with border-collapse', () => {
     const el = renderTable(makeTable(), makeCtx());
     const table = el.querySelector('table')!;
@@ -136,6 +156,56 @@ describe('renderTable', () => {
   it('applies flipV transform', () => {
     const el = renderTable(makeTable({ flipV: true }), makeCtx());
     expect(el.style.transform).toContain('scaleY(-1)');
+  });
+
+  it('counter-flips cell text when the table is flipped horizontally', () => {
+    const rows: TableRow[] = [
+      {
+        height: 100,
+        cells: [
+          {
+            gridSpan: 1,
+            rowSpan: 1,
+            hMerge: false,
+            vMerge: false,
+            textBody: { paragraphs: [{ runs: [{ text: 'Readable' }], level: 0 }] },
+          },
+        ],
+      },
+    ];
+
+    const el = renderTable(makeTable({ columns: [400], rows, flipH: true }), makeCtx());
+    const td = el.querySelector('td')!;
+    const textHost = td.firstElementChild as HTMLElement;
+
+    expect(el.style.transform).toContain('scaleX(-1)');
+    expect(textHost.style.transform).toContain('scaleX(-1)');
+    expect(td.textContent).toContain('Readable');
+  });
+
+  it('counter-flips cell text when the table is flipped vertically', () => {
+    const rows: TableRow[] = [
+      {
+        height: 100,
+        cells: [
+          {
+            gridSpan: 1,
+            rowSpan: 1,
+            hMerge: false,
+            vMerge: false,
+            textBody: { paragraphs: [{ runs: [{ text: 'Still readable' }], level: 0 }] },
+          },
+        ],
+      },
+    ];
+
+    const el = renderTable(makeTable({ columns: [400], rows, flipV: true }), makeCtx());
+    const td = el.querySelector('td')!;
+    const textHost = td.firstElementChild as HTMLElement;
+
+    expect(el.style.transform).toContain('scaleY(-1)');
+    expect(textHost.style.transform).toContain('scaleY(-1)');
+    expect(td.textContent).toContain('Still readable');
   });
 
   it('skips merged cells (hMerge/vMerge)', () => {
@@ -819,7 +889,49 @@ describe('renderTable', () => {
       const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
       const paragraph = el.querySelector('td div') as HTMLElement;
 
-      expect(parseFloat(paragraph.style.lineHeight)).toBeCloseTo(1.5, 3);
+      expect(parseFloat(paragraph.style.lineHeight)).toBeCloseTo(1.785, 3);
+    });
+
+    it('trims outer paragraph spacing inside table cells', () => {
+      const rows: TableRow[] = [
+        {
+          height: 0,
+          cells: [
+            {
+              gridSpan: 1,
+              rowSpan: 1,
+              hMerge: false,
+              vMerge: false,
+              textBody: {
+                paragraphs: [
+                  {
+                    properties: parseXml(
+                      '<pPr><spcBef><spcPts val="1200"/></spcBef><spcAft><spcPts val="300"/></spcAft></pPr>',
+                    ),
+                    runs: [{ text: 'First paragraph' }],
+                    level: 0,
+                  },
+                  {
+                    properties: parseXml(
+                      '<pPr><spcBef><spcPts val="400"/></spcBef><spcAft><spcPts val="900"/></spcAft></pPr>',
+                    ),
+                    runs: [{ text: 'Last paragraph' }],
+                    level: 0,
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ];
+
+      const el = renderTable(makeTable({ columns: [400], rows }), makeCtx());
+      const paragraphs = el.querySelectorAll('td div');
+
+      expect((paragraphs[0] as HTMLElement).style.marginTop).toBe('0px');
+      expect((paragraphs[0] as HTMLElement).style.marginBottom).toBe('3pt');
+      expect((paragraphs[1] as HTMLElement).style.marginTop).toBe('4pt');
+      expect((paragraphs[1] as HTMLElement).style.marginBottom).toBe('0px');
     });
 
     // -----------------------------------------------------------------------

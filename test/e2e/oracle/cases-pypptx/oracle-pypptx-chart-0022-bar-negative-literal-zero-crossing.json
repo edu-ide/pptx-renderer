@@ -1,0 +1,24 @@
+{
+  "name": "oracle-pypptx-chart-0022-bar-negative-literal-zero-crossing",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "chart.bar.horizontal",
+      "chart.series.strLit",
+      "chart.series.numLit",
+      "chart.invertIfNegative=false",
+      "chart.value-axis.crosses-zero",
+      "chart.category-labels.zero-crossing"
+    ]
+  }
+}

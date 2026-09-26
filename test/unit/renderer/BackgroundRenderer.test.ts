@@ -197,6 +197,44 @@ describe('renderBackground', () => {
     expect(container.style.background).toContain('linear-gradient');
   });
 
+  it('renders path gradient backgrounds as an SVG layer instead of a CSS radial approximation', () => {
+    const bg = bgPrXml(`
+      <a:gradFill>
+        <a:gsLst>
+          <a:gs pos="0"><a:srgbClr val="831B22"/></a:gs>
+          <a:gs pos="38000"><a:srgbClr val="64131E"/></a:gs>
+          <a:gs pos="71000"><a:srgbClr val="4D144A"/></a:gs>
+          <a:gs pos="100000"><a:srgbClr val="391262"/></a:gs>
+        </a:gsLst>
+        <a:path path="circle">
+          <a:fillToRect l="100000" t="100000"/>
+        </a:path>
+      </a:gradFill>
+    `);
+    const ctx = createMockRenderContext({
+      slide: { rels: new Map(), background: bg } as any,
+      presentation: {
+        ...createMockRenderContext().presentation,
+        width: 1280,
+        height: 720,
+      },
+    });
+
+    renderBackground(ctx, container);
+
+    expect(container.style.background).not.toContain('radial-gradient');
+    const svg = container.querySelector('svg[data-pptx-background-gradient="true"]');
+    expect(svg).toBeTruthy();
+    expect(svg?.getAttribute('viewBox')).toBe('0 0 1280 720');
+    const radial = svg?.querySelector('radialGradient');
+    expect(radial).toBeTruthy();
+    expect(radial?.getAttribute('color-interpolation')).toBe('linearRGB');
+    expect(radial?.getAttribute('cx')).toBe('1280');
+    expect(radial?.getAttribute('cy')).toBe('720');
+    expect(Number(radial?.getAttribute('r'))).toBeCloseTo(Math.hypot(1280, 720), 4);
+    expect(svg?.querySelectorAll('stop')).toHaveLength(4);
+  });
+
   it('renders pattern fill backgrounds through the shared fill resolver', () => {
     const bg = bgPrXml(`
       <a:pattFill prst="pct20">
@@ -333,6 +371,80 @@ describe('renderBackground', () => {
     expect(container.style.backgroundSize).toBe('50% 80%');
     expect(container.style.backgroundPosition).toBe('50% 50%');
     expect(container.style.backgroundRepeat).toBe('no-repeat');
+  });
+
+  it('applies alphaModFix opacity to blipFill backgrounds', () => {
+    const mediaPath = 'ppt/media/alpha-bg.png';
+    const rId = 'rIdAlpha';
+
+    const bg = bgPrXml(`
+      <a:blipFill>
+        <a:blip r:embed="${rId}"
+                xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <a:alphaModFix amt="35000"/>
+        </a:blip>
+        <a:stretch><a:fillRect/></a:stretch>
+      </a:blipFill>
+    `);
+    const slideRels = new Map([[rId, { type: 'image', target: '../media/alpha-bg.png' }]]);
+    const media = new Map([[mediaPath, new Uint8Array([0x89, 0x50, 0x4e, 0x47])]]);
+    const ctx = createMockRenderContext({
+      slide: { rels: slideRels, background: bg } as any,
+      presentation: {
+        ...createMockRenderContext().presentation,
+        media,
+      },
+    });
+
+    renderBackground(ctx, container);
+
+    expect(container.style.opacity).toBe('');
+    expect(container.style.backgroundImage).toBe('');
+    const layer = container.querySelector('[data-pptx-background-image="true"]') as HTMLElement;
+    expect(layer).toBeTruthy();
+    expect(layer.style.backgroundImage).toMatch(/^url\(/);
+    expect(layer.style.backgroundSize).toBe('100% 100%');
+    expect(layer.style.opacity).toBe('0.35');
+  });
+
+  it('combines srcRect crop with fillRect destination insets for blipFill backgrounds', () => {
+    const mediaPath = 'ppt/media/cropped-bg.png';
+    const rId = 'rIdCropped';
+
+    const bg = bgPrXml(`
+      <a:blipFill>
+        <a:blip r:embed="${rId}"
+                xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>
+        <a:srcRect l="10000" t="20000" r="10000" b="20000"/>
+        <a:stretch><a:fillRect l="25000" t="10000" r="25000" b="10000"/></a:stretch>
+      </a:blipFill>
+    `);
+    const slideRels = new Map([[rId, { type: 'image', target: '../media/cropped-bg.png' }]]);
+    const media = new Map([[mediaPath, new Uint8Array([0x89, 0x50, 0x4e, 0x47])]]);
+    const ctx = createMockRenderContext({
+      slide: { rels: slideRels, background: bg } as any,
+      presentation: {
+        ...createMockRenderContext().presentation,
+        media,
+      },
+    });
+
+    renderBackground(ctx, container);
+
+    expect(container.style.backgroundImage).toBe('');
+    const layer = container.querySelector('[data-pptx-background-image="true"]') as HTMLElement;
+    const cropLayer = layer.querySelector('[data-pptx-background-crop="true"]') as HTMLElement;
+    expect(layer).toBeTruthy();
+    expect(layer.style.left).toBe('25%');
+    expect(layer.style.top).toBe('10%');
+    expect(layer.style.width).toBe('50%');
+    expect(layer.style.height).toBe('80%');
+    expect(layer.style.overflow).toBe('hidden');
+    expect(cropLayer).toBeTruthy();
+    expect(parseFloat(cropLayer.style.width)).toBeCloseTo(125, 1);
+    expect(parseFloat(cropLayer.style.height)).toBeCloseTo(166.667, 1);
+    expect(parseFloat(cropLayer.style.left)).toBeCloseTo(-12.5, 1);
+    expect(parseFloat(cropLayer.style.top)).toBeCloseTo(-33.333, 1);
   });
 
   // -------------------------------------------------------------------------
@@ -524,6 +636,33 @@ describe('renderBackground', () => {
     expect(container.style.backgroundColor).toMatch(/#223344|rgb\(34,\s*51,\s*68\)/i);
   });
 
+  it('uses fillToRect as the center shade area for SVG background gradients', () => {
+    const bg = bgPrXml(`
+      <a:gradFill>
+        <a:gsLst>
+          <a:gs pos="0"><a:srgbClr val="FFFFFF"/></a:gs>
+          <a:gs pos="100000"><a:srgbClr val="000000"/></a:gs>
+        </a:gsLst>
+        <a:path path="circle">
+          <a:fillToRect l="25000" t="25000" r="25000" b="25000"/>
+        </a:path>
+      </a:gradFill>
+    `);
+    const ctx = createMockRenderContext({
+      slide: { rels: new Map(), background: bg } as any,
+      presentation: {
+        ...createMockRenderContext().presentation,
+        width: 1280,
+        height: 720,
+      },
+    });
+
+    renderBackground(ctx, container);
+
+    const stops = Array.from(container.querySelectorAll('radialGradient stop'));
+    expect(stops.map((stop) => stop.getAttribute('offset'))).toEqual(['50%', '100%']);
+  });
+
   it('renders bgRef idx through the theme fill style instead of flattening to color', () => {
     const bg = bgRefXml(1002, `<a:schemeClr val="accent1"/>`);
     const ctx = createMockRenderContext({
@@ -550,6 +689,37 @@ describe('renderBackground', () => {
     renderBackground(ctx, container);
 
     expect(container.style.background).toContain('linear-gradient');
+  });
+
+  it('renders bgRef path gradient theme fills as an SVG background layer', () => {
+    const bg = bgRefXml(1001, `<a:schemeClr val="accent1"/>`);
+    const ctx = createMockRenderContext({
+      slide: { rels: new Map(), background: bg } as any,
+      theme: {
+        ...createMockRenderContext().theme,
+        bgFillStyles: [
+          parseXml(`
+            <a:gradFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+              <a:gsLst>
+                <a:gs pos="0"><a:schemeClr val="phClr"/></a:gs>
+                <a:gs pos="100000"><a:schemeClr val="phClr"><a:tint val="50000"/></a:schemeClr></a:gs>
+              </a:gsLst>
+              <a:path path="rect">
+                <a:fillToRect l="50000" t="50000" r="50000" b="50000"/>
+              </a:path>
+            </a:gradFill>
+          `),
+        ],
+      },
+    });
+
+    renderBackground(ctx, container);
+
+    expect(container.style.background).not.toContain('radial-gradient');
+    const svg = container.querySelector('svg[data-pptx-background-gradient="true"]');
+    expect(svg).toBeTruthy();
+    expect(svg?.querySelectorAll('linearGradient')).toHaveLength(2);
+    expect(svg?.querySelector('g[style*="isolation"]')).toBeTruthy();
   });
 
   // -------------------------------------------------------------------------

@@ -52,6 +52,43 @@ describe('parseGroupNode', () => {
     expect(node.name).toBe('Group 1');
   });
 
+  it('retains group-level scene3d camera semantics for the renderer planner', () => {
+    const node = parseGroupNode(
+      parseXml(`
+        <grpSp xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <nvGrpSpPr><cNvPr id="20" name="Picture Group"/><nvPr/></nvGrpSpPr>
+          <grpSpPr>
+            <xfrm>
+              <off x="0" y="0"/><ext cx="1815283" cy="650783"/>
+              <chOff x="3244850" y="5338935"/><chExt cx="3781425" cy="1355647"/>
+            </xfrm>
+            <scene3d>
+              <camera prst="perspectiveLeft" fov="5700000">
+                <rot lat="0" lon="1500000" rev="0"/>
+              </camera>
+              <lightRig rig="threePt" dir="t"/>
+            </scene3d>
+          </grpSpPr>
+        </grpSp>
+      `),
+    );
+
+    expect(node.shape3d).toEqual({
+      scene: {
+        cameraPreset: 'perspectiveLeft',
+        fieldOfView: 95,
+        cameraZoom: undefined,
+        cameraRotation: { latitude: 0, longitude: 25, revolution: 0 },
+        lightRig: 'threePt',
+        lightDirection: 't',
+        lightRotation: undefined,
+      },
+      shape: undefined,
+      effectKinds: [],
+      parseIssues: [],
+    });
+  });
+
   it('collects child shape nodes', () => {
     const node = parseGroupNode(makeGroupXml({ childCount: 3 }));
     expect(node.children).toHaveLength(3);

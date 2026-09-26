@@ -1,0 +1,9790 @@
+{
+  "diagnostics": {
+    "identicalDuplicateShapes": [
+      "upDownArrow"
+    ],
+    "normalizedFormulas": [
+      {
+        "guide": "xB",
+        "normalized": "+- xH 0 dxB",
+        "original": "+- xH 0 dxB 0",
+        "shape": "circularArrow"
+      },
+      {
+        "guide": "yB",
+        "normalized": "+- yH 0 dyB",
+        "original": "+- yH 0 dyB 0",
+        "shape": "circularArrow"
+      },
+      {
+        "guide": "xB",
+        "normalized": "+- xH 0 dxB",
+        "original": "+- xH 0 dxB 0",
+        "shape": "leftCircularArrow"
+      },
+      {
+        "guide": "yB",
+        "normalized": "+- yH 0 dyB",
+        "original": "+- yH 0 dyB 0",
+        "shape": "leftCircularArrow"
+      },
+      {
+        "guide": "xB",
+        "normalized": "+- xH 0 dxB",
+        "original": "+- xH 0 dxB 0",
+        "shape": "leftRightCircularArrow"
+      },
+      {
+        "guide": "yB",
+        "normalized": "+- yH 0 dyB",
+        "original": "+- yH 0 dyB 0",
+        "shape": "leftRightCircularArrow"
+      },
+      {
+        "guide": "xJ",
+        "normalized": "+- xI 0 dxJ",
+        "original": "+- xI 0 dxJ 0",
+        "shape": "leftRightCircularArrow"
+      },
+      {
+        "guide": "yJ",
+        "normalized": "+- yI 0 dyJ",
+        "original": "+- yI 0 dyJ 0",
+        "shape": "leftRightCircularArrow"
+      }
+    ],
+    "shadowedGuides": [
+      {
+        "guide": "dxI",
+        "occurrence": 2,
+        "shape": "circularArrow"
+      },
+      {
+        "guide": "dyI",
+        "occurrence": 2,
+        "shape": "circularArrow"
+      },
+      {
+        "guide": "q1",
+        "occurrence": 2,
+        "shape": "ellipseRibbon"
+      },
+      {
+        "guide": "q1",
+        "occurrence": 2,
+        "shape": "ellipseRibbon2"
+      },
+      {
+        "guide": "a1",
+        "occurrence": 2,
+        "shape": "gear6"
+      },
+      {
+        "guide": "a1",
+        "occurrence": 2,
+        "shape": "gear9"
+      },
+      {
+        "guide": "a2",
+        "occurrence": 2,
+        "shape": "gear9"
+      },
+      {
+        "guide": "dxI",
+        "occurrence": 2,
+        "shape": "leftCircularArrow"
+      },
+      {
+        "guide": "dyI",
+        "occurrence": 2,
+        "shape": "leftCircularArrow"
+      },
+      {
+        "guide": "dxI",
+        "occurrence": 2,
+        "shape": "leftRightCircularArrow"
+      },
+      {
+        "guide": "dyI",
+        "occurrence": 2,
+        "shape": "leftRightCircularArrow"
+      },
+      {
+        "guide": "il",
+        "occurrence": 2,
+        "shape": "parallelogram"
+      }
+    ]
+  },
+  "formulaContract": {
+    "compatibilityNotes": {
+      "deviations": {
+        "angleUnit": "PowerPoint measures trigonometric angles in 60000ths of a degree.",
+        "at2": "PowerPoint uses atan2(y, x) and returns zero when both operands are zero.",
+        "mod": "Office uses sqrt(x^2 + y^2 + z^2).",
+        "sqrt": "Office uses sqrt(abs(x))."
+      },
+      "sourceUrl": "https://learn.microsoft.com/en-us/openspecs/office_standards/ms-oi29500/851cc3e8-ab22-4f5e-86d1-23b0b06d5edd"
+    },
+    "definitions": [
+      {
+        "arity": 3,
+        "expression": "(x * y) / z",
+        "token": "*/"
+      },
+      {
+        "arity": 3,
+        "expression": "(x + y) - z",
+        "token": "+-"
+      },
+      {
+        "arity": 3,
+        "expression": "(x + y) / z",
+        "token": "+/"
+      },
+      {
+        "arity": 3,
+        "expression": "x > 0 ? y : z",
+        "token": "?:"
+      },
+      {
+        "arity": 1,
+        "expression": "abs(x)",
+        "token": "abs"
+      },
+      {
+        "arity": 2,
+        "expression": "atan2(y, x)",
+        "token": "at2"
+      },
+      {
+        "arity": 3,
+        "expression": "x * cos(atan2(z, y))",
+        "token": "cat2"
+      },
+      {
+        "arity": 2,
+        "expression": "x * cos(y)",
+        "token": "cos"
+      },
+      {
+        "arity": 2,
+        "expression": "max(x, y)",
+        "token": "max"
+      },
+      {
+        "arity": 2,
+        "expression": "min(x, y)",
+        "token": "min"
+      },
+      {
+        "arity": 3,
+        "expression": "sqrt(x^2 + y^2 + z^2)",
+        "token": "mod"
+      },
+      {
+        "arity": 3,
+        "expression": "x if y < x; z if y > z; otherwise y",
+        "token": "pin"
+      },
+      {
+        "arity": 3,
+        "expression": "x * sin(atan2(z, y))",
+        "token": "sat2"
+      },
+      {
+        "arity": 2,
+        "expression": "x * sin(y)",
+        "token": "sin"
+      },
+      {
+        "arity": 1,
+        "expression": "sqrt(abs(x))",
+        "token": "sqrt"
+      },
+      {
+        "arity": 2,
+        "expression": "x * tan(y)",
+        "token": "tan"
+      },
+      {
+        "arity": 1,
+        "expression": "x",
+        "token": "val"
+      }
+    ],
+    "numericPolicy": {
+      "angleUnit": "60000ths-of-a-degree",
+      "atan2ZeroZero": 0,
+      "divisionByZero": "evaluation-error",
+      "intermediateRepresentation": "IEEE-754 binary64",
+      "intermediateRounding": "none",
+      "negativeSquareRoot": "absolute-operand",
+      "nonFiniteResult": "evaluation-error",
+      "outputRounding": "path-emitter-only"
+    },
+    "predefinedGuides": {
+      "3cd4": 16200000,
+      "3cd8": 8100000,
+      "5cd8": 13500000,
+      "7cd8": 18900000,
+      "b": "input:height",
+      "cd2": 10800000,
+      "cd3": 7200000,
+      "cd4": 5400000,
+      "cd8": 2700000,
+      "h": "input:height",
+      "hc": "*/ w 1 2",
+      "hd10": "*/ h 1 10",
+      "hd2": "*/ h 1 2",
+      "hd3": "*/ h 1 3",
+      "hd4": "*/ h 1 4",
+      "hd5": "*/ h 1 5",
+      "hd6": "*/ h 1 6",
+      "hd8": "*/ h 1 8",
+      "l": 0,
+      "ls": "max w h",
+      "r": "input:width",
+      "ss": "min w h",
+      "ssd16": "*/ ss 1 16",
+      "ssd2": "*/ ss 1 2",
+      "ssd32": "*/ ss 1 32",
+      "ssd4": "*/ ss 1 4",
+      "ssd6": "*/ ss 1 6",
+      "ssd8": "*/ ss 1 8",
+      "t": 0,
+      "vc": "*/ h 1 2",
+      "w": "input:width",
+      "wd10": "*/ w 1 10",
+      "wd12": "*/ w 1 12",
+      "wd2": "*/ w 1 2",
+      "wd3": "*/ w 1 3",
+      "wd32": "*/ w 1 32",
+      "wd4": "*/ w 1 4",
+      "wd5": "*/ w 1 5",
+      "wd6": "*/ w 1 6",
+      "wd8": "*/ w 1 8"
+    }
+  },
+  "geometryIr": {
+    "evaluationProfiles": [
+      {
+        "evaluatedShapes": 186,
+        "height": 216,
+        "name": "square",
+        "width": 216
+      },
+      {
+        "evaluatedShapes": 186,
+        "height": 180,
+        "name": "wide",
+        "width": 400
+      },
+      {
+        "evaluatedShapes": 186,
+        "height": 400,
+        "name": "tall",
+        "width": 180
+      }
+    ],
+    "schemaVersion": 1,
+    "structuralSha256": "2ce78a1515e8270ff7831a679636afc892443ed59c9220ee754870beacf8426b",
+    "summary": {
+      "adjustHandles": 241,
+      "adjustmentGuides": 298,
+      "calculatedGuides": 3612,
+      "connectionSites": 856,
+      "pathCommands": {
+        "arcTo": 393,
+        "close": 319,
+        "cubicBezTo": 28,
+        "lnTo": 1689,
+        "moveTo": 445,
+        "quadBezTo": 33
+      },
+      "paths": 319,
+      "shapes": 186,
+      "textRectangles": 181
+    }
+  },
+  "pathEmission": {
+    "precision": 6,
+    "profiles": [
+      {
+        "emittedPaths": 319,
+        "emittedShapes": 186,
+        "height": 216,
+        "name": "square",
+        "nonEmptyPaths": 319,
+        "nonFiniteTokens": 0,
+        "sha256": "5046dd9a441dfa2a0625e6efea55727a64d25d66b8dea774fdebdf001f945394",
+        "width": 216
+      },
+      {
+        "emittedPaths": 319,
+        "emittedShapes": 186,
+        "height": 180,
+        "name": "wide",
+        "nonEmptyPaths": 319,
+        "nonFiniteTokens": 0,
+        "sha256": "46d8ab97f90d5d2e1abf1861cbc347ec1bf61ca09ad865b9d92aca6f024738d2",
+        "width": 400
+      },
+      {
+        "emittedPaths": 319,
+        "emittedShapes": 186,
+        "height": 400,
+        "name": "tall",
+        "nonEmptyPaths": 319,
+        "nonFiniteTokens": 0,
+        "sha256": "0c06126330e44bd412b553d2f224bf405541603b92328ccca875a6c1986a072a",
+        "width": 180
+      }
+    ],
+    "schemaVersion": 1
+  },
+  "reconciliation": {
+    "entries": [
+      {
+        "manualReferences": [
+          {
+            "name": "docx4j",
+            "sha256": "6fc9592cb55db6e572051f41d15a079ae4164635af902db6f13a8a61d0c949d3",
+            "url": "https://github.com/plutext/docx4j/blob/VERSION_11_5_14/docx4j-core/src/main/resources/org/docx4j/model/shapes/presetShapeDefinitions.xml"
+          }
+        ],
+        "rationale": "The ECMA guide y1 references the previously defined dy1. The inspected docx4j reference instead contains an unresolved dy token.",
+        "shape": "leftArrow",
+        "status": "use-ecma"
+      },
+      {
+        "manualReferences": [
+          {
+            "name": "docx4j",
+            "sha256": "6fc9592cb55db6e572051f41d15a079ae4164635af902db6f13a8a61d0c949d3",
+            "url": "https://github.com/plutext/docx4j/blob/VERSION_11_5_14/docx4j-core/src/main/resources/org/docx4j/model/shapes/presetShapeDefinitions.xml"
+          },
+          {
+            "name": "LibreOffice",
+            "sha256": "eaff19f4405b3be6822428c96ef46cc685499217366fd58e5e63a5a24739f02f",
+            "url": "https://github.com/LibreOffice/core/blob/a99249f88f05400c61a7f5d9d6460fa6669caf36/oox/source/drawingml/customshapes/presetShapeDefinitions.xml"
+          }
+        ],
+        "rationale": "The ECMA electronic addendum has no upArrow element. Reference implementations add it but do not agree on every guide, connection site, and text rectangle.",
+        "shape": "upArrow",
+        "status": "pending-native-oracle"
+      }
+    ],
+    "formulaNormalizations": [
+      {
+        "guide": "xB",
+        "normalized": "+- xH 0 dxB",
+        "original": "+- xH 0 dxB 0",
+        "rationale": "The source has a fourth trailing zero although the ECMA +- formula has exactly three operands.",
+        "shape": "circularArrow"
+      },
+      {
+        "guide": "yB",
+        "normalized": "+- yH 0 dyB",
+        "original": "+- yH 0 dyB 0",
+        "rationale": "The source has a fourth trailing zero although the ECMA +- formula has exactly three operands.",
+        "shape": "circularArrow"
+      },
+      {
+        "guide": "xB",
+        "normalized": "+- xH 0 dxB",
+        "original": "+- xH 0 dxB 0",
+        "rationale": "The source has a fourth trailing zero although the ECMA +- formula has exactly three operands.",
+        "shape": "leftCircularArrow"
+      },
+      {
+        "guide": "yB",
+        "normalized": "+- yH 0 dyB",
+        "original": "+- yH 0 dyB 0",
+        "rationale": "The source has a fourth trailing zero although the ECMA +- formula has exactly three operands.",
+        "shape": "leftCircularArrow"
+      },
+      {
+        "guide": "xB",
+        "normalized": "+- xH 0 dxB",
+        "original": "+- xH 0 dxB 0",
+        "rationale": "The source has a fourth trailing zero although the ECMA +- formula has exactly three operands.",
+        "shape": "leftRightCircularArrow"
+      },
+      {
+        "guide": "yB",
+        "normalized": "+- yH 0 dyB",
+        "original": "+- yH 0 dyB 0",
+        "rationale": "The source has a fourth trailing zero although the ECMA +- formula has exactly three operands.",
+        "shape": "leftRightCircularArrow"
+      },
+      {
+        "guide": "xJ",
+        "normalized": "+- xI 0 dxJ",
+        "original": "+- xI 0 dxJ 0",
+        "rationale": "The source has a fourth trailing zero although the ECMA +- formula has exactly three operands.",
+        "shape": "leftRightCircularArrow"
+      },
+      {
+        "guide": "yJ",
+        "normalized": "+- yI 0 dyJ",
+        "original": "+- yI 0 dyJ 0",
+        "rationale": "The source has a fourth trailing zero although the ECMA +- formula has exactly three operands.",
+        "shape": "leftRightCircularArrow"
+      }
+    ],
+    "schemaVersion": 1
+  },
+  "schemaVersion": 1,
+  "shapes": [
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 4,
+      "calculatedGuides": 4,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "adj4",
+        "y1",
+        "x1",
+        "y2",
+        "x2"
+      ],
+      "hasTextRectangle": true,
+      "name": "accentBorderCallout1",
+      "operatorUsage": {
+        "*/": 4,
+        "val": 4
+      },
+      "pathCommands": {
+        "close": 2,
+        "lnTo": 5,
+        "moveTo": 3
+      },
+      "pathFills": {
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 3
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 3,
+      "adjustmentGuides": 6,
+      "calculatedGuides": 6,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "adj4",
+        "adj5",
+        "adj6",
+        "y1",
+        "x1",
+        "y2",
+        "x2",
+        "y3",
+        "x3"
+      ],
+      "hasTextRectangle": true,
+      "name": "accentBorderCallout2",
+      "operatorUsage": {
+        "*/": 6,
+        "val": 6
+      },
+      "pathCommands": {
+        "close": 2,
+        "lnTo": 6,
+        "moveTo": 3
+      },
+      "pathFills": {
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 3
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 4,
+      "adjustmentGuides": 8,
+      "calculatedGuides": 8,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "adj4",
+        "adj5",
+        "adj6",
+        "adj7",
+        "adj8",
+        "y1",
+        "x1",
+        "y2",
+        "x2",
+        "y3",
+        "x3",
+        "y4",
+        "x4"
+      ],
+      "hasTextRectangle": true,
+      "name": "accentBorderCallout3",
+      "operatorUsage": {
+        "*/": 8,
+        "val": 8
+      },
+      "pathCommands": {
+        "close": 2,
+        "lnTo": 7,
+        "moveTo": 3
+      },
+      "pathFills": {
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 3
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 4,
+      "calculatedGuides": 4,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "adj4",
+        "y1",
+        "x1",
+        "y2",
+        "x2"
+      ],
+      "hasTextRectangle": true,
+      "name": "accentCallout1",
+      "operatorUsage": {
+        "*/": 4,
+        "val": 4
+      },
+      "pathCommands": {
+        "close": 2,
+        "lnTo": 5,
+        "moveTo": 3
+      },
+      "pathFills": {
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 1,
+        "true": 2
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 3,
+      "adjustmentGuides": 6,
+      "calculatedGuides": 6,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "adj4",
+        "adj5",
+        "adj6",
+        "y1",
+        "x1",
+        "y2",
+        "x2",
+        "y3",
+        "x3"
+      ],
+      "hasTextRectangle": true,
+      "name": "accentCallout2",
+      "operatorUsage": {
+        "*/": 6,
+        "val": 6
+      },
+      "pathCommands": {
+        "close": 2,
+        "lnTo": 6,
+        "moveTo": 3
+      },
+      "pathFills": {
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 1,
+        "true": 2
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 4,
+      "adjustmentGuides": 8,
+      "calculatedGuides": 8,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "adj4",
+        "adj5",
+        "adj6",
+        "adj7",
+        "adj8",
+        "y1",
+        "x1",
+        "y2",
+        "x2",
+        "y3",
+        "x3",
+        "y4",
+        "x4"
+      ],
+      "hasTextRectangle": true,
+      "name": "accentCallout3",
+      "operatorUsage": {
+        "*/": 8,
+        "val": 8
+      },
+      "pathCommands": {
+        "close": 2,
+        "lnTo": 7,
+        "moveTo": 3
+      },
+      "pathFills": {
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 1,
+        "true": 2
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 5,
+      "connectionSites": 4,
+      "guideNames": [
+        "dx2",
+        "g9",
+        "g10",
+        "g11",
+        "g12"
+      ],
+      "hasTextRectangle": true,
+      "name": "actionButtonBackPrevious",
+      "operatorUsage": {
+        "*/": 1,
+        "+-": 4
+      },
+      "pathCommands": {
+        "close": 5,
+        "lnTo": 12,
+        "moveTo": 5
+      },
+      "pathFills": {
+        "darken": 1,
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 2,
+        "true": 2
+      },
+      "paths": 4
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 10,
+      "connectionSites": 4,
+      "guideNames": [
+        "dx2",
+        "g9",
+        "g10",
+        "g11",
+        "g12",
+        "g13",
+        "g14",
+        "g15",
+        "g16",
+        "g17"
+      ],
+      "hasTextRectangle": true,
+      "name": "actionButtonBeginning",
+      "operatorUsage": {
+        "*/": 4,
+        "+-": 6
+      },
+      "pathCommands": {
+        "close": 8,
+        "lnTo": 21,
+        "moveTo": 8
+      },
+      "pathFills": {
+        "darken": 1,
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 2,
+        "true": 2
+      },
+      "paths": 4
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 0,
+      "connectionSites": 4,
+      "guideNames": [],
+      "hasTextRectangle": true,
+      "name": "actionButtonBlank",
+      "operatorUsage": {},
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 3,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 9,
+      "connectionSites": 4,
+      "guideNames": [
+        "dx2",
+        "g9",
+        "g10",
+        "dx1",
+        "g11",
+        "g12",
+        "g13",
+        "g14",
+        "g15"
+      ],
+      "hasTextRectangle": true,
+      "name": "actionButtonDocument",
+      "operatorUsage": {
+        "*/": 3,
+        "+-": 6
+      },
+      "pathCommands": {
+        "close": 6,
+        "lnTo": 23,
+        "moveTo": 7
+      },
+      "pathFills": {
+        "darken": 1,
+        "darkenLess": 1,
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 3,
+        "true": 2
+      },
+      "paths": 5
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 10,
+      "connectionSites": 4,
+      "guideNames": [
+        "dx2",
+        "g9",
+        "g10",
+        "g11",
+        "g12",
+        "g13",
+        "g14",
+        "g15",
+        "g16",
+        "g17"
+      ],
+      "hasTextRectangle": true,
+      "name": "actionButtonEnd",
+      "operatorUsage": {
+        "*/": 4,
+        "+-": 6
+      },
+      "pathCommands": {
+        "close": 8,
+        "lnTo": 21,
+        "moveTo": 8
+      },
+      "pathFills": {
+        "darken": 1,
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 2,
+        "true": 2
+      },
+      "paths": 4
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 5,
+      "connectionSites": 4,
+      "guideNames": [
+        "dx2",
+        "g9",
+        "g10",
+        "g11",
+        "g12"
+      ],
+      "hasTextRectangle": true,
+      "name": "actionButtonForwardNext",
+      "operatorUsage": {
+        "*/": 1,
+        "+-": 4
+      },
+      "pathCommands": {
+        "close": 5,
+        "lnTo": 12,
+        "moveTo": 5
+      },
+      "pathFills": {
+        "darken": 1,
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 2,
+        "true": 2
+      },
+      "paths": 4
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 21,
+      "connectionSites": 4,
+      "guideNames": [
+        "dx2",
+        "g9",
+        "g11",
+        "g13",
+        "g14",
+        "g15",
+        "g16",
+        "g19",
+        "g20",
+        "g21",
+        "g23",
+        "g24",
+        "g27",
+        "g29",
+        "g30",
+        "g31",
+        "g33",
+        "g36",
+        "g37",
+        "g41",
+        "g42"
+      ],
+      "hasTextRectangle": true,
+      "name": "actionButtonHelp",
+      "operatorUsage": {
+        "*/": 12,
+        "+-": 9
+      },
+      "pathCommands": {
+        "arcTo": 21,
+        "close": 8,
+        "lnTo": 15,
+        "moveTo": 8
+      },
+      "pathFills": {
+        "darken": 1,
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 2,
+        "true": 2
+      },
+      "paths": 4
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 26,
+      "connectionSites": 4,
+      "guideNames": [
+        "dx2",
+        "g9",
+        "g10",
+        "g11",
+        "g12",
+        "g13",
+        "g14",
+        "g15",
+        "g16",
+        "g17",
+        "g18",
+        "g19",
+        "g20",
+        "g21",
+        "g22",
+        "g23",
+        "g24",
+        "g25",
+        "g26",
+        "g27",
+        "g28",
+        "g29",
+        "g30",
+        "g31",
+        "g32",
+        "g33"
+      ],
+      "hasTextRectangle": true,
+      "name": "actionButtonHome",
+      "operatorUsage": {
+        "*/": 12,
+        "+-": 14
+      },
+      "pathCommands": {
+        "close": 8,
+        "lnTo": 46,
+        "moveTo": 11
+      },
+      "pathFills": {
+        "darken": 1,
+        "darkenLess": 1,
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 3,
+        "true": 2
+      },
+      "paths": 5
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 22,
+      "connectionSites": 4,
+      "guideNames": [
+        "dx2",
+        "g9",
+        "g11",
+        "g13",
+        "g14",
+        "g17",
+        "g18",
+        "g19",
+        "g20",
+        "g22",
+        "g23",
+        "g24",
+        "g25",
+        "g28",
+        "g29",
+        "g30",
+        "g31",
+        "g32",
+        "g34",
+        "g35",
+        "g37",
+        "g38"
+      ],
+      "hasTextRectangle": true,
+      "name": "actionButtonInformation",
+      "operatorUsage": {
+        "*/": 11,
+        "+-": 11
+      },
+      "pathCommands": {
+        "arcTo": 6,
+        "close": 8,
+        "lnTo": 33,
+        "moveTo": 11
+      },
+      "pathFills": {
+        "darken": 1,
+        "lighten": 1,
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 3,
+        "true": 2
+      },
+      "paths": 5
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 41,
+      "connectionSites": 4,
+      "guideNames": [
+        "dx2",
+        "g9",
+        "g10",
+        "g11",
+        "g12",
+        "g13",
+        "g14",
+        "g15",
+        "g16",
+        "g17",
+        "g18",
+        "g19",
+        "g20",
+        "g21",
+        "g22",
+        "g23",
+        "g24",
+        "g25",
+        "g26",
+        "g27",
+        "g28",
+        "g29",
+        "g30",
+        "g31",
+        "g32",
+        "g33",
+        "g34",
+        "g35",
+        "g36",
+        "g37",
+        "g38",
+        "g39",
+        "g40",
+        "g41",
+        "g42",
+        "g43",
+        "g44",
+        "g45",
+        "g46",
+        "g47",
+        "g48"
+      ],
+      "hasTextRectangle": true,
+      "name": "actionButtonMovie",
+      "operatorUsage": {
+        "*/": 19,
+        "+-": 22
+      },
+      "pathCommands": {
+        "close": 5,
+        "lnTo": 60,
+        "moveTo": 5
+      },
+      "pathFills": {
+        "darken": 1,
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 2,
+        "true": 2
+      },
+      "paths": 4
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 20,
+      "connectionSites": 4,
+      "guideNames": [
+        "dx2",
+        "g9",
+        "g10",
+        "g11",
+        "g12",
+        "g13",
+        "g14",
+        "g15",
+        "g16",
+        "g17",
+        "g18",
+        "g19",
+        "g20",
+        "g21",
+        "g22",
+        "g23",
+        "g24",
+        "g25",
+        "g26",
+        "g27"
+      ],
+      "hasTextRectangle": true,
+      "name": "actionButtonReturn",
+      "operatorUsage": {
+        "*/": 8,
+        "+-": 12
+      },
+      "pathCommands": {
+        "arcTo": 12,
+        "close": 5,
+        "lnTo": 36,
+        "moveTo": 5
+      },
+      "pathFills": {
+        "darken": 1,
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 2,
+        "true": 2
+      },
+      "paths": 4
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 19,
+      "connectionSites": 4,
+      "guideNames": [
+        "dx2",
+        "g9",
+        "g10",
+        "g11",
+        "g12",
+        "g13",
+        "g14",
+        "g15",
+        "g16",
+        "g17",
+        "g18",
+        "g19",
+        "g20",
+        "g21",
+        "g22",
+        "g23",
+        "g24",
+        "g25",
+        "g26"
+      ],
+      "hasTextRectangle": true,
+      "name": "actionButtonSound",
+      "operatorUsage": {
+        "*/": 8,
+        "+-": 11
+      },
+      "pathCommands": {
+        "close": 5,
+        "lnTo": 24,
+        "moveTo": 8
+      },
+      "pathFills": {
+        "darken": 1,
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 2,
+        "true": 2
+      },
+      "paths": 4
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 42,
+      "connectionSites": 3,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "stAng",
+        "enAng",
+        "sw11",
+        "sw12",
+        "swAng",
+        "wt1",
+        "ht1",
+        "dx1",
+        "dy1",
+        "wt2",
+        "ht2",
+        "dx2",
+        "dy2",
+        "x1",
+        "y1",
+        "x2",
+        "y2",
+        "sw0",
+        "da1",
+        "g1",
+        "ir",
+        "sw1",
+        "sw2",
+        "sw3",
+        "da2",
+        "g5",
+        "ib",
+        "sw4",
+        "sw5",
+        "sw6",
+        "da3",
+        "g9",
+        "il",
+        "sw7",
+        "sw8",
+        "sw9",
+        "da4",
+        "g13",
+        "it",
+        "cang1",
+        "cang2",
+        "cang3"
+      ],
+      "hasTextRectangle": true,
+      "name": "arc",
+      "operatorUsage": {
+        "+-": 19,
+        "+/": 1,
+        "?:": 8,
+        "cat2": 2,
+        "cos": 2,
+        "max": 2,
+        "min": 2,
+        "pin": 2,
+        "sat2": 2,
+        "sin": 2,
+        "val": 2
+      },
+      "pathCommands": {
+        "arcTo": 2,
+        "close": 1,
+        "lnTo": 1,
+        "moveTo": 2
+      },
+      "pathFills": {
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 1,
+        "true": 1
+      },
+      "paths": 2
+    },
+    {
+      "adjustHandles": 4,
+      "adjustmentGuides": 4,
+      "calculatedGuides": 23,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "adj4",
+        "a2",
+        "maxAdj1",
+        "a1",
+        "a3",
+        "th",
+        "aw2",
+        "th2",
+        "dh2",
+        "ah",
+        "bw",
+        "bh",
+        "bs",
+        "maxAdj4",
+        "a4",
+        "bd",
+        "bd3",
+        "bd2",
+        "x3",
+        "x4",
+        "y3",
+        "y4",
+        "y5",
+        "y6"
+      ],
+      "hasTextRectangle": true,
+      "name": "bentArrow",
+      "operatorUsage": {
+        "*/": 7,
+        "+-": 10,
+        "max": 1,
+        "min": 1,
+        "pin": 4,
+        "val": 4
+      },
+      "pathCommands": {
+        "arcTo": 2,
+        "close": 1,
+        "lnTo": 8,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 0,
+      "connectionSites": 0,
+      "guideNames": [],
+      "hasTextRectangle": true,
+      "name": "bentConnector2",
+      "operatorUsage": {},
+      "pathCommands": {
+        "lnTo": 2,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "none": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 1,
+      "connectionSites": 0,
+      "guideNames": [
+        "adj1",
+        "x1"
+      ],
+      "hasTextRectangle": true,
+      "name": "bentConnector3",
+      "operatorUsage": {
+        "*/": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "lnTo": 3,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "none": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 4,
+      "connectionSites": 0,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "x1",
+        "x2",
+        "y2",
+        "y1"
+      ],
+      "hasTextRectangle": true,
+      "name": "bentConnector4",
+      "operatorUsage": {
+        "*/": 2,
+        "+/": 2,
+        "val": 2
+      },
+      "pathCommands": {
+        "lnTo": 4,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "none": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 3,
+      "adjustmentGuides": 3,
+      "calculatedGuides": 6,
+      "connectionSites": 0,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "x1",
+        "x3",
+        "x2",
+        "y2",
+        "y1",
+        "y3"
+      ],
+      "hasTextRectangle": true,
+      "name": "bentConnector5",
+      "operatorUsage": {
+        "*/": 3,
+        "+/": 3,
+        "val": 3
+      },
+      "pathCommands": {
+        "lnTo": 5,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "none": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 3,
+      "adjustmentGuides": 3,
+      "calculatedGuides": 16,
+      "connectionSites": 6,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "a1",
+        "a2",
+        "a3",
+        "y1",
+        "dx1",
+        "x1",
+        "dx3",
+        "x3",
+        "dx2",
+        "x2",
+        "x4",
+        "dy2",
+        "y2",
+        "x0",
+        "y3",
+        "y15"
+      ],
+      "hasTextRectangle": true,
+      "name": "bentUpArrow",
+      "operatorUsage": {
+        "*/": 6,
+        "+-": 5,
+        "+/": 2,
+        "pin": 3,
+        "val": 3
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 8,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 4,
+      "connectionSites": 8,
+      "guideNames": [
+        "adj",
+        "a",
+        "x1",
+        "x2",
+        "y2"
+      ],
+      "hasTextRectangle": true,
+      "name": "bevel",
+      "operatorUsage": {
+        "*/": 1,
+        "+-": 2,
+        "pin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "close": 7,
+        "lnTo": 25,
+        "moveTo": 11
+      },
+      "pathFills": {
+        "darken": 1,
+        "darkenLess": 1,
+        "lighten": 1,
+        "lightenLess": 1,
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 5,
+        "true": 1
+      },
+      "paths": 6
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 3,
+      "calculatedGuides": 71,
+      "connectionSites": 3,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "stAng",
+        "istAng",
+        "a3",
+        "sw11",
+        "sw12",
+        "swAng",
+        "iswAng",
+        "wt1",
+        "ht1",
+        "wt3",
+        "ht3",
+        "dx1",
+        "dy1",
+        "dx3",
+        "dy3",
+        "x1",
+        "y1",
+        "x3",
+        "y3",
+        "dr",
+        "iwd2",
+        "ihd2",
+        "wt2",
+        "ht2",
+        "wt4",
+        "ht4",
+        "dx2",
+        "dy2",
+        "dx4",
+        "dy4",
+        "x2",
+        "y2",
+        "x4",
+        "y4",
+        "sw0",
+        "da1",
+        "g1",
+        "g2",
+        "g3",
+        "ir",
+        "sw1",
+        "sw2",
+        "sw3",
+        "da2",
+        "g5",
+        "g6",
+        "g7",
+        "ib",
+        "sw4",
+        "sw5",
+        "sw6",
+        "da3",
+        "g9",
+        "g10",
+        "g11",
+        "il",
+        "sw7",
+        "sw8",
+        "sw9",
+        "da4",
+        "g13",
+        "g14",
+        "g15",
+        "it",
+        "x5",
+        "y5",
+        "x6",
+        "y6",
+        "cang1",
+        "cang2",
+        "cang3"
+      ],
+      "hasTextRectangle": true,
+      "name": "blockArc",
+      "operatorUsage": {
+        "*/": 1,
+        "+-": 26,
+        "+/": 5,
+        "?:": 8,
+        "cat2": 4,
+        "cos": 4,
+        "max": 6,
+        "min": 6,
+        "pin": 3,
+        "sat2": 4,
+        "sin": 4,
+        "val": 3
+      },
+      "pathCommands": {
+        "arcTo": 2,
+        "close": 1,
+        "lnTo": 1,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 4,
+      "calculatedGuides": 4,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "adj4",
+        "y1",
+        "x1",
+        "y2",
+        "x2"
+      ],
+      "hasTextRectangle": true,
+      "name": "borderCallout1",
+      "operatorUsage": {
+        "*/": 4,
+        "val": 4
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 4,
+        "moveTo": 2
+      },
+      "pathFills": {
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 2
+      },
+      "paths": 2
+    },
+    {
+      "adjustHandles": 3,
+      "adjustmentGuides": 6,
+      "calculatedGuides": 6,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "adj4",
+        "adj5",
+        "adj6",
+        "y1",
+        "x1",
+        "y2",
+        "x2",
+        "y3",
+        "x3"
+      ],
+      "hasTextRectangle": true,
+      "name": "borderCallout2",
+      "operatorUsage": {
+        "*/": 6,
+        "val": 6
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 5,
+        "moveTo": 2
+      },
+      "pathFills": {
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 2
+      },
+      "paths": 2
+    },
+    {
+      "adjustHandles": 4,
+      "adjustmentGuides": 8,
+      "calculatedGuides": 8,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "adj4",
+        "adj5",
+        "adj6",
+        "adj7",
+        "adj8",
+        "y1",
+        "x1",
+        "y2",
+        "x2",
+        "y3",
+        "x3",
+        "y4",
+        "x4"
+      ],
+      "hasTextRectangle": true,
+      "name": "borderCallout3",
+      "operatorUsage": {
+        "*/": 8,
+        "val": 8
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 6,
+        "moveTo": 2
+      },
+      "pathFills": {
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 2
+      },
+      "paths": 2
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 12,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj",
+        "a",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "y2",
+        "y3",
+        "y4",
+        "it",
+        "il",
+        "ir",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "bracePair",
+      "operatorUsage": {
+        "*/": 3,
+        "+-": 8,
+        "pin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "arcTo": 16,
+        "close": 1,
+        "lnTo": 9,
+        "moveTo": 3
+      },
+      "pathFills": {
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 1,
+        "true": 1
+      },
+      "paths": 2
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 7,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj",
+        "a",
+        "x1",
+        "x2",
+        "y2",
+        "il",
+        "ir",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "bracketPair",
+      "operatorUsage": {
+        "*/": 2,
+        "+-": 4,
+        "pin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "arcTo": 8,
+        "close": 1,
+        "lnTo": 5,
+        "moveTo": 3
+      },
+      "pathFills": {
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 1,
+        "true": 1
+      },
+      "paths": 2
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 4,
+      "calculatedGuides": 4,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "adj4",
+        "y1",
+        "x1",
+        "y2",
+        "x2"
+      ],
+      "hasTextRectangle": true,
+      "name": "callout1",
+      "operatorUsage": {
+        "*/": 4,
+        "val": 4
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 4,
+        "moveTo": 2
+      },
+      "pathFills": {
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 1,
+        "true": 1
+      },
+      "paths": 2
+    },
+    {
+      "adjustHandles": 3,
+      "adjustmentGuides": 6,
+      "calculatedGuides": 6,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "adj4",
+        "adj5",
+        "adj6",
+        "y1",
+        "x1",
+        "y2",
+        "x2",
+        "y3",
+        "x3"
+      ],
+      "hasTextRectangle": true,
+      "name": "callout2",
+      "operatorUsage": {
+        "*/": 6,
+        "val": 6
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 5,
+        "moveTo": 2
+      },
+      "pathFills": {
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 1,
+        "true": 1
+      },
+      "paths": 2
+    },
+    {
+      "adjustHandles": 4,
+      "adjustmentGuides": 8,
+      "calculatedGuides": 8,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "adj4",
+        "adj5",
+        "adj6",
+        "adj7",
+        "adj8",
+        "y1",
+        "x1",
+        "y2",
+        "x2",
+        "y3",
+        "x3",
+        "y4",
+        "x4"
+      ],
+      "hasTextRectangle": true,
+      "name": "callout3",
+      "operatorUsage": {
+        "*/": 8,
+        "val": 8
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 6,
+        "moveTo": 2
+      },
+      "pathFills": {
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 1,
+        "true": 1
+      },
+      "paths": 2
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 5,
+      "connectionSites": 5,
+      "guideNames": [
+        "adj",
+        "maxAdj",
+        "a",
+        "y1",
+        "y2",
+        "y3"
+      ],
+      "hasTextRectangle": true,
+      "name": "can",
+      "operatorUsage": {
+        "*/": 2,
+        "+-": 2,
+        "pin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "arcTo": 7,
+        "close": 2,
+        "lnTo": 3,
+        "moveTo": 3
+      },
+      "pathFills": {
+        "lighten": 1,
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 2,
+        "true": 1
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 0,
+      "connectionSites": 0,
+      "guideNames": [],
+      "hasTextRectangle": false,
+      "name": "chartPlus",
+      "operatorUsage": {},
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 5,
+        "moveTo": 3
+      },
+      "pathFills": {
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 1,
+        "true": 1
+      },
+      "paths": 2
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 0,
+      "connectionSites": 0,
+      "guideNames": [],
+      "hasTextRectangle": false,
+      "name": "chartStar",
+      "operatorUsage": {},
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 6,
+        "moveTo": 4
+      },
+      "pathFills": {
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 1,
+        "true": 1
+      },
+      "paths": 2
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 0,
+      "connectionSites": 0,
+      "guideNames": [],
+      "hasTextRectangle": false,
+      "name": "chartX",
+      "operatorUsage": {},
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 5,
+        "moveTo": 3
+      },
+      "pathFills": {
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 1,
+        "true": 1
+      },
+      "paths": 2
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 8,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj",
+        "maxAdj",
+        "a",
+        "x1",
+        "x2",
+        "x3",
+        "dx",
+        "il",
+        "ir"
+      ],
+      "hasTextRectangle": true,
+      "name": "chevron",
+      "operatorUsage": {
+        "*/": 3,
+        "+-": 2,
+        "?:": 2,
+        "pin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 5,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 27,
+      "connectionSites": 3,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "stAng",
+        "enAng",
+        "sw1",
+        "sw2",
+        "swAng",
+        "wt1",
+        "ht1",
+        "dx1",
+        "dy1",
+        "wt2",
+        "ht2",
+        "dx2",
+        "dy2",
+        "x1",
+        "y1",
+        "x2",
+        "y2",
+        "x3",
+        "y3",
+        "midAng0",
+        "midAng",
+        "idx",
+        "idy",
+        "il",
+        "ir",
+        "it",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "chord",
+      "operatorUsage": {
+        "*/": 1,
+        "+-": 11,
+        "+/": 2,
+        "?:": 1,
+        "cat2": 2,
+        "cos": 3,
+        "pin": 2,
+        "sat2": 2,
+        "sin": 3,
+        "val": 2
+      },
+      "pathCommands": {
+        "arcTo": 1,
+        "close": 1,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 4,
+      "adjustmentGuides": 5,
+      "calculatedGuides": 192,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "adj4",
+        "adj5",
+        "a5",
+        "maxAdj1",
+        "a1",
+        "enAng",
+        "stAng",
+        "th",
+        "thh",
+        "th2",
+        "rw1",
+        "rh1",
+        "rw2",
+        "rh2",
+        "rw3",
+        "rh3",
+        "wtH",
+        "htH",
+        "dxH",
+        "dyH",
+        "xH",
+        "yH",
+        "rI",
+        "u1",
+        "u2",
+        "u3",
+        "u4",
+        "u5",
+        "u6",
+        "u7",
+        "u8",
+        "u9",
+        "u10",
+        "u11",
+        "u12",
+        "u13",
+        "u14",
+        "u15",
+        "u16",
+        "u17",
+        "u18",
+        "u19",
+        "u20",
+        "u21",
+        "maxAng",
+        "aAng",
+        "ptAng",
+        "wtA",
+        "htA",
+        "dxA",
+        "dyA",
+        "xA",
+        "yA",
+        "wtE",
+        "htE",
+        "dxE",
+        "dyE",
+        "xE",
+        "yE",
+        "dxG",
+        "dyG",
+        "xG",
+        "yG",
+        "dxB",
+        "dyB",
+        "xB",
+        "yB",
+        "sx1",
+        "sy1",
+        "sx2",
+        "sy2",
+        "rO",
+        "x1O",
+        "y1O",
+        "x2O",
+        "y2O",
+        "dxO",
+        "dyO",
+        "dO",
+        "q1",
+        "q2",
+        "DO",
+        "q3",
+        "q4",
+        "q5",
+        "q6",
+        "q7",
+        "q8",
+        "sdelO",
+        "ndyO",
+        "sdyO",
+        "q9",
+        "q10",
+        "q11",
+        "dxF1",
+        "q12",
+        "dxF2",
+        "adyO",
+        "q13",
+        "q14",
+        "dyF1",
+        "q15",
+        "dyF2",
+        "q16",
+        "q17",
+        "q18",
+        "q19",
+        "q20",
+        "q21",
+        "q22",
+        "dxF",
+        "dyF",
+        "sdxF",
+        "sdyF",
+        "xF",
+        "yF",
+        "x1I",
+        "y1I",
+        "x2I",
+        "y2I",
+        "dxI",
+        "dyI",
+        "dI",
+        "v1",
+        "v2",
+        "DI",
+        "v3",
+        "v4",
+        "v5",
+        "v6",
+        "v7",
+        "v8",
+        "sdelI",
+        "v9",
+        "v10",
+        "v11",
+        "dxC1",
+        "v12",
+        "dxC2",
+        "adyI",
+        "v13",
+        "v14",
+        "dyC1",
+        "v15",
+        "dyC2",
+        "v16",
+        "v17",
+        "v18",
+        "v19",
+        "v20",
+        "v21",
+        "v22",
+        "dxC",
+        "dyC",
+        "sdxC",
+        "sdyC",
+        "xC",
+        "yC",
+        "ist0",
+        "ist1",
+        "istAng",
+        "isw1",
+        "isw2",
+        "iswAng",
+        "p1",
+        "p2",
+        "p3",
+        "p4",
+        "p5",
+        "xGp",
+        "yGp",
+        "xBp",
+        "yBp",
+        "en0",
+        "en1",
+        "en2",
+        "sw0",
+        "sw1",
+        "swAng",
+        "wtI",
+        "htI",
+        "dxI",
+        "dyI",
+        "xI",
+        "yI",
+        "aI",
+        "aA",
+        "aB",
+        "idx",
+        "idy",
+        "il",
+        "ir",
+        "it",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "circularArrow",
+      "operatorUsage": {
+        "*/": 51,
+        "+-": 73,
+        "+/": 5,
+        "?:": 16,
+        "abs": 3,
+        "at2": 3,
+        "cat2": 4,
+        "cos": 7,
+        "max": 2,
+        "min": 2,
+        "mod": 7,
+        "pin": 5,
+        "sat2": 4,
+        "sin": 7,
+        "sqrt": 3,
+        "val": 5
+      },
+      "pathCommands": {
+        "arcTo": 2,
+        "close": 1,
+        "lnTo": 4,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 8,
+      "connectionSites": 4,
+      "guideNames": [
+        "il",
+        "it",
+        "ir",
+        "ib",
+        "g27",
+        "g28",
+        "g29",
+        "g30"
+      ],
+      "hasTextRectangle": true,
+      "name": "cloud",
+      "operatorUsage": {
+        "*/": 8
+      },
+      "pathCommands": {
+        "arcTo": 22,
+        "close": 1,
+        "moveTo": 12
+      },
+      "pathFills": {
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 2
+      },
+      "paths": 2
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 43,
+      "connectionSites": 5,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "dxPos",
+        "dyPos",
+        "xPos",
+        "yPos",
+        "ht",
+        "wt",
+        "g2",
+        "g3",
+        "g4",
+        "g5",
+        "g6",
+        "g7",
+        "g8",
+        "g9",
+        "g10",
+        "g11",
+        "g12",
+        "g13",
+        "g14",
+        "g15",
+        "g16",
+        "g17",
+        "g18",
+        "g19",
+        "g20",
+        "g21",
+        "g22",
+        "g23",
+        "g24",
+        "g25",
+        "g26",
+        "x23",
+        "x24",
+        "x25",
+        "il",
+        "it",
+        "ir",
+        "ib",
+        "g27",
+        "g28",
+        "g29",
+        "g30",
+        "pang"
+      ],
+      "hasTextRectangle": true,
+      "name": "cloudCallout",
+      "operatorUsage": {
+        "*/": 21,
+        "+-": 16,
+        "at2": 1,
+        "cat2": 2,
+        "mod": 1,
+        "sat2": 2,
+        "val": 2
+      },
+      "pathCommands": {
+        "arcTo": 25,
+        "close": 4,
+        "moveTo": 15
+      },
+      "pathFills": {
+        "none": 1,
+        "norm": 4
+      },
+      "pathStrokes": {
+        "true": 5
+      },
+      "paths": 5
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 12,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "maxAdj1",
+        "maxAdj2",
+        "a1",
+        "a2",
+        "x1",
+        "dy1",
+        "y1",
+        "cx1",
+        "cy1",
+        "d",
+        "it",
+        "ir"
+      ],
+      "hasTextRectangle": true,
+      "name": "corner",
+      "operatorUsage": {
+        "*/": 5,
+        "+-": 2,
+        "+/": 1,
+        "?:": 2,
+        "pin": 2,
+        "val": 2
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 5,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 4,
+      "connectionSites": 12,
+      "guideNames": [
+        "md",
+        "dx",
+        "y1",
+        "x1"
+      ],
+      "hasTextRectangle": true,
+      "name": "cornerTabs",
+      "operatorUsage": {
+        "*/": 1,
+        "+-": 2,
+        "mod": 1
+      },
+      "pathCommands": {
+        "close": 4,
+        "lnTo": 8,
+        "moveTo": 4
+      },
+      "pathFills": {
+        "norm": 4
+      },
+      "pathStrokes": {
+        "true": 4
+      },
+      "paths": 4
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 8,
+      "connectionSites": 6,
+      "guideNames": [
+        "adj",
+        "a",
+        "y1",
+        "y4",
+        "y2",
+        "y3",
+        "x4",
+        "x2",
+        "x3"
+      ],
+      "hasTextRectangle": true,
+      "name": "cube",
+      "operatorUsage": {
+        "*/": 3,
+        "+-": 2,
+        "+/": 2,
+        "pin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "close": 4,
+        "lnTo": 17,
+        "moveTo": 6
+      },
+      "pathFills": {
+        "darkenLess": 1,
+        "lightenLess": 1,
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 3,
+        "true": 1
+      },
+      "paths": 4
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 0,
+      "connectionSites": 0,
+      "guideNames": [],
+      "hasTextRectangle": true,
+      "name": "curvedConnector2",
+      "operatorUsage": {},
+      "pathCommands": {
+        "cubicBezTo": 1,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "none": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 4,
+      "connectionSites": 0,
+      "guideNames": [
+        "adj1",
+        "x2",
+        "x1",
+        "x3",
+        "y3"
+      ],
+      "hasTextRectangle": true,
+      "name": "curvedConnector3",
+      "operatorUsage": {
+        "*/": 2,
+        "+/": 2,
+        "val": 1
+      },
+      "pathCommands": {
+        "cubicBezTo": 2,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "none": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 10,
+      "connectionSites": 0,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "x2",
+        "x1",
+        "x3",
+        "x4",
+        "x5",
+        "y4",
+        "y1",
+        "y2",
+        "y3",
+        "y5"
+      ],
+      "hasTextRectangle": true,
+      "name": "curvedConnector4",
+      "operatorUsage": {
+        "*/": 2,
+        "+/": 8,
+        "val": 2
+      },
+      "pathCommands": {
+        "cubicBezTo": 3,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "none": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 3,
+      "adjustmentGuides": 3,
+      "calculatedGuides": 14,
+      "connectionSites": 0,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "x3",
+        "x6",
+        "x1",
+        "x2",
+        "x4",
+        "x5",
+        "x7",
+        "y4",
+        "y1",
+        "y2",
+        "y3",
+        "y5",
+        "y6",
+        "y7"
+      ],
+      "hasTextRectangle": true,
+      "name": "curvedConnector5",
+      "operatorUsage": {
+        "*/": 3,
+        "+/": 11,
+        "val": 3
+      },
+      "pathCommands": {
+        "cubicBezTo": 4,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "none": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 3,
+      "adjustmentGuides": 3,
+      "calculatedGuides": 41,
+      "connectionSites": 5,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "maxAdj2",
+        "a2",
+        "a1",
+        "th",
+        "aw",
+        "q1",
+        "wR",
+        "q7",
+        "q8",
+        "q9",
+        "q10",
+        "q11",
+        "idy",
+        "maxAdj3",
+        "a3",
+        "ah",
+        "x3",
+        "q2",
+        "q3",
+        "q4",
+        "q5",
+        "dx",
+        "x5",
+        "x7",
+        "q6",
+        "dh",
+        "x4",
+        "x8",
+        "aw2",
+        "x6",
+        "y1",
+        "swAng",
+        "mswAng",
+        "iy",
+        "ix",
+        "q12",
+        "dang2",
+        "stAng",
+        "stAng2",
+        "swAng2",
+        "swAng3"
+      ],
+      "hasTextRectangle": true,
+      "name": "curvedDownArrow",
+      "operatorUsage": {
+        "*/": 15,
+        "+-": 17,
+        "+/": 2,
+        "at2": 2,
+        "pin": 3,
+        "sqrt": 2,
+        "val": 3
+      },
+      "pathCommands": {
+        "arcTo": 8,
+        "close": 2,
+        "lnTo": 11,
+        "moveTo": 3
+      },
+      "pathFills": {
+        "darkenLess": 1,
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 2,
+        "true": 1
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 3,
+      "adjustmentGuides": 3,
+      "calculatedGuides": 40,
+      "connectionSites": 5,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "maxAdj2",
+        "a2",
+        "a1",
+        "th",
+        "aw",
+        "q1",
+        "hR",
+        "q7",
+        "q8",
+        "q9",
+        "q10",
+        "q11",
+        "idx",
+        "maxAdj3",
+        "a3",
+        "ah",
+        "y3",
+        "q2",
+        "q3",
+        "q4",
+        "q5",
+        "dy",
+        "y5",
+        "y7",
+        "q6",
+        "dh",
+        "y4",
+        "y8",
+        "aw2",
+        "y6",
+        "x1",
+        "swAng",
+        "mswAng",
+        "ix",
+        "iy",
+        "q12",
+        "dang2",
+        "swAng2",
+        "swAng3",
+        "stAng3"
+      ],
+      "hasTextRectangle": true,
+      "name": "curvedLeftArrow",
+      "operatorUsage": {
+        "*/": 15,
+        "+-": 16,
+        "+/": 2,
+        "at2": 2,
+        "pin": 3,
+        "sqrt": 2,
+        "val": 3
+      },
+      "pathCommands": {
+        "arcTo": 8,
+        "close": 2,
+        "lnTo": 10,
+        "moveTo": 3
+      },
+      "pathFills": {
+        "darkenLess": 1,
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 2,
+        "true": 1
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 3,
+      "adjustmentGuides": 3,
+      "calculatedGuides": 41,
+      "connectionSites": 5,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "maxAdj2",
+        "a2",
+        "a1",
+        "th",
+        "aw",
+        "q1",
+        "hR",
+        "q7",
+        "q8",
+        "q9",
+        "q10",
+        "q11",
+        "idx",
+        "maxAdj3",
+        "a3",
+        "ah",
+        "y3",
+        "q2",
+        "q3",
+        "q4",
+        "q5",
+        "dy",
+        "y5",
+        "y7",
+        "q6",
+        "dh",
+        "y4",
+        "y8",
+        "aw2",
+        "y6",
+        "x1",
+        "swAng",
+        "stAng",
+        "mswAng",
+        "ix",
+        "iy",
+        "q12",
+        "dang2",
+        "swAng2",
+        "swAng3",
+        "stAng3"
+      ],
+      "hasTextRectangle": true,
+      "name": "curvedRightArrow",
+      "operatorUsage": {
+        "*/": 15,
+        "+-": 17,
+        "+/": 2,
+        "at2": 2,
+        "pin": 3,
+        "sqrt": 2,
+        "val": 3
+      },
+      "pathCommands": {
+        "arcTo": 8,
+        "close": 2,
+        "lnTo": 10,
+        "moveTo": 3
+      },
+      "pathFills": {
+        "darkenLess": 1,
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 2,
+        "true": 1
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 3,
+      "adjustmentGuides": 3,
+      "calculatedGuides": 42,
+      "connectionSites": 5,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "maxAdj2",
+        "a2",
+        "a1",
+        "th",
+        "aw",
+        "q1",
+        "wR",
+        "q7",
+        "q8",
+        "q9",
+        "q10",
+        "q11",
+        "idy",
+        "maxAdj3",
+        "a3",
+        "ah",
+        "x3",
+        "q2",
+        "q3",
+        "q4",
+        "q5",
+        "dx",
+        "x5",
+        "x7",
+        "q6",
+        "dh",
+        "x4",
+        "x8",
+        "aw2",
+        "x6",
+        "y1",
+        "swAng",
+        "mswAng",
+        "iy",
+        "ix",
+        "q12",
+        "dang2",
+        "swAng2",
+        "mswAng2",
+        "stAng3",
+        "swAng3",
+        "stAng2"
+      ],
+      "hasTextRectangle": true,
+      "name": "curvedUpArrow",
+      "operatorUsage": {
+        "*/": 15,
+        "+-": 18,
+        "+/": 2,
+        "at2": 2,
+        "pin": 3,
+        "sqrt": 2,
+        "val": 3
+      },
+      "pathCommands": {
+        "arcTo": 8,
+        "close": 2,
+        "lnTo": 10,
+        "moveTo": 3
+      },
+      "pathFills": {
+        "darkenLess": 1,
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 2,
+        "true": 1
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 13,
+      "connectionSites": 10,
+      "guideNames": [
+        "vf",
+        "shd2",
+        "dx1",
+        "dx2",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "dy1",
+        "dy2",
+        "y1",
+        "y2",
+        "y3",
+        "y4"
+      ],
+      "hasTextRectangle": true,
+      "name": "decagon",
+      "operatorUsage": {
+        "*/": 1,
+        "+-": 8,
+        "cos": 2,
+        "sin": 2,
+        "val": 1
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 9,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 7,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj",
+        "a",
+        "x2",
+        "x1",
+        "x3",
+        "y2",
+        "y1",
+        "y3"
+      ],
+      "hasTextRectangle": true,
+      "name": "diagStripe",
+      "operatorUsage": {
+        "*/": 4,
+        "+/": 2,
+        "pin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 3,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 2,
+      "connectionSites": 4,
+      "guideNames": [
+        "ir",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "diamond",
+      "operatorUsage": {
+        "*/": 2
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 3,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 8,
+      "connectionSites": 12,
+      "guideNames": [
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "y1",
+        "y2",
+        "y3",
+        "y4"
+      ],
+      "hasTextRectangle": true,
+      "name": "dodecagon",
+      "operatorUsage": {
+        "*/": 8
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 11,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 10,
+      "connectionSites": 8,
+      "guideNames": [
+        "adj",
+        "a",
+        "dr",
+        "iwd2",
+        "ihd2",
+        "idx",
+        "idy",
+        "il",
+        "ir",
+        "it",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "donut",
+      "operatorUsage": {
+        "*/": 1,
+        "+-": 6,
+        "cos": 1,
+        "pin": 1,
+        "sin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "arcTo": 8,
+        "close": 2,
+        "moveTo": 2
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 36,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "a1",
+        "a2",
+        "y1",
+        "dy2",
+        "y2",
+        "y3",
+        "y4",
+        "y5",
+        "y6",
+        "dx1",
+        "of2",
+        "x1",
+        "dx2",
+        "x2",
+        "dx8",
+        "x8",
+        "dx3",
+        "x3",
+        "dx4",
+        "x4",
+        "x5",
+        "x6",
+        "x7",
+        "x9",
+        "x15",
+        "x10",
+        "x11",
+        "x12",
+        "x13",
+        "x14",
+        "x16",
+        "xAdj",
+        "il",
+        "ir",
+        "it",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "doubleWave",
+      "operatorUsage": {
+        "*/": 5,
+        "+-": 18,
+        "+/": 6,
+        "?:": 2,
+        "abs": 1,
+        "max": 1,
+        "min": 1,
+        "pin": 2,
+        "val": 2
+      },
+      "pathCommands": {
+        "close": 1,
+        "cubicBezTo": 4,
+        "lnTo": 1,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 10,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "maxAdj2",
+        "a1",
+        "a2",
+        "dy1",
+        "y1",
+        "dx1",
+        "x1",
+        "x2",
+        "dy2",
+        "y2"
+      ],
+      "hasTextRectangle": true,
+      "name": "downArrow",
+      "operatorUsage": {
+        "*/": 4,
+        "+-": 4,
+        "pin": 2,
+        "val": 2
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 6,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 4,
+      "adjustmentGuides": 4,
+      "calculatedGuides": 19,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "adj4",
+        "maxAdj2",
+        "a2",
+        "maxAdj1",
+        "a1",
+        "maxAdj3",
+        "a3",
+        "q2",
+        "maxAdj4",
+        "a4",
+        "dx1",
+        "dx2",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "dy3",
+        "y3",
+        "y2",
+        "y1"
+      ],
+      "hasTextRectangle": true,
+      "name": "downArrowCallout",
+      "operatorUsage": {
+        "*/": 9,
+        "+-": 6,
+        "pin": 4,
+        "val": 4
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 10,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 6,
+      "connectionSites": 8,
+      "guideNames": [
+        "idx",
+        "idy",
+        "il",
+        "ir",
+        "it",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "ellipse",
+      "operatorUsage": {
+        "+-": 4,
+        "cos": 1,
+        "sin": 1
+      },
+      "pathCommands": {
+        "arcTo": 4,
+        "close": 1,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 3,
+      "adjustmentGuides": 3,
+      "calculatedGuides": 43,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "a1",
+        "a2",
+        "q10",
+        "q11",
+        "q12",
+        "minAdj3",
+        "a3",
+        "dx2",
+        "x2",
+        "x3",
+        "x4",
+        "x5",
+        "x6",
+        "dy1",
+        "f1",
+        "q1",
+        "q2",
+        "y1",
+        "cx1",
+        "cy1",
+        "cx2",
+        "q1",
+        "dy3",
+        "q3",
+        "q4",
+        "q5",
+        "y3",
+        "q6",
+        "q7",
+        "cy3",
+        "rh",
+        "q8",
+        "y2",
+        "y5",
+        "y6",
+        "cx4",
+        "q9",
+        "cy4",
+        "cx5",
+        "cy6",
+        "y7",
+        "cy7",
+        "y8"
+      ],
+      "hasTextRectangle": true,
+      "name": "ellipseRibbon",
+      "operatorUsage": {
+        "*/": 14,
+        "+-": 24,
+        "+/": 1,
+        "max": 1,
+        "pin": 3,
+        "val": 3
+      },
+      "pathCommands": {
+        "close": 3,
+        "lnTo": 22,
+        "moveTo": 7,
+        "quadBezTo": 14
+      },
+      "pathFills": {
+        "darkenLess": 1,
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 2,
+        "true": 1
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 3,
+      "adjustmentGuides": 3,
+      "calculatedGuides": 53,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "a1",
+        "a2",
+        "q10",
+        "q11",
+        "q12",
+        "minAdj3",
+        "a3",
+        "dx2",
+        "x2",
+        "x3",
+        "x4",
+        "x5",
+        "x6",
+        "dy1",
+        "f1",
+        "q1",
+        "q2",
+        "u1",
+        "y1",
+        "cx1",
+        "cu1",
+        "cy1",
+        "cx2",
+        "q1",
+        "dy3",
+        "q3",
+        "q4",
+        "q5",
+        "u3",
+        "y3",
+        "q6",
+        "q7",
+        "cu3",
+        "cy3",
+        "rh",
+        "q8",
+        "u2",
+        "y2",
+        "u5",
+        "y5",
+        "u6",
+        "y6",
+        "cx4",
+        "q9",
+        "cu4",
+        "cy4",
+        "cx5",
+        "cu6",
+        "cy6",
+        "u7",
+        "y7",
+        "cu7",
+        "cy7"
+      ],
+      "hasTextRectangle": true,
+      "name": "ellipseRibbon2",
+      "operatorUsage": {
+        "*/": 14,
+        "+-": 34,
+        "+/": 1,
+        "max": 1,
+        "pin": 3,
+        "val": 3
+      },
+      "pathCommands": {
+        "close": 3,
+        "lnTo": 23,
+        "moveTo": 7,
+        "quadBezTo": 14
+      },
+      "pathFills": {
+        "darkenLess": 1,
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 2,
+        "true": 1
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 5,
+      "connectionSites": 4,
+      "guideNames": [
+        "x2",
+        "y2",
+        "il",
+        "ir",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "flowChartAlternateProcess",
+      "operatorUsage": {
+        "*/": 1,
+        "+-": 4
+      },
+      "pathCommands": {
+        "arcTo": 4,
+        "close": 1,
+        "lnTo": 3,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 2,
+      "connectionSites": 3,
+      "guideNames": [
+        "ir",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "flowChartCollate",
+      "operatorUsage": {
+        "*/": 2
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 5,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 6,
+      "connectionSites": 8,
+      "guideNames": [
+        "idx",
+        "idy",
+        "il",
+        "ir",
+        "it",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "flowChartConnector",
+      "operatorUsage": {
+        "+-": 4,
+        "cos": 1,
+        "sin": 1
+      },
+      "pathCommands": {
+        "arcTo": 4,
+        "close": 1,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 2,
+      "connectionSites": 4,
+      "guideNames": [
+        "ir",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "flowChartDecision",
+      "operatorUsage": {
+        "*/": 2
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 3,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 5,
+      "connectionSites": 4,
+      "guideNames": [
+        "idx",
+        "idy",
+        "ir",
+        "it",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "flowChartDelay",
+      "operatorUsage": {
+        "+-": 3,
+        "cos": 1,
+        "sin": 1
+      },
+      "pathCommands": {
+        "arcTo": 1,
+        "close": 1,
+        "lnTo": 2,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 1,
+      "connectionSites": 4,
+      "guideNames": [
+        "x2"
+      ],
+      "hasTextRectangle": true,
+      "name": "flowChartDisplay",
+      "operatorUsage": {
+        "*/": 1
+      },
+      "pathCommands": {
+        "arcTo": 1,
+        "close": 1,
+        "lnTo": 3,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 2,
+      "connectionSites": 4,
+      "guideNames": [
+        "y1",
+        "y2"
+      ],
+      "hasTextRectangle": true,
+      "name": "flowChartDocument",
+      "operatorUsage": {
+        "*/": 2
+      },
+      "pathCommands": {
+        "close": 1,
+        "cubicBezTo": 1,
+        "lnTo": 2,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 1,
+      "connectionSites": 4,
+      "guideNames": [
+        "x2"
+      ],
+      "hasTextRectangle": true,
+      "name": "flowChartExtract",
+      "operatorUsage": {
+        "*/": 1
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 2,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 4,
+      "connectionSites": 6,
+      "guideNames": [
+        "x3",
+        "x4",
+        "x5",
+        "x6"
+      ],
+      "hasTextRectangle": true,
+      "name": "flowChartInputOutput",
+      "operatorUsage": {
+        "*/": 4
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 3,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 0,
+      "connectionSites": 4,
+      "guideNames": [],
+      "hasTextRectangle": true,
+      "name": "flowChartInternalStorage",
+      "operatorUsage": {},
+      "pathCommands": {
+        "close": 2,
+        "lnTo": 8,
+        "moveTo": 4
+      },
+      "pathFills": {
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 1,
+        "true": 2
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 1,
+      "connectionSites": 5,
+      "guideNames": [
+        "y3"
+      ],
+      "hasTextRectangle": true,
+      "name": "flowChartMagneticDisk",
+      "operatorUsage": {
+        "*/": 1
+      },
+      "pathCommands": {
+        "arcTo": 5,
+        "close": 2,
+        "lnTo": 2,
+        "moveTo": 3
+      },
+      "pathFills": {
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 1,
+        "true": 2
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 1,
+      "connectionSites": 5,
+      "guideNames": [
+        "x2"
+      ],
+      "hasTextRectangle": true,
+      "name": "flowChartMagneticDrum",
+      "operatorUsage": {
+        "*/": 1
+      },
+      "pathCommands": {
+        "arcTo": 5,
+        "close": 2,
+        "lnTo": 4,
+        "moveTo": 3
+      },
+      "pathFills": {
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 1,
+        "true": 2
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 7,
+      "connectionSites": 4,
+      "guideNames": [
+        "idx",
+        "idy",
+        "il",
+        "ir",
+        "it",
+        "ib",
+        "ang1"
+      ],
+      "hasTextRectangle": true,
+      "name": "flowChartMagneticTape",
+      "operatorUsage": {
+        "+-": 4,
+        "at2": 1,
+        "cos": 1,
+        "sin": 1
+      },
+      "pathCommands": {
+        "arcTo": 4,
+        "close": 1,
+        "lnTo": 2,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 0,
+      "connectionSites": 4,
+      "guideNames": [],
+      "hasTextRectangle": true,
+      "name": "flowChartManualInput",
+      "operatorUsage": {},
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 3,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 2,
+      "connectionSites": 4,
+      "guideNames": [
+        "x3",
+        "x4"
+      ],
+      "hasTextRectangle": true,
+      "name": "flowChartManualOperation",
+      "operatorUsage": {
+        "*/": 2
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 3,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 1,
+      "connectionSites": 4,
+      "guideNames": [
+        "x2"
+      ],
+      "hasTextRectangle": true,
+      "name": "flowChartMerge",
+      "operatorUsage": {
+        "*/": 1
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 2,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 5,
+      "connectionSites": 4,
+      "guideNames": [
+        "y2",
+        "y8",
+        "x3",
+        "x4",
+        "x5"
+      ],
+      "hasTextRectangle": true,
+      "name": "flowChartMultidocument",
+      "operatorUsage": {
+        "*/": 5
+      },
+      "pathCommands": {
+        "close": 5,
+        "cubicBezTo": 9,
+        "lnTo": 26,
+        "moveTo": 7
+      },
+      "pathFills": {
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 2,
+        "true": 1
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 1,
+      "connectionSites": 4,
+      "guideNames": [
+        "x4"
+      ],
+      "hasTextRectangle": true,
+      "name": "flowChartOfflineStorage",
+      "operatorUsage": {
+        "*/": 1
+      },
+      "pathCommands": {
+        "close": 2,
+        "lnTo": 5,
+        "moveTo": 3
+      },
+      "pathFills": {
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 1,
+        "true": 2
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 1,
+      "connectionSites": 4,
+      "guideNames": [
+        "y1"
+      ],
+      "hasTextRectangle": true,
+      "name": "flowChartOffpageConnector",
+      "operatorUsage": {
+        "*/": 1
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 4,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 1,
+      "connectionSites": 4,
+      "guideNames": [
+        "x2"
+      ],
+      "hasTextRectangle": true,
+      "name": "flowChartOnlineStorage",
+      "operatorUsage": {
+        "*/": 1
+      },
+      "pathCommands": {
+        "arcTo": 2,
+        "close": 1,
+        "lnTo": 2,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 6,
+      "connectionSites": 8,
+      "guideNames": [
+        "idx",
+        "idy",
+        "il",
+        "ir",
+        "it",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "flowChartOr",
+      "operatorUsage": {
+        "+-": 4,
+        "cos": 1,
+        "sin": 1
+      },
+      "pathCommands": {
+        "arcTo": 8,
+        "close": 2,
+        "lnTo": 2,
+        "moveTo": 4
+      },
+      "pathFills": {
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 1,
+        "true": 2
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 1,
+      "connectionSites": 4,
+      "guideNames": [
+        "x2"
+      ],
+      "hasTextRectangle": true,
+      "name": "flowChartPredefinedProcess",
+      "operatorUsage": {
+        "*/": 1
+      },
+      "pathCommands": {
+        "close": 2,
+        "lnTo": 8,
+        "moveTo": 4
+      },
+      "pathFills": {
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 1,
+        "true": 2
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 1,
+      "connectionSites": 4,
+      "guideNames": [
+        "x2"
+      ],
+      "hasTextRectangle": true,
+      "name": "flowChartPreparation",
+      "operatorUsage": {
+        "*/": 1
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 5,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 0,
+      "connectionSites": 4,
+      "guideNames": [],
+      "hasTextRectangle": true,
+      "name": "flowChartProcess",
+      "operatorUsage": {},
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 3,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 0,
+      "connectionSites": 4,
+      "guideNames": [],
+      "hasTextRectangle": true,
+      "name": "flowChartPunchedCard",
+      "operatorUsage": {},
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 4,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 2,
+      "connectionSites": 4,
+      "guideNames": [
+        "y2",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "flowChartPunchedTape",
+      "operatorUsage": {
+        "*/": 2
+      },
+      "pathCommands": {
+        "arcTo": 4,
+        "close": 1,
+        "lnTo": 1,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 2,
+      "connectionSites": 4,
+      "guideNames": [
+        "ir",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "flowChartSort",
+      "operatorUsage": {
+        "*/": 2
+      },
+      "pathCommands": {
+        "close": 2,
+        "lnTo": 7,
+        "moveTo": 3
+      },
+      "pathFills": {
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 1,
+        "true": 2
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 6,
+      "connectionSites": 8,
+      "guideNames": [
+        "idx",
+        "idy",
+        "il",
+        "ir",
+        "it",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "flowChartSummingJunction",
+      "operatorUsage": {
+        "+-": 4,
+        "cos": 1,
+        "sin": 1
+      },
+      "pathCommands": {
+        "arcTo": 8,
+        "close": 2,
+        "lnTo": 2,
+        "moveTo": 4
+      },
+      "pathFills": {
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 1,
+        "true": 2
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 4,
+      "connectionSites": 4,
+      "guideNames": [
+        "il",
+        "ir",
+        "it",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "flowChartTerminator",
+      "operatorUsage": {
+        "*/": 4
+      },
+      "pathCommands": {
+        "arcTo": 2,
+        "close": 1,
+        "lnTo": 2,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 7,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj",
+        "a",
+        "dy2",
+        "dy1",
+        "x1",
+        "x2",
+        "y2",
+        "y1"
+      ],
+      "hasTextRectangle": true,
+      "name": "foldedCorner",
+      "operatorUsage": {
+        "*/": 2,
+        "+-": 4,
+        "pin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "close": 2,
+        "lnTo": 13,
+        "moveTo": 3
+      },
+      "pathFills": {
+        "darkenLess": 1,
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 2,
+        "true": 1
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 4,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "a1",
+        "x1",
+        "x4",
+        "y4"
+      ],
+      "hasTextRectangle": true,
+      "name": "frame",
+      "operatorUsage": {
+        "*/": 1,
+        "+-": 2,
+        "pin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "close": 2,
+        "lnTo": 6,
+        "moveTo": 2
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 31,
+      "connectionSites": 0,
+      "guideNames": [
+        "d",
+        "rw2",
+        "rh2",
+        "t1",
+        "t2",
+        "da",
+        "2da",
+        "stAng1",
+        "swAng1",
+        "swAng3",
+        "rw3",
+        "rh3",
+        "ct1",
+        "st1",
+        "m1",
+        "n1",
+        "dx1",
+        "dy1",
+        "x1",
+        "y1",
+        "ct3",
+        "st3",
+        "m3",
+        "n3",
+        "dx3",
+        "dy3",
+        "x3",
+        "vc3",
+        "y2",
+        "x2",
+        "cd"
+      ],
+      "hasTextRectangle": true,
+      "name": "funnel",
+      "operatorUsage": {
+        "*/": 7,
+        "+-": 11,
+        "at2": 1,
+        "cos": 5,
+        "mod": 2,
+        "sin": 5
+      },
+      "pathCommands": {
+        "arcTo": 3,
+        "close": 2,
+        "lnTo": 1,
+        "moveTo": 2
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 107,
+      "connectionSites": 6,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "a1",
+        "a2",
+        "th",
+        "lFD",
+        "th2",
+        "l2",
+        "l3",
+        "rh",
+        "rw",
+        "dr",
+        "maxr",
+        "ha",
+        "aA1",
+        "aD1",
+        "ta11",
+        "ta12",
+        "bA1",
+        "cta1",
+        "sta1",
+        "ma1",
+        "na1",
+        "dxa1",
+        "dya1",
+        "xA1",
+        "yA1",
+        "td11",
+        "td12",
+        "bD1",
+        "ctd1",
+        "std1",
+        "md1",
+        "nd1",
+        "dxd1",
+        "dyd1",
+        "xD1",
+        "yD1",
+        "xAD1",
+        "yAD1",
+        "lAD1",
+        "a1",
+        "dxF1",
+        "dyF1",
+        "xF1",
+        "yF1",
+        "xE1",
+        "yE1",
+        "yC1t",
+        "xC1t",
+        "yC1",
+        "xC1",
+        "yB1",
+        "xB1",
+        "aD6",
+        "td61",
+        "td62",
+        "bD6",
+        "ctd6",
+        "std6",
+        "md6",
+        "nd6",
+        "dxd6",
+        "dyd6",
+        "xD6",
+        "yD6",
+        "xA6",
+        "xF6",
+        "xE6",
+        "yC6",
+        "swAng1",
+        "aA2",
+        "aD2",
+        "ta21",
+        "ta22",
+        "bA2",
+        "yA2",
+        "td21",
+        "td22",
+        "bD2",
+        "yD2",
+        "yC2",
+        "yB2",
+        "xB2",
+        "swAng2",
+        "aD3",
+        "td31",
+        "td32",
+        "bD3",
+        "yD3",
+        "yB3",
+        "aD4",
+        "td41",
+        "td42",
+        "bD4",
+        "xD4",
+        "xC4",
+        "xB4",
+        "aD5",
+        "td51",
+        "td52",
+        "bD5",
+        "xD5",
+        "xC5",
+        "xB5",
+        "xCxn1",
+        "yCxn1",
+        "yCxn2",
+        "xCxn4"
+      ],
+      "hasTextRectangle": true,
+      "name": "gear6",
+      "operatorUsage": {
+        "*/": 7,
+        "+-": 47,
+        "+/": 3,
+        "?:": 1,
+        "at2": 10,
+        "cos": 16,
+        "mod": 4,
+        "pin": 2,
+        "sin": 16,
+        "val": 3
+      },
+      "pathCommands": {
+        "arcTo": 6,
+        "close": 1,
+        "lnTo": 18,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 242,
+      "connectionSites": 9,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "a1",
+        "a2",
+        "th",
+        "lFD",
+        "th2",
+        "l2",
+        "l3",
+        "rh",
+        "rw",
+        "dr",
+        "maxr",
+        "ha",
+        "aA1",
+        "aD1",
+        "ta11",
+        "ta12",
+        "bA1",
+        "cta1",
+        "sta1",
+        "ma1",
+        "na1",
+        "dxa1",
+        "dya1",
+        "xA1",
+        "yA1",
+        "td11",
+        "td12",
+        "bD1",
+        "ctd1",
+        "std1",
+        "md1",
+        "nd1",
+        "dxd1",
+        "dyd1",
+        "xD1",
+        "yD1",
+        "xAD1",
+        "yAD1",
+        "lAD1",
+        "a1",
+        "dxF1",
+        "dyF1",
+        "xF1",
+        "yF1",
+        "xE1",
+        "yE1",
+        "yC1t",
+        "xC1t",
+        "yC1",
+        "xC1",
+        "yB1",
+        "xB1",
+        "aA2",
+        "aD2",
+        "ta21",
+        "ta22",
+        "bA2",
+        "cta2",
+        "sta2",
+        "ma2",
+        "na2",
+        "dxa2",
+        "dya2",
+        "xA2",
+        "yA2",
+        "td21",
+        "td22",
+        "bD2",
+        "ctd2",
+        "std2",
+        "md2",
+        "nd2",
+        "dxd2",
+        "dyd2",
+        "xD2",
+        "yD2",
+        "xAD2",
+        "yAD2",
+        "lAD2",
+        "a2",
+        "dxF2",
+        "dyF2",
+        "xF2",
+        "yF2",
+        "xE2",
+        "yE2",
+        "yC2t",
+        "xC2t",
+        "yC2",
+        "xC2",
+        "yB2",
+        "xB2",
+        "swAng1",
+        "aA3",
+        "aD3",
+        "ta31",
+        "ta32",
+        "bA3",
+        "cta3",
+        "sta3",
+        "ma3",
+        "na3",
+        "dxa3",
+        "dya3",
+        "xA3",
+        "yA3",
+        "td31",
+        "td32",
+        "bD3",
+        "ctd3",
+        "std3",
+        "md3",
+        "nd3",
+        "dxd3",
+        "dyd3",
+        "xD3",
+        "yD3",
+        "xAD3",
+        "yAD3",
+        "lAD3",
+        "a3",
+        "dxF3",
+        "dyF3",
+        "xF3",
+        "yF3",
+        "xE3",
+        "yE3",
+        "yC3t",
+        "xC3t",
+        "yC3",
+        "xC3",
+        "yB3",
+        "xB3",
+        "swAng2",
+        "aA4",
+        "aD4",
+        "ta41",
+        "ta42",
+        "bA4",
+        "cta4",
+        "sta4",
+        "ma4",
+        "na4",
+        "dxa4",
+        "dya4",
+        "xA4",
+        "yA4",
+        "td41",
+        "td42",
+        "bD4",
+        "ctd4",
+        "std4",
+        "md4",
+        "nd4",
+        "dxd4",
+        "dyd4",
+        "xD4",
+        "yD4",
+        "xAD4",
+        "yAD4",
+        "lAD4",
+        "a4",
+        "dxF4",
+        "dyF4",
+        "xF4",
+        "yF4",
+        "xE4",
+        "yE4",
+        "yC4t",
+        "xC4t",
+        "yC4",
+        "xC4",
+        "yB4",
+        "xB4",
+        "swAng3",
+        "aA5",
+        "aD5",
+        "ta51",
+        "ta52",
+        "bA5",
+        "td51",
+        "td52",
+        "bD5",
+        "xD5",
+        "xC5",
+        "xB5",
+        "swAng4",
+        "aD6",
+        "td61",
+        "td62",
+        "bD6",
+        "xD6",
+        "xC6",
+        "xB6",
+        "aD7",
+        "td71",
+        "td72",
+        "bD7",
+        "xD7",
+        "xC7",
+        "xB7",
+        "aD8",
+        "td81",
+        "td82",
+        "bD8",
+        "xA8",
+        "xD8",
+        "xC8",
+        "xB8",
+        "aA9",
+        "aD9",
+        "td91",
+        "td92",
+        "bD9",
+        "ctd9",
+        "std9",
+        "md9",
+        "nd9",
+        "dxd9",
+        "dyd9",
+        "xD9",
+        "yD9",
+        "ta91",
+        "ta92",
+        "bA9",
+        "xA9",
+        "xF9",
+        "xE9",
+        "yC9",
+        "swAng5",
+        "xCxn1",
+        "yCxn1",
+        "xCxn2",
+        "yCxn2",
+        "xCxn3",
+        "yCxn3",
+        "xCxn4",
+        "yCxn4",
+        "xCxn5",
+        "xCxn6",
+        "xCxn7",
+        "xCxn8"
+      ],
+      "hasTextRectangle": true,
+      "name": "gear9",
+      "operatorUsage": {
+        "*/": 13,
+        "+-": 99,
+        "+/": 12,
+        "?:": 1,
+        "at2": 20,
+        "cos": 41,
+        "mod": 13,
+        "pin": 2,
+        "sin": 41,
+        "val": 2
+      },
+      "pathCommands": {
+        "arcTo": 9,
+        "close": 1,
+        "lnTo": 27,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 16,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "maxAdj2",
+        "a2",
+        "x1",
+        "g1",
+        "g2",
+        "maxAdj1",
+        "a1",
+        "y1",
+        "dx2",
+        "x2",
+        "dy2",
+        "y2",
+        "cx1",
+        "cy1",
+        "cx2",
+        "cy2"
+      ],
+      "hasTextRectangle": true,
+      "name": "halfFrame",
+      "operatorUsage": {
+        "*/": 9,
+        "+-": 3,
+        "+/": 2,
+        "pin": 2,
+        "val": 2
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 5,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 10,
+      "connectionSites": 2,
+      "guideNames": [
+        "dx1",
+        "dx2",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "y1",
+        "il",
+        "ir",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "heart",
+      "operatorUsage": {
+        "*/": 5,
+        "+-": 5
+      },
+      "pathCommands": {
+        "close": 1,
+        "cubicBezTo": 2,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 19,
+      "connectionSites": 7,
+      "guideNames": [
+        "hf",
+        "vf",
+        "swd2",
+        "shd2",
+        "svc",
+        "dx1",
+        "dx2",
+        "dx3",
+        "dy1",
+        "dy2",
+        "dy3",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "x5",
+        "x6",
+        "y1",
+        "y2",
+        "y3",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "heptagon",
+      "operatorUsage": {
+        "*/": 9,
+        "+-": 10,
+        "val": 2
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 6,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 20,
+      "connectionSites": 6,
+      "guideNames": [
+        "adj",
+        "vf",
+        "maxAdj",
+        "a",
+        "shd2",
+        "x1",
+        "x2",
+        "dy1",
+        "y1",
+        "y2",
+        "q1",
+        "q2",
+        "q3",
+        "q4",
+        "q5",
+        "q6",
+        "q7",
+        "q8",
+        "il",
+        "it",
+        "ir",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "hexagon",
+      "operatorUsage": {
+        "*/": 7,
+        "+-": 7,
+        "+/": 1,
+        "?:": 3,
+        "pin": 1,
+        "sin": 1,
+        "val": 2
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 5,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 6,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj",
+        "maxAdj",
+        "a",
+        "dx1",
+        "x1",
+        "ir",
+        "x2"
+      ],
+      "hasTextRectangle": true,
+      "name": "homePlate",
+      "operatorUsage": {
+        "*/": 3,
+        "+-": 1,
+        "+/": 1,
+        "pin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 4,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 11,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj",
+        "a",
+        "ch",
+        "ch2",
+        "ch4",
+        "y3",
+        "y4",
+        "y6",
+        "y7",
+        "y5",
+        "x3",
+        "x4"
+      ],
+      "hasTextRectangle": true,
+      "name": "horizontalScroll",
+      "operatorUsage": {
+        "*/": 3,
+        "+-": 7,
+        "pin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "arcTo": 19,
+        "close": 5,
+        "lnTo": 15,
+        "moveTo": 9
+      },
+      "pathFills": {
+        "darkenLess": 1,
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 2,
+        "true": 1
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 8,
+      "connectionSites": 4,
+      "guideNames": [
+        "x5",
+        "x12",
+        "x21",
+        "x24",
+        "y3",
+        "y6",
+        "y9",
+        "y18"
+      ],
+      "hasTextRectangle": true,
+      "name": "irregularSeal1",
+      "operatorUsage": {
+        "*/": 8
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 23,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 11,
+      "connectionSites": 4,
+      "guideNames": [
+        "x2",
+        "x5",
+        "x16",
+        "x19",
+        "y2",
+        "y3",
+        "y8",
+        "y14",
+        "y16",
+        "y17",
+        "y24"
+      ],
+      "hasTextRectangle": true,
+      "name": "irregularSeal2",
+      "operatorUsage": {
+        "*/": 11
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 27,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 10,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "maxAdj2",
+        "a1",
+        "a2",
+        "dx2",
+        "x2",
+        "dy1",
+        "y1",
+        "y2",
+        "dx1",
+        "x1"
+      ],
+      "hasTextRectangle": true,
+      "name": "leftArrow",
+      "operatorUsage": {
+        "*/": 4,
+        "+-": 4,
+        "pin": 2,
+        "val": 2
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 6,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 4,
+      "adjustmentGuides": 4,
+      "calculatedGuides": 19,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "adj4",
+        "maxAdj2",
+        "a2",
+        "maxAdj1",
+        "a1",
+        "maxAdj3",
+        "a3",
+        "q2",
+        "maxAdj4",
+        "a4",
+        "dy1",
+        "dy2",
+        "y1",
+        "y2",
+        "y3",
+        "y4",
+        "x1",
+        "dx2",
+        "x2",
+        "x3"
+      ],
+      "hasTextRectangle": true,
+      "name": "leftArrowCallout",
+      "operatorUsage": {
+        "*/": 8,
+        "+-": 6,
+        "+/": 1,
+        "pin": 4,
+        "val": 4
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 10,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 14,
+      "connectionSites": 3,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "a2",
+        "q1",
+        "q2",
+        "q3",
+        "maxAdj1",
+        "a1",
+        "y1",
+        "y3",
+        "y4",
+        "dx1",
+        "dy1",
+        "il",
+        "it",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "leftBrace",
+      "operatorUsage": {
+        "*/": 4,
+        "+-": 5,
+        "cos": 1,
+        "min": 1,
+        "pin": 2,
+        "sin": 1,
+        "val": 2
+      },
+      "pathCommands": {
+        "arcTo": 8,
+        "close": 1,
+        "lnTo": 4,
+        "moveTo": 2
+      },
+      "pathFills": {
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 1,
+        "true": 1
+      },
+      "paths": 2
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 9,
+      "connectionSites": 3,
+      "guideNames": [
+        "adj",
+        "maxAdj",
+        "a",
+        "y1",
+        "y2",
+        "dx1",
+        "dy1",
+        "il",
+        "it",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "leftBracket",
+      "operatorUsage": {
+        "*/": 2,
+        "+-": 4,
+        "cos": 1,
+        "pin": 1,
+        "sin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "arcTo": 4,
+        "close": 1,
+        "lnTo": 2,
+        "moveTo": 2
+      },
+      "pathFills": {
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 1,
+        "true": 1
+      },
+      "paths": 2
+    },
+    {
+      "adjustHandles": 4,
+      "adjustmentGuides": 5,
+      "calculatedGuides": 205,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "adj4",
+        "adj5",
+        "a5",
+        "maxAdj1",
+        "a1",
+        "enAng",
+        "stAng",
+        "th",
+        "thh",
+        "th2",
+        "rw1",
+        "rh1",
+        "rw2",
+        "rh2",
+        "rw3",
+        "rh3",
+        "wtH",
+        "htH",
+        "dxH",
+        "dyH",
+        "xH",
+        "yH",
+        "rI",
+        "u1",
+        "u2",
+        "u3",
+        "u4",
+        "u5",
+        "u6",
+        "u7",
+        "u8",
+        "u9",
+        "u10",
+        "u11",
+        "u12",
+        "u13",
+        "u14",
+        "u15",
+        "u16",
+        "u17",
+        "u18",
+        "u19",
+        "u20",
+        "u21",
+        "u22",
+        "minAng",
+        "u23",
+        "a2",
+        "aAng",
+        "ptAng",
+        "wtA",
+        "htA",
+        "dxA",
+        "dyA",
+        "xA",
+        "yA",
+        "wtE",
+        "htE",
+        "dxE",
+        "dyE",
+        "xE",
+        "yE",
+        "wtD",
+        "htD",
+        "dxD",
+        "dyD",
+        "xD",
+        "yD",
+        "dxG",
+        "dyG",
+        "xG",
+        "yG",
+        "dxB",
+        "dyB",
+        "xB",
+        "yB",
+        "sx1",
+        "sy1",
+        "sx2",
+        "sy2",
+        "rO",
+        "x1O",
+        "y1O",
+        "x2O",
+        "y2O",
+        "dxO",
+        "dyO",
+        "dO",
+        "q1",
+        "q2",
+        "DO",
+        "q3",
+        "q4",
+        "q5",
+        "q6",
+        "q7",
+        "q8",
+        "sdelO",
+        "ndyO",
+        "sdyO",
+        "q9",
+        "q10",
+        "q11",
+        "dxF1",
+        "q12",
+        "dxF2",
+        "adyO",
+        "q13",
+        "q14",
+        "dyF1",
+        "q15",
+        "dyF2",
+        "q16",
+        "q17",
+        "q18",
+        "q19",
+        "q20",
+        "q21",
+        "q22",
+        "dxF",
+        "dyF",
+        "sdxF",
+        "sdyF",
+        "xF",
+        "yF",
+        "x1I",
+        "y1I",
+        "x2I",
+        "y2I",
+        "dxI",
+        "dyI",
+        "dI",
+        "v1",
+        "v2",
+        "DI",
+        "v3",
+        "v4",
+        "v5",
+        "v6",
+        "v7",
+        "v8",
+        "sdelI",
+        "v9",
+        "v10",
+        "v11",
+        "dxC1",
+        "v12",
+        "dxC2",
+        "adyI",
+        "v13",
+        "v14",
+        "dyC1",
+        "v15",
+        "dyC2",
+        "v16",
+        "v17",
+        "v18",
+        "v19",
+        "v20",
+        "v21",
+        "v22",
+        "dxC",
+        "dyC",
+        "sdxC",
+        "sdyC",
+        "xC",
+        "yC",
+        "ist0",
+        "ist1",
+        "istAng0",
+        "isw1",
+        "isw2",
+        "iswAng0",
+        "istAng",
+        "iswAng",
+        "p1",
+        "p2",
+        "p3",
+        "p4",
+        "p5",
+        "xGp",
+        "yGp",
+        "xBp",
+        "yBp",
+        "en0",
+        "en1",
+        "en2",
+        "sw0",
+        "sw1",
+        "swAng",
+        "stAng0",
+        "swAng0",
+        "wtI",
+        "htI",
+        "dxI",
+        "dyI",
+        "xI",
+        "yI",
+        "aI",
+        "aA",
+        "aB",
+        "idx",
+        "idy",
+        "il",
+        "ir",
+        "it",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "leftCircularArrow",
+      "operatorUsage": {
+        "*/": 53,
+        "+-": 79,
+        "+/": 5,
+        "?:": 16,
+        "abs": 4,
+        "at2": 3,
+        "cat2": 5,
+        "cos": 8,
+        "max": 2,
+        "min": 2,
+        "mod": 7,
+        "pin": 5,
+        "sat2": 5,
+        "sin": 8,
+        "sqrt": 3,
+        "val": 5
+      },
+      "pathCommands": {
+        "arcTo": 2,
+        "close": 1,
+        "lnTo": 5,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 11,
+      "connectionSites": 6,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "maxAdj2",
+        "a1",
+        "a2",
+        "x2",
+        "x3",
+        "dy",
+        "y1",
+        "y2",
+        "dx1",
+        "x1",
+        "x4"
+      ],
+      "hasTextRectangle": true,
+      "name": "leftRightArrow",
+      "operatorUsage": {
+        "*/": 4,
+        "+-": 5,
+        "pin": 2,
+        "val": 2
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 9,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 4,
+      "adjustmentGuides": 4,
+      "calculatedGuides": 20,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "adj4",
+        "maxAdj2",
+        "a2",
+        "maxAdj1",
+        "a1",
+        "maxAdj3",
+        "a3",
+        "q2",
+        "maxAdj4",
+        "a4",
+        "dy1",
+        "dy2",
+        "y1",
+        "y2",
+        "y3",
+        "y4",
+        "x1",
+        "x4",
+        "dx2",
+        "x2",
+        "x3"
+      ],
+      "hasTextRectangle": true,
+      "name": "leftRightArrowCallout",
+      "operatorUsage": {
+        "*/": 8,
+        "+-": 8,
+        "pin": 4,
+        "val": 4
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 17,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 4,
+      "adjustmentGuides": 5,
+      "calculatedGuides": 230,
+      "connectionSites": 6,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "adj4",
+        "adj5",
+        "a5",
+        "maxAdj1",
+        "a1",
+        "enAng",
+        "stAng",
+        "th",
+        "thh",
+        "th2",
+        "rw1",
+        "rh1",
+        "rw2",
+        "rh2",
+        "rw3",
+        "rh3",
+        "wtH",
+        "htH",
+        "dxH",
+        "dyH",
+        "xH",
+        "yH",
+        "rI",
+        "u1",
+        "u2",
+        "u3",
+        "u4",
+        "u5",
+        "u6",
+        "u7",
+        "u8",
+        "u9",
+        "u10",
+        "u11",
+        "u12",
+        "u13",
+        "u14",
+        "u15",
+        "u16",
+        "u17",
+        "u18",
+        "u19",
+        "u20",
+        "u21",
+        "maxAng",
+        "aAng",
+        "ptAng",
+        "wtA",
+        "htA",
+        "dxA",
+        "dyA",
+        "xA",
+        "yA",
+        "dxG",
+        "dyG",
+        "xG",
+        "yG",
+        "dxB",
+        "dyB",
+        "xB",
+        "yB",
+        "sx1",
+        "sy1",
+        "sx2",
+        "sy2",
+        "rO",
+        "x1O",
+        "y1O",
+        "x2O",
+        "y2O",
+        "dxO",
+        "dyO",
+        "dO",
+        "q1",
+        "q2",
+        "DO",
+        "q3",
+        "q4",
+        "q5",
+        "q6",
+        "q7",
+        "q8",
+        "sdelO",
+        "ndyO",
+        "sdyO",
+        "q9",
+        "q10",
+        "q11",
+        "dxF1",
+        "q12",
+        "dxF2",
+        "adyO",
+        "q13",
+        "q14",
+        "dyF1",
+        "q15",
+        "dyF2",
+        "q16",
+        "q17",
+        "q18",
+        "q19",
+        "q20",
+        "q21",
+        "q22",
+        "dxF",
+        "dyF",
+        "sdxF",
+        "sdyF",
+        "xF",
+        "yF",
+        "x1I",
+        "y1I",
+        "x2I",
+        "y2I",
+        "dxI",
+        "dyI",
+        "dI",
+        "v1",
+        "v2",
+        "DI",
+        "v3",
+        "v4",
+        "v5",
+        "v6",
+        "v7",
+        "v8",
+        "sdelI",
+        "v9",
+        "v10",
+        "v11",
+        "dxC1",
+        "v12",
+        "dxC2",
+        "adyI",
+        "v13",
+        "v14",
+        "dyC1",
+        "v15",
+        "dyC2",
+        "v16",
+        "v17",
+        "v18",
+        "v19",
+        "v20",
+        "v21",
+        "v22",
+        "dxC",
+        "dyC",
+        "sdxC",
+        "sdyC",
+        "xC",
+        "yC",
+        "wtI",
+        "htI",
+        "dxI",
+        "dyI",
+        "xI",
+        "yI",
+        "lptAng",
+        "wtL",
+        "htL",
+        "dxL",
+        "dyL",
+        "xL",
+        "yL",
+        "dxK",
+        "dyK",
+        "xK",
+        "yK",
+        "dxJ",
+        "dyJ",
+        "xJ",
+        "yJ",
+        "p1",
+        "p2",
+        "p3",
+        "p4",
+        "p5",
+        "xGp",
+        "yGp",
+        "xBp",
+        "yBp",
+        "en0",
+        "en1",
+        "en2",
+        "od0",
+        "od1",
+        "od2",
+        "st0",
+        "st1",
+        "st2",
+        "sw0",
+        "sw1",
+        "swAng",
+        "ist0",
+        "ist1",
+        "istAng",
+        "id0",
+        "id1",
+        "id2",
+        "ien0",
+        "ien1",
+        "ien2",
+        "isw1",
+        "isw2",
+        "iswAng",
+        "wtE",
+        "htE",
+        "dxE",
+        "dyE",
+        "xE",
+        "yE",
+        "wtD",
+        "htD",
+        "dxD",
+        "dyD",
+        "xD",
+        "yD",
+        "xKp",
+        "yKp",
+        "xJp",
+        "yJp",
+        "aL",
+        "aA",
+        "aB",
+        "aJ",
+        "idx",
+        "idy",
+        "il",
+        "ir",
+        "it",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "leftRightCircularArrow",
+      "operatorUsage": {
+        "*/": 51,
+        "+-": 91,
+        "+/": 5,
+        "?:": 24,
+        "abs": 3,
+        "at2": 3,
+        "cat2": 6,
+        "cos": 11,
+        "max": 2,
+        "min": 2,
+        "mod": 7,
+        "pin": 5,
+        "sat2": 6,
+        "sin": 11,
+        "sqrt": 3,
+        "val": 5
+      },
+      "pathCommands": {
+        "arcTo": 2,
+        "close": 1,
+        "lnTo": 7,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 3,
+      "adjustmentGuides": 3,
+      "calculatedGuides": 23,
+      "connectionSites": 6,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "a3",
+        "maxAdj1",
+        "a1",
+        "w1",
+        "maxAdj2",
+        "a2",
+        "x1",
+        "x4",
+        "dy1",
+        "dy2",
+        "ly1",
+        "ry4",
+        "ly2",
+        "ry3",
+        "ly4",
+        "ry1",
+        "ly3",
+        "ry2",
+        "hR",
+        "x2",
+        "x3",
+        "y1",
+        "y2"
+      ],
+      "hasTextRectangle": true,
+      "name": "leftRightRibbon",
+      "operatorUsage": {
+        "*/": 6,
+        "+-": 14,
+        "pin": 3,
+        "val": 3
+      },
+      "pathCommands": {
+        "arcTo": 8,
+        "close": 3,
+        "lnTo": 27,
+        "moveTo": 5
+      },
+      "pathFills": {
+        "darkenLess": 1,
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 2,
+        "true": 1
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 3,
+      "adjustmentGuides": 3,
+      "calculatedGuides": 21,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "a2",
+        "maxAdj1",
+        "a1",
+        "q1",
+        "maxAdj3",
+        "a3",
+        "x1",
+        "dx2",
+        "x2",
+        "x5",
+        "dx3",
+        "x3",
+        "x4",
+        "x6",
+        "dy2",
+        "y2",
+        "y4",
+        "y3",
+        "y5",
+        "il",
+        "ir"
+      ],
+      "hasTextRectangle": true,
+      "name": "leftRightUpArrow",
+      "operatorUsage": {
+        "*/": 7,
+        "+-": 11,
+        "pin": 3,
+        "val": 3
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 16,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 3,
+      "adjustmentGuides": 3,
+      "calculatedGuides": 20,
+      "connectionSites": 8,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "a2",
+        "maxAdj1",
+        "a1",
+        "maxAdj3",
+        "a3",
+        "x1",
+        "dx2",
+        "x2",
+        "y2",
+        "dx4",
+        "x4",
+        "y4",
+        "dx3",
+        "x3",
+        "x5",
+        "y3",
+        "y5",
+        "il",
+        "cx1",
+        "cy1"
+      ],
+      "hasTextRectangle": true,
+      "name": "leftUpArrow",
+      "operatorUsage": {
+        "*/": 6,
+        "+-": 9,
+        "+/": 2,
+        "pin": 3,
+        "val": 3
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 11,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 14,
+      "connectionSites": 7,
+      "guideNames": [
+        "x1",
+        "x3",
+        "x4",
+        "x5",
+        "x8",
+        "x9",
+        "x11",
+        "y1",
+        "y2",
+        "y4",
+        "y6",
+        "y7",
+        "y10",
+        "y11"
+      ],
+      "hasTextRectangle": true,
+      "name": "lightningBolt",
+      "operatorUsage": {
+        "*/": 14
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 10,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 0,
+      "connectionSites": 2,
+      "guideNames": [],
+      "hasTextRectangle": false,
+      "name": "line",
+      "operatorUsage": {},
+      "pathCommands": {
+        "lnTo": 1,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 0,
+      "connectionSites": 2,
+      "guideNames": [],
+      "hasTextRectangle": false,
+      "name": "lineInv",
+      "operatorUsage": {},
+      "pathCommands": {
+        "lnTo": 1,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 3,
+      "adjustmentGuides": 3,
+      "calculatedGuides": 22,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "a1",
+        "ma1",
+        "ma3h",
+        "ma3w",
+        "maxAdj3",
+        "a3",
+        "m4a3",
+        "maxAdj2",
+        "a2",
+        "dy1",
+        "yg",
+        "rad",
+        "dx1",
+        "y3",
+        "y4",
+        "a",
+        "y2",
+        "y1",
+        "y5",
+        "x1",
+        "x3",
+        "x2"
+      ],
+      "hasTextRectangle": true,
+      "name": "mathDivide",
+      "operatorUsage": {
+        "*/": 6,
+        "+-": 11,
+        "+/": 1,
+        "min": 1,
+        "pin": 3,
+        "val": 3
+      },
+      "pathCommands": {
+        "arcTo": 2,
+        "close": 3,
+        "lnTo": 3,
+        "moveTo": 3
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 15,
+      "connectionSites": 6,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "a1",
+        "2a1",
+        "mAdj2",
+        "a2",
+        "dy1",
+        "dy2",
+        "dx1",
+        "y2",
+        "y3",
+        "y1",
+        "y4",
+        "x1",
+        "x2",
+        "yC1",
+        "yC2"
+      ],
+      "hasTextRectangle": true,
+      "name": "mathEqual",
+      "operatorUsage": {
+        "*/": 4,
+        "+-": 7,
+        "+/": 2,
+        "pin": 2,
+        "val": 2
+      },
+      "pathCommands": {
+        "close": 2,
+        "lnTo": 6,
+        "moveTo": 2
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 7,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "a1",
+        "dy1",
+        "dx1",
+        "y1",
+        "y2",
+        "x1",
+        "x2"
+      ],
+      "hasTextRectangle": true,
+      "name": "mathMinus",
+      "operatorUsage": {
+        "*/": 2,
+        "+-": 4,
+        "pin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 3,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 31,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "a1",
+        "th",
+        "a",
+        "sa",
+        "ca",
+        "ta",
+        "dl",
+        "rw",
+        "lM",
+        "xM",
+        "yM",
+        "dxAM",
+        "dyAM",
+        "xA",
+        "yA",
+        "xB",
+        "yB",
+        "xBC",
+        "yBC",
+        "yC",
+        "xD",
+        "xE",
+        "yFE",
+        "xFE",
+        "xF",
+        "xL",
+        "yG",
+        "yH",
+        "yI",
+        "xC2",
+        "yC3"
+      ],
+      "hasTextRectangle": true,
+      "name": "mathMultiply",
+      "operatorUsage": {
+        "*/": 8,
+        "+-": 17,
+        "at2": 1,
+        "cos": 1,
+        "mod": 1,
+        "pin": 1,
+        "sin": 1,
+        "tan": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 11,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 3,
+      "adjustmentGuides": 3,
+      "calculatedGuides": 55,
+      "connectionSites": 6,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "a1",
+        "crAng",
+        "2a1",
+        "maxAdj3",
+        "a3",
+        "dy1",
+        "dy2",
+        "dx1",
+        "x1",
+        "x8",
+        "y2",
+        "y3",
+        "y1",
+        "y4",
+        "cadj2",
+        "xadj2",
+        "len",
+        "bhw",
+        "bhw2",
+        "x7",
+        "dx67",
+        "x6",
+        "dx57",
+        "x5",
+        "dx47",
+        "x4",
+        "dx37",
+        "x3",
+        "dx27",
+        "x2",
+        "rx7",
+        "rx6",
+        "rx5",
+        "rx4",
+        "rx3",
+        "rx2",
+        "dx7",
+        "rxt",
+        "lxt",
+        "rx",
+        "lx",
+        "dy3",
+        "dy4",
+        "ry",
+        "ly",
+        "dlx",
+        "drx",
+        "dly",
+        "dry",
+        "xC1",
+        "xC2",
+        "yC1",
+        "yC2",
+        "yC3",
+        "yC4"
+      ],
+      "hasTextRectangle": true,
+      "name": "mathNotEqual",
+      "operatorUsage": {
+        "*/": 13,
+        "+-": 27,
+        "+/": 6,
+        "?:": 4,
+        "mod": 1,
+        "pin": 3,
+        "tan": 1,
+        "val": 3
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 19,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 12,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "a1",
+        "dx1",
+        "dy1",
+        "dx2",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "y1",
+        "y2",
+        "y3",
+        "y4"
+      ],
+      "hasTextRectangle": true,
+      "name": "mathPlus",
+      "operatorUsage": {
+        "*/": 3,
+        "+-": 8,
+        "pin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 11,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 34,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj",
+        "a",
+        "g0",
+        "g0w",
+        "g1",
+        "g2",
+        "g3",
+        "g4",
+        "g5",
+        "g6",
+        "g6w",
+        "g7",
+        "g8",
+        "dy1",
+        "g10h",
+        "g11h",
+        "g12",
+        "g12w",
+        "g13",
+        "q1",
+        "q2",
+        "q3",
+        "q4",
+        "dy4",
+        "g15h",
+        "g16h",
+        "g17w",
+        "g18w",
+        "dx2p",
+        "dx2",
+        "dy2",
+        "stAng1",
+        "enAngp1",
+        "enAng1",
+        "swAng1"
+      ],
+      "hasTextRectangle": true,
+      "name": "moon",
+      "operatorUsage": {
+        "*/": 16,
+        "+-": 14,
+        "at2": 2,
+        "pin": 1,
+        "sqrt": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "arcTo": 2,
+        "close": 1,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 13,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "maxAdj",
+        "a1",
+        "a2",
+        "x1",
+        "x2",
+        "dx3",
+        "x3",
+        "x4",
+        "il",
+        "adjm",
+        "it",
+        "irt",
+        "ir"
+      ],
+      "hasTextRectangle": true,
+      "name": "nonIsoscelesTrapezoid",
+      "operatorUsage": {
+        "*/": 7,
+        "+-": 2,
+        "+/": 1,
+        "max": 1,
+        "pin": 2,
+        "val": 2
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 3,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 32,
+      "connectionSites": 8,
+      "guideNames": [
+        "adj",
+        "a",
+        "dr",
+        "iwd2",
+        "ihd2",
+        "ang",
+        "ct",
+        "st",
+        "m",
+        "n",
+        "drd2",
+        "dang",
+        "2dang",
+        "swAng",
+        "t3",
+        "stAng1",
+        "stAng2",
+        "ct1",
+        "st1",
+        "m1",
+        "n1",
+        "dx1",
+        "dy1",
+        "x1",
+        "y1",
+        "x2",
+        "y2",
+        "idx",
+        "idy",
+        "il",
+        "ir",
+        "it",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "noSmoking",
+      "operatorUsage": {
+        "*/": 5,
+        "+-": 13,
+        "at2": 3,
+        "cos": 4,
+        "mod": 2,
+        "pin": 1,
+        "sin": 4,
+        "val": 1
+      },
+      "pathCommands": {
+        "arcTo": 6,
+        "close": 3,
+        "moveTo": 3
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 10,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "maxAdj2",
+        "a1",
+        "a2",
+        "dx2",
+        "x2",
+        "dy1",
+        "y1",
+        "y2",
+        "x1",
+        "x3"
+      ],
+      "hasTextRectangle": true,
+      "name": "notchedRightArrow",
+      "operatorUsage": {
+        "*/": 4,
+        "+-": 4,
+        "pin": 2,
+        "val": 2
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 7,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 7,
+      "connectionSites": 8,
+      "guideNames": [
+        "adj",
+        "a",
+        "x1",
+        "x2",
+        "y2",
+        "il",
+        "ir",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "octagon",
+      "operatorUsage": {
+        "*/": 2,
+        "+-": 4,
+        "pin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 7,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 18,
+      "connectionSites": 6,
+      "guideNames": [
+        "adj",
+        "maxAdj",
+        "a",
+        "x1",
+        "x2",
+        "x6",
+        "x5",
+        "x3",
+        "x4",
+        "il",
+        "q1",
+        "q2",
+        "il",
+        "it",
+        "ir",
+        "ib",
+        "q3",
+        "y1",
+        "y2"
+      ],
+      "hasTextRectangle": true,
+      "name": "parallelogram",
+      "operatorUsage": {
+        "*/": 9,
+        "+-": 6,
+        "+/": 1,
+        "pin": 2,
+        "val": 1
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 3,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 14,
+      "connectionSites": 6,
+      "guideNames": [
+        "hf",
+        "vf",
+        "swd2",
+        "shd2",
+        "svc",
+        "dx1",
+        "dx2",
+        "dy1",
+        "dy2",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "y1",
+        "y2",
+        "it"
+      ],
+      "hasTextRectangle": true,
+      "name": "pentagon",
+      "operatorUsage": {
+        "*/": 4,
+        "+-": 6,
+        "cos": 2,
+        "sin": 2,
+        "val": 2
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 4,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 23,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "stAng",
+        "enAng",
+        "sw1",
+        "sw2",
+        "swAng",
+        "wt1",
+        "ht1",
+        "dx1",
+        "dy1",
+        "x1",
+        "y1",
+        "wt2",
+        "ht2",
+        "dx2",
+        "dy2",
+        "x2",
+        "y2",
+        "idx",
+        "idy",
+        "il",
+        "ir",
+        "it",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "pie",
+      "operatorUsage": {
+        "+-": 10,
+        "?:": 1,
+        "cat2": 2,
+        "cos": 3,
+        "pin": 2,
+        "sat2": 2,
+        "sin": 3,
+        "val": 2
+      },
+      "pathCommands": {
+        "arcTo": 1,
+        "close": 1,
+        "lnTo": 1,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 4,
+      "connectionSites": 2,
+      "guideNames": [
+        "g1",
+        "g2",
+        "x1",
+        "y1"
+      ],
+      "hasTextRectangle": true,
+      "name": "pieWedge",
+      "operatorUsage": {
+        "+-": 2,
+        "cos": 1,
+        "sin": 1
+      },
+      "pathCommands": {
+        "arcTo": 1,
+        "close": 1,
+        "lnTo": 1,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 7,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj",
+        "a",
+        "x1",
+        "x2",
+        "y2",
+        "il",
+        "ir",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "plaque",
+      "operatorUsage": {
+        "*/": 2,
+        "+-": 4,
+        "pin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "arcTo": 4,
+        "close": 1,
+        "lnTo": 3,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 4,
+      "connectionSites": 12,
+      "guideNames": [
+        "md",
+        "dx",
+        "y1",
+        "x1"
+      ],
+      "hasTextRectangle": true,
+      "name": "plaqueTabs",
+      "operatorUsage": {
+        "*/": 1,
+        "+-": 2,
+        "mod": 1
+      },
+      "pathCommands": {
+        "arcTo": 4,
+        "close": 4,
+        "lnTo": 4,
+        "moveTo": 4
+      },
+      "pathFills": {
+        "norm": 4
+      },
+      "pathStrokes": {
+        "true": 4
+      },
+      "paths": 4
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 9,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj",
+        "a",
+        "x1",
+        "x2",
+        "y2",
+        "d",
+        "il",
+        "ir",
+        "it",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "plus",
+      "operatorUsage": {
+        "*/": 1,
+        "+-": 3,
+        "?:": 4,
+        "pin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 11,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 3,
+      "adjustmentGuides": 3,
+      "calculatedGuides": 21,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "a2",
+        "maxAdj1",
+        "a1",
+        "q1",
+        "maxAdj3",
+        "a3",
+        "x1",
+        "dx2",
+        "x2",
+        "x5",
+        "dx3",
+        "x3",
+        "x4",
+        "x6",
+        "y2",
+        "y5",
+        "y3",
+        "y4",
+        "y6",
+        "il",
+        "ir"
+      ],
+      "hasTextRectangle": true,
+      "name": "quadArrow",
+      "operatorUsage": {
+        "*/": 6,
+        "+-": 12,
+        "pin": 3,
+        "val": 3
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 23,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 4,
+      "adjustmentGuides": 4,
+      "calculatedGuides": 27,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "adj4",
+        "a2",
+        "maxAdj1",
+        "a1",
+        "maxAdj3",
+        "a3",
+        "q2",
+        "maxAdj4",
+        "a4",
+        "dx2",
+        "dx3",
+        "ah",
+        "dx1",
+        "dy1",
+        "x8",
+        "x2",
+        "x7",
+        "x3",
+        "x6",
+        "x4",
+        "x5",
+        "y8",
+        "y2",
+        "y7",
+        "y3",
+        "y6",
+        "y4",
+        "y5"
+      ],
+      "hasTextRectangle": true,
+      "name": "quadArrowCallout",
+      "operatorUsage": {
+        "*/": 7,
+        "+-": 16,
+        "pin": 4,
+        "val": 4
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 31,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 0,
+      "connectionSites": 4,
+      "guideNames": [],
+      "hasTextRectangle": true,
+      "name": "rect",
+      "operatorUsage": {},
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 3,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 19,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "a1",
+        "a2",
+        "x10",
+        "dx2",
+        "x2",
+        "x9",
+        "x3",
+        "x8",
+        "x5",
+        "x6",
+        "x4",
+        "x7",
+        "y1",
+        "y2",
+        "y4",
+        "y3",
+        "hR",
+        "y5",
+        "y6"
+      ],
+      "hasTextRectangle": true,
+      "name": "ribbon",
+      "operatorUsage": {
+        "*/": 5,
+        "+-": 12,
+        "pin": 2,
+        "val": 2
+      },
+      "pathCommands": {
+        "arcTo": 16,
+        "close": 4,
+        "lnTo": 34,
+        "moveTo": 8
+      },
+      "pathFills": {
+        "darkenLess": 1,
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 2,
+        "true": 1
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 21,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "a1",
+        "a2",
+        "x10",
+        "dx2",
+        "x2",
+        "x9",
+        "x3",
+        "x8",
+        "x5",
+        "x6",
+        "x4",
+        "x7",
+        "dy1",
+        "y1",
+        "dy2",
+        "y2",
+        "y4",
+        "y3",
+        "hR",
+        "y6",
+        "y7"
+      ],
+      "hasTextRectangle": true,
+      "name": "ribbon2",
+      "operatorUsage": {
+        "*/": 4,
+        "+-": 14,
+        "+/": 1,
+        "pin": 2,
+        "val": 2
+      },
+      "pathCommands": {
+        "arcTo": 16,
+        "close": 4,
+        "lnTo": 35,
+        "moveTo": 8
+      },
+      "pathFills": {
+        "darkenLess": 1,
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 2,
+        "true": 1
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 10,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "maxAdj2",
+        "a1",
+        "a2",
+        "dx1",
+        "x1",
+        "dy1",
+        "y1",
+        "y2",
+        "dx2",
+        "x2"
+      ],
+      "hasTextRectangle": true,
+      "name": "rightArrow",
+      "operatorUsage": {
+        "*/": 4,
+        "+-": 4,
+        "pin": 2,
+        "val": 2
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 6,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 4,
+      "adjustmentGuides": 4,
+      "calculatedGuides": 19,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "adj4",
+        "maxAdj2",
+        "a2",
+        "maxAdj1",
+        "a1",
+        "maxAdj3",
+        "a3",
+        "q2",
+        "maxAdj4",
+        "a4",
+        "dy1",
+        "dy2",
+        "y1",
+        "y2",
+        "y3",
+        "y4",
+        "dx3",
+        "x3",
+        "x2",
+        "x1"
+      ],
+      "hasTextRectangle": true,
+      "name": "rightArrowCallout",
+      "operatorUsage": {
+        "*/": 9,
+        "+-": 6,
+        "pin": 4,
+        "val": 4
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 10,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 15,
+      "connectionSites": 3,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "a2",
+        "q1",
+        "q2",
+        "q3",
+        "maxAdj1",
+        "a1",
+        "y1",
+        "y3",
+        "y2",
+        "y4",
+        "dx1",
+        "dy1",
+        "ir",
+        "it",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "rightBrace",
+      "operatorUsage": {
+        "*/": 4,
+        "+-": 6,
+        "cos": 1,
+        "min": 1,
+        "pin": 2,
+        "sin": 1,
+        "val": 2
+      },
+      "pathCommands": {
+        "arcTo": 8,
+        "close": 1,
+        "lnTo": 4,
+        "moveTo": 2
+      },
+      "pathFills": {
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 1,
+        "true": 1
+      },
+      "paths": 2
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 9,
+      "connectionSites": 3,
+      "guideNames": [
+        "adj",
+        "maxAdj",
+        "a",
+        "y1",
+        "y2",
+        "dx1",
+        "dy1",
+        "ir",
+        "it",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "rightBracket",
+      "operatorUsage": {
+        "*/": 2,
+        "+-": 4,
+        "cos": 1,
+        "pin": 1,
+        "sin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "arcTo": 4,
+        "close": 1,
+        "lnTo": 2,
+        "moveTo": 2
+      },
+      "pathFills": {
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 1,
+        "true": 1
+      },
+      "paths": 2
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 5,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj",
+        "a",
+        "dx1",
+        "x1",
+        "idx",
+        "ir"
+      ],
+      "hasTextRectangle": true,
+      "name": "round1Rect",
+      "operatorUsage": {
+        "*/": 2,
+        "+-": 2,
+        "pin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "arcTo": 1,
+        "close": 1,
+        "lnTo": 3,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 13,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "a1",
+        "a2",
+        "x1",
+        "y1",
+        "a",
+        "x2",
+        "y2",
+        "dx1",
+        "dx2",
+        "d",
+        "dx",
+        "ir",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "round2DiagRect",
+      "operatorUsage": {
+        "*/": 4,
+        "+-": 6,
+        "?:": 1,
+        "pin": 2,
+        "val": 2
+      },
+      "pathCommands": {
+        "arcTo": 4,
+        "close": 1,
+        "lnTo": 4,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 13,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "a1",
+        "a2",
+        "tx1",
+        "tx2",
+        "bx1",
+        "bx2",
+        "by1",
+        "d",
+        "tdx",
+        "bdx",
+        "il",
+        "ir",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "round2SameRect",
+      "operatorUsage": {
+        "*/": 4,
+        "+-": 6,
+        "?:": 1,
+        "pin": 2,
+        "val": 2
+      },
+      "pathCommands": {
+        "arcTo": 4,
+        "close": 1,
+        "lnTo": 4,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 7,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj",
+        "a",
+        "x1",
+        "x2",
+        "y2",
+        "il",
+        "ir",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "roundRect",
+      "operatorUsage": {
+        "*/": 2,
+        "+-": 4,
+        "pin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "arcTo": 4,
+        "close": 1,
+        "lnTo": 3,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 3,
+      "connectionSites": 6,
+      "guideNames": [
+        "it",
+        "ir",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "rtTriangle",
+      "operatorUsage": {
+        "*/": 3
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 2,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 20,
+      "connectionSites": 8,
+      "guideNames": [
+        "adj",
+        "a",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "y1",
+        "y3",
+        "dy2",
+        "y2",
+        "y4",
+        "dy3",
+        "y5",
+        "idx",
+        "idy",
+        "il",
+        "ir",
+        "it",
+        "ib",
+        "wR",
+        "hR"
+      ],
+      "hasTextRectangle": true,
+      "name": "smileyFace",
+      "operatorUsage": {
+        "*/": 10,
+        "+-": 7,
+        "cos": 1,
+        "pin": 1,
+        "sin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "arcTo": 4,
+        "close": 2,
+        "moveTo": 5,
+        "quadBezTo": 1
+      },
+      "pathFills": {
+        "darkenLess": 1,
+        "none": 2,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 1,
+        "true": 3
+      },
+      "paths": 4
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 5,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj",
+        "a",
+        "dx1",
+        "x1",
+        "it",
+        "ir"
+      ],
+      "hasTextRectangle": true,
+      "name": "snip1Rect",
+      "operatorUsage": {
+        "*/": 2,
+        "+-": 1,
+        "+/": 1,
+        "pin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 4,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 13,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "a1",
+        "a2",
+        "lx1",
+        "lx2",
+        "ly1",
+        "rx1",
+        "rx2",
+        "ry1",
+        "d",
+        "dx",
+        "il",
+        "ir",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "snip2DiagRect",
+      "operatorUsage": {
+        "*/": 3,
+        "+-": 7,
+        "?:": 1,
+        "pin": 2,
+        "val": 2
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 7,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 13,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "a1",
+        "a2",
+        "tx1",
+        "tx2",
+        "bx1",
+        "bx2",
+        "by1",
+        "d",
+        "dx",
+        "il",
+        "ir",
+        "it",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "snip2SameRect",
+      "operatorUsage": {
+        "*/": 4,
+        "+-": 5,
+        "+/": 1,
+        "?:": 1,
+        "pin": 2,
+        "val": 2
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 7,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 7,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "a1",
+        "a2",
+        "x1",
+        "dx2",
+        "x2",
+        "il",
+        "ir"
+      ],
+      "hasTextRectangle": true,
+      "name": "snipRoundRect",
+      "operatorUsage": {
+        "*/": 3,
+        "+-": 1,
+        "+/": 1,
+        "pin": 2,
+        "val": 2
+      },
+      "pathCommands": {
+        "arcTo": 1,
+        "close": 1,
+        "lnTo": 5,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 4,
+      "connectionSites": 16,
+      "guideNames": [
+        "md",
+        "dx",
+        "y1",
+        "x1"
+      ],
+      "hasTextRectangle": true,
+      "name": "squareTabs",
+      "operatorUsage": {
+        "*/": 1,
+        "+-": 2,
+        "mod": 1
+      },
+      "pathCommands": {
+        "close": 4,
+        "lnTo": 12,
+        "moveTo": 4
+      },
+      "pathFills": {
+        "norm": 4
+      },
+      "pathStrokes": {
+        "true": 4
+      },
+      "paths": 4
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 31,
+      "connectionSites": 10,
+      "guideNames": [
+        "adj",
+        "hf",
+        "a",
+        "swd2",
+        "dx1",
+        "dx2",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "dy1",
+        "dy2",
+        "y1",
+        "y2",
+        "y3",
+        "y4",
+        "iwd2",
+        "ihd2",
+        "sdx1",
+        "sdx2",
+        "sdy1",
+        "sdy2",
+        "sx1",
+        "sx2",
+        "sx3",
+        "sx4",
+        "sx5",
+        "sx6",
+        "sy1",
+        "sy2",
+        "sy3",
+        "sy4",
+        "yAdj"
+      ],
+      "hasTextRectangle": true,
+      "name": "star10",
+      "operatorUsage": {
+        "*/": 11,
+        "+-": 19,
+        "pin": 1,
+        "val": 2
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 19,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 30,
+      "connectionSites": 12,
+      "guideNames": [
+        "adj",
+        "a",
+        "dx1",
+        "dy1",
+        "x1",
+        "x3",
+        "x4",
+        "y1",
+        "y3",
+        "y4",
+        "iwd2",
+        "ihd2",
+        "sdx1",
+        "sdx2",
+        "sdx3",
+        "sdy1",
+        "sdy2",
+        "sdy3",
+        "sx1",
+        "sx2",
+        "sx3",
+        "sx4",
+        "sx5",
+        "sx6",
+        "sy1",
+        "sy2",
+        "sy3",
+        "sy4",
+        "sy5",
+        "sy6",
+        "yAdj"
+      ],
+      "hasTextRectangle": true,
+      "name": "star12",
+      "operatorUsage": {
+        "*/": 4,
+        "+-": 17,
+        "cos": 4,
+        "pin": 1,
+        "sin": 4,
+        "val": 1
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 23,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 52,
+      "connectionSites": 16,
+      "guideNames": [
+        "adj",
+        "a",
+        "dx1",
+        "dx2",
+        "dx3",
+        "dy1",
+        "dy2",
+        "dy3",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "x5",
+        "x6",
+        "y1",
+        "y2",
+        "y3",
+        "y4",
+        "y5",
+        "y6",
+        "iwd2",
+        "ihd2",
+        "sdx1",
+        "sdx2",
+        "sdx3",
+        "sdx4",
+        "sdy1",
+        "sdy2",
+        "sdy3",
+        "sdy4",
+        "sx1",
+        "sx2",
+        "sx3",
+        "sx4",
+        "sx5",
+        "sx6",
+        "sx7",
+        "sx8",
+        "sy1",
+        "sy2",
+        "sy3",
+        "sy4",
+        "sy5",
+        "sy6",
+        "sy7",
+        "sy8",
+        "idx",
+        "idy",
+        "il",
+        "it",
+        "ir",
+        "ib",
+        "yAdj"
+      ],
+      "hasTextRectangle": true,
+      "name": "star16",
+      "operatorUsage": {
+        "*/": 16,
+        "+-": 33,
+        "cos": 1,
+        "pin": 1,
+        "sin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 31,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 76,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj",
+        "a",
+        "dx1",
+        "dx2",
+        "dx3",
+        "dx4",
+        "dx5",
+        "dy1",
+        "dy2",
+        "dy3",
+        "dy4",
+        "dy5",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "x5",
+        "x6",
+        "x7",
+        "x8",
+        "x9",
+        "x10",
+        "y1",
+        "y2",
+        "y3",
+        "y4",
+        "y5",
+        "y6",
+        "y7",
+        "y8",
+        "y9",
+        "y10",
+        "iwd2",
+        "ihd2",
+        "sdx1",
+        "sdx2",
+        "sdx3",
+        "sdx4",
+        "sdx5",
+        "sdx6",
+        "sdy1",
+        "sdy2",
+        "sdy3",
+        "sdy4",
+        "sdy5",
+        "sdy6",
+        "sx1",
+        "sx2",
+        "sx3",
+        "sx4",
+        "sx5",
+        "sx6",
+        "sx7",
+        "sx8",
+        "sx9",
+        "sx10",
+        "sx11",
+        "sx12",
+        "sy1",
+        "sy2",
+        "sy3",
+        "sy4",
+        "sy5",
+        "sy6",
+        "sy7",
+        "sy8",
+        "sy9",
+        "sy10",
+        "sy11",
+        "sy12",
+        "idx",
+        "idy",
+        "il",
+        "it",
+        "ir",
+        "ib",
+        "yAdj"
+      ],
+      "hasTextRectangle": true,
+      "name": "star24",
+      "operatorUsage": {
+        "*/": 14,
+        "+-": 49,
+        "cos": 5,
+        "pin": 1,
+        "sin": 5,
+        "val": 3
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 47,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 100,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj",
+        "a",
+        "dx1",
+        "dx2",
+        "dx3",
+        "dx4",
+        "dx5",
+        "dx6",
+        "dx7",
+        "dy1",
+        "dy2",
+        "dy3",
+        "dy4",
+        "dy5",
+        "dy6",
+        "dy7",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "x5",
+        "x6",
+        "x7",
+        "x8",
+        "x9",
+        "x10",
+        "x11",
+        "x12",
+        "x13",
+        "x14",
+        "y1",
+        "y2",
+        "y3",
+        "y4",
+        "y5",
+        "y6",
+        "y7",
+        "y8",
+        "y9",
+        "y10",
+        "y11",
+        "y12",
+        "y13",
+        "y14",
+        "iwd2",
+        "ihd2",
+        "sdx1",
+        "sdx2",
+        "sdx3",
+        "sdx4",
+        "sdx5",
+        "sdx6",
+        "sdx7",
+        "sdx8",
+        "sdy1",
+        "sdy2",
+        "sdy3",
+        "sdy4",
+        "sdy5",
+        "sdy6",
+        "sdy7",
+        "sdy8",
+        "sx1",
+        "sx2",
+        "sx3",
+        "sx4",
+        "sx5",
+        "sx6",
+        "sx7",
+        "sx8",
+        "sx9",
+        "sx10",
+        "sx11",
+        "sx12",
+        "sx13",
+        "sx14",
+        "sx15",
+        "sx16",
+        "sy1",
+        "sy2",
+        "sy3",
+        "sy4",
+        "sy5",
+        "sy6",
+        "sy7",
+        "sy8",
+        "sy9",
+        "sy10",
+        "sy11",
+        "sy12",
+        "sy13",
+        "sy14",
+        "sy15",
+        "sy16",
+        "idx",
+        "idy",
+        "il",
+        "it",
+        "ir",
+        "ib",
+        "yAdj"
+      ],
+      "hasTextRectangle": true,
+      "name": "star32",
+      "operatorUsage": {
+        "*/": 30,
+        "+-": 65,
+        "cos": 2,
+        "pin": 1,
+        "sin": 2,
+        "val": 1
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 63,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 10,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj",
+        "a",
+        "iwd2",
+        "ihd2",
+        "sdx",
+        "sdy",
+        "sx1",
+        "sx2",
+        "sy1",
+        "sy2",
+        "yAdj"
+      ],
+      "hasTextRectangle": true,
+      "name": "star4",
+      "operatorUsage": {
+        "*/": 2,
+        "+-": 5,
+        "cos": 1,
+        "pin": 1,
+        "sin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 7,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 3,
+      "calculatedGuides": 28,
+      "connectionSites": 5,
+      "guideNames": [
+        "adj",
+        "hf",
+        "vf",
+        "a",
+        "swd2",
+        "shd2",
+        "svc",
+        "dx1",
+        "dx2",
+        "dy1",
+        "dy2",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "y1",
+        "y2",
+        "iwd2",
+        "ihd2",
+        "sdx1",
+        "sdx2",
+        "sdy1",
+        "sdy2",
+        "sx1",
+        "sx2",
+        "sx3",
+        "sx4",
+        "sy1",
+        "sy2",
+        "sy3",
+        "yAdj"
+      ],
+      "hasTextRectangle": true,
+      "name": "star5",
+      "operatorUsage": {
+        "*/": 5,
+        "+-": 14,
+        "cos": 4,
+        "pin": 1,
+        "sin": 4,
+        "val": 3
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 9,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 17,
+      "connectionSites": 6,
+      "guideNames": [
+        "adj",
+        "hf",
+        "a",
+        "swd2",
+        "dx1",
+        "x1",
+        "x2",
+        "y2",
+        "iwd2",
+        "ihd2",
+        "sdx2",
+        "sx1",
+        "sx2",
+        "sx3",
+        "sx4",
+        "sdy1",
+        "sy1",
+        "sy2",
+        "yAdj"
+      ],
+      "hasTextRectangle": true,
+      "name": "star6",
+      "operatorUsage": {
+        "*/": 4,
+        "+-": 10,
+        "cos": 1,
+        "pin": 1,
+        "sin": 1,
+        "val": 2
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 11,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 3,
+      "calculatedGuides": 38,
+      "connectionSites": 7,
+      "guideNames": [
+        "adj",
+        "hf",
+        "vf",
+        "a",
+        "swd2",
+        "shd2",
+        "svc",
+        "dx1",
+        "dx2",
+        "dx3",
+        "dy1",
+        "dy2",
+        "dy3",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "x5",
+        "x6",
+        "y1",
+        "y2",
+        "y3",
+        "iwd2",
+        "ihd2",
+        "sdx1",
+        "sdx2",
+        "sdx3",
+        "sx1",
+        "sx2",
+        "sx3",
+        "sx4",
+        "sx5",
+        "sx6",
+        "sdy1",
+        "sdy2",
+        "sdy3",
+        "sy1",
+        "sy2",
+        "sy3",
+        "sy4",
+        "yAdj"
+      ],
+      "hasTextRectangle": true,
+      "name": "star7",
+      "operatorUsage": {
+        "*/": 17,
+        "+-": 20,
+        "pin": 1,
+        "val": 3
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 13,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 22,
+      "connectionSites": 8,
+      "guideNames": [
+        "adj",
+        "a",
+        "dx1",
+        "x1",
+        "x2",
+        "dy1",
+        "y1",
+        "y2",
+        "iwd2",
+        "ihd2",
+        "sdx1",
+        "sdx2",
+        "sdy1",
+        "sdy2",
+        "sx1",
+        "sx2",
+        "sx3",
+        "sx4",
+        "sy1",
+        "sy2",
+        "sy3",
+        "sy4",
+        "yAdj"
+      ],
+      "hasTextRectangle": true,
+      "name": "star8",
+      "operatorUsage": {
+        "*/": 6,
+        "+-": 13,
+        "cos": 1,
+        "pin": 1,
+        "sin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 15,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 0,
+      "adjustmentGuides": 0,
+      "calculatedGuides": 0,
+      "connectionSites": 0,
+      "guideNames": [],
+      "hasTextRectangle": true,
+      "name": "straightConnector1",
+      "operatorUsage": {},
+      "pathCommands": {
+        "lnTo": 1,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "none": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 11,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "maxAdj2",
+        "a1",
+        "a2",
+        "x4",
+        "dx5",
+        "x5",
+        "dy1",
+        "y1",
+        "y2",
+        "dx6",
+        "x6"
+      ],
+      "hasTextRectangle": true,
+      "name": "stripedRightArrow",
+      "operatorUsage": {
+        "*/": 5,
+        "+-": 4,
+        "pin": 2,
+        "val": 2
+      },
+      "pathCommands": {
+        "close": 3,
+        "lnTo": 12,
+        "moveTo": 3
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 47,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj",
+        "a",
+        "g0",
+        "g1",
+        "g2",
+        "g3",
+        "g4",
+        "g5",
+        "g6",
+        "g7",
+        "g8",
+        "g9",
+        "g10",
+        "g11",
+        "g12",
+        "g13",
+        "g14",
+        "g15",
+        "g16",
+        "g17",
+        "g18",
+        "ox1",
+        "oy1",
+        "ox2",
+        "oy2",
+        "x8",
+        "x9",
+        "x10",
+        "x12",
+        "x13",
+        "x14",
+        "x15",
+        "x16",
+        "x17",
+        "x18",
+        "x19",
+        "wR",
+        "hR",
+        "y8",
+        "y9",
+        "y10",
+        "y12",
+        "y13",
+        "y14",
+        "y15",
+        "y16",
+        "y17",
+        "y18"
+      ],
+      "hasTextRectangle": true,
+      "name": "sun",
+      "operatorUsage": {
+        "*/": 32,
+        "+-": 14,
+        "pin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "arcTo": 1,
+        "close": 9,
+        "lnTo": 16,
+        "moveTo": 9
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 25,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "a1",
+        "maxAdj2",
+        "a2",
+        "ad1",
+        "ad2",
+        "xB",
+        "yB",
+        "alfa",
+        "dx0",
+        "xC",
+        "dx1",
+        "yF",
+        "xF",
+        "xE",
+        "yE",
+        "dy2",
+        "dy22",
+        "dy3",
+        "yD",
+        "dy4",
+        "yP1",
+        "xP1",
+        "dy5",
+        "yP2",
+        "xP2"
+      ],
+      "hasTextRectangle": true,
+      "name": "swooshArrow",
+      "operatorUsage": {
+        "*/": 8,
+        "+-": 11,
+        "pin": 2,
+        "tan": 2,
+        "val": 4
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 4,
+        "moveTo": 1,
+        "quadBezTo": 2
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 18,
+      "connectionSites": 8,
+      "guideNames": [
+        "adj",
+        "a",
+        "r2",
+        "tw",
+        "th",
+        "sw",
+        "sh",
+        "dx1",
+        "dy1",
+        "x1",
+        "y1",
+        "x2",
+        "y2",
+        "idx",
+        "idy",
+        "il",
+        "ir",
+        "it",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "teardrop",
+      "operatorUsage": {
+        "*/": 4,
+        "+-": 6,
+        "+/": 2,
+        "cos": 2,
+        "pin": 1,
+        "sin": 2,
+        "sqrt": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "arcTo": 3,
+        "close": 1,
+        "moveTo": 1,
+        "quadBezTo": 2
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 9,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj",
+        "maxAdj",
+        "a",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "il",
+        "it",
+        "ir"
+      ],
+      "hasTextRectangle": true,
+      "name": "trapezoid",
+      "operatorUsage": {
+        "*/": 5,
+        "+-": 3,
+        "pin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 3,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 4,
+      "connectionSites": 6,
+      "guideNames": [
+        "adj",
+        "a",
+        "x1",
+        "x2",
+        "x3"
+      ],
+      "hasTextRectangle": true,
+      "name": "triangle",
+      "operatorUsage": {
+        "*/": 2,
+        "+-": 1,
+        "pin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 2,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 4,
+      "adjustmentGuides": 4,
+      "calculatedGuides": 19,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "adj4",
+        "maxAdj2",
+        "a2",
+        "maxAdj1",
+        "a1",
+        "maxAdj3",
+        "a3",
+        "q2",
+        "maxAdj4",
+        "a4",
+        "dx1",
+        "dx2",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "y1",
+        "dy2",
+        "y2",
+        "y3"
+      ],
+      "hasTextRectangle": true,
+      "name": "upArrowCallout",
+      "operatorUsage": {
+        "*/": 8,
+        "+-": 6,
+        "+/": 1,
+        "pin": 4,
+        "val": 4
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 10,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 11,
+      "connectionSites": 8,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "maxAdj2",
+        "a1",
+        "a2",
+        "y2",
+        "y3",
+        "dx1",
+        "x1",
+        "x2",
+        "dy1",
+        "y1",
+        "y4"
+      ],
+      "hasTextRectangle": true,
+      "name": "upDownArrow",
+      "operatorUsage": {
+        "*/": 4,
+        "+-": 5,
+        "pin": 2,
+        "val": 2
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 9,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 4,
+      "adjustmentGuides": 4,
+      "calculatedGuides": 20,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "adj4",
+        "maxAdj2",
+        "a2",
+        "maxAdj1",
+        "a1",
+        "maxAdj3",
+        "a3",
+        "q2",
+        "maxAdj4",
+        "a4",
+        "dx1",
+        "dx2",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "y1",
+        "y4",
+        "dy2",
+        "y2",
+        "y3"
+      ],
+      "hasTextRectangle": true,
+      "name": "upDownArrowCallout",
+      "operatorUsage": {
+        "*/": 8,
+        "+-": 8,
+        "pin": 4,
+        "val": 4
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 17,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 5,
+      "adjustmentGuides": 5,
+      "calculatedGuides": 32,
+      "connectionSites": 5,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "adj4",
+        "adj5",
+        "a2",
+        "maxAdj1",
+        "a1",
+        "q2",
+        "q3",
+        "maxAdj3",
+        "a3",
+        "q1",
+        "minAdj5",
+        "a5",
+        "th",
+        "aw2",
+        "th2",
+        "dh2",
+        "y5",
+        "ah",
+        "y4",
+        "x9",
+        "bw",
+        "bs",
+        "maxAdj4",
+        "a4",
+        "bd",
+        "bd3",
+        "bd2",
+        "x3",
+        "x8",
+        "x6",
+        "x7",
+        "x4",
+        "x5",
+        "cx"
+      ],
+      "hasTextRectangle": true,
+      "name": "uturnArrow",
+      "operatorUsage": {
+        "*/": 12,
+        "+-": 12,
+        "+/": 1,
+        "max": 1,
+        "min": 1,
+        "pin": 5,
+        "val": 5
+      },
+      "pathCommands": {
+        "arcTo": 4,
+        "close": 1,
+        "lnTo": 10,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 1,
+      "calculatedGuides": 11,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj",
+        "a",
+        "ch",
+        "ch2",
+        "ch4",
+        "x3",
+        "x4",
+        "x6",
+        "x7",
+        "x5",
+        "y3",
+        "y4"
+      ],
+      "hasTextRectangle": true,
+      "name": "verticalScroll",
+      "operatorUsage": {
+        "*/": 3,
+        "+-": 7,
+        "pin": 1,
+        "val": 1
+      },
+      "pathCommands": {
+        "arcTo": 19,
+        "close": 5,
+        "lnTo": 15,
+        "moveTo": 9
+      },
+      "pathFills": {
+        "darkenLess": 1,
+        "none": 1,
+        "norm": 1
+      },
+      "pathStrokes": {
+        "false": 2,
+        "true": 1
+      },
+      "paths": 3
+    },
+    {
+      "adjustHandles": 2,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 30,
+      "connectionSites": 4,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "a1",
+        "a2",
+        "y1",
+        "dy2",
+        "y2",
+        "y3",
+        "y4",
+        "y5",
+        "y6",
+        "dx1",
+        "of2",
+        "x1",
+        "dx2",
+        "x2",
+        "dx5",
+        "x5",
+        "dx3",
+        "x3",
+        "x4",
+        "x6",
+        "x10",
+        "x7",
+        "x8",
+        "x9",
+        "xAdj",
+        "xAdj2",
+        "il",
+        "ir",
+        "it",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "wave",
+      "operatorUsage": {
+        "*/": 5,
+        "+-": 15,
+        "+/": 3,
+        "?:": 2,
+        "abs": 1,
+        "max": 1,
+        "min": 1,
+        "pin": 2,
+        "val": 2
+      },
+      "pathCommands": {
+        "close": 1,
+        "cubicBezTo": 2,
+        "lnTo": 1,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 28,
+      "connectionSites": 8,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "dxPos",
+        "dyPos",
+        "xPos",
+        "yPos",
+        "sdx",
+        "sdy",
+        "pang",
+        "stAng",
+        "enAng",
+        "dx1",
+        "dy1",
+        "x1",
+        "y1",
+        "dx2",
+        "dy2",
+        "x2",
+        "y2",
+        "stAng1",
+        "enAng1",
+        "swAng1",
+        "swAng2",
+        "swAng",
+        "idx",
+        "idy",
+        "il",
+        "ir",
+        "it",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "wedgeEllipseCallout",
+      "operatorUsage": {
+        "*/": 4,
+        "+-": 14,
+        "?:": 1,
+        "at2": 3,
+        "cos": 3,
+        "sin": 3,
+        "val": 2
+      },
+      "pathCommands": {
+        "arcTo": 1,
+        "close": 1,
+        "lnTo": 1,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 2,
+      "calculatedGuides": 34,
+      "connectionSites": 5,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "dxPos",
+        "dyPos",
+        "xPos",
+        "yPos",
+        "dx",
+        "dy",
+        "dq",
+        "ady",
+        "adq",
+        "dz",
+        "xg1",
+        "xg2",
+        "x1",
+        "x2",
+        "yg1",
+        "yg2",
+        "y1",
+        "y2",
+        "t1",
+        "xl",
+        "t2",
+        "xt",
+        "t3",
+        "xr",
+        "t4",
+        "xb",
+        "t5",
+        "yl",
+        "t6",
+        "yt",
+        "t7",
+        "yr",
+        "t8",
+        "yb"
+      ],
+      "hasTextRectangle": true,
+      "name": "wedgeRectCallout",
+      "operatorUsage": {
+        "*/": 7,
+        "+-": 5,
+        "?:": 20,
+        "abs": 2,
+        "val": 2
+      },
+      "pathCommands": {
+        "close": 1,
+        "lnTo": 15,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    },
+    {
+      "adjustHandles": 1,
+      "adjustmentGuides": 3,
+      "calculatedGuides": 38,
+      "connectionSites": 5,
+      "guideNames": [
+        "adj1",
+        "adj2",
+        "adj3",
+        "dxPos",
+        "dyPos",
+        "xPos",
+        "yPos",
+        "dq",
+        "ady",
+        "adq",
+        "dz",
+        "xg1",
+        "xg2",
+        "x1",
+        "x2",
+        "yg1",
+        "yg2",
+        "y1",
+        "y2",
+        "t1",
+        "xl",
+        "t2",
+        "xt",
+        "t3",
+        "xr",
+        "t4",
+        "xb",
+        "t5",
+        "yl",
+        "t6",
+        "yt",
+        "t7",
+        "yr",
+        "t8",
+        "yb",
+        "u1",
+        "u2",
+        "v2",
+        "il",
+        "ir",
+        "ib"
+      ],
+      "hasTextRectangle": true,
+      "name": "wedgeRoundRectCallout",
+      "operatorUsage": {
+        "*/": 9,
+        "+-": 7,
+        "?:": 20,
+        "abs": 2,
+        "val": 3
+      },
+      "pathCommands": {
+        "arcTo": 4,
+        "close": 1,
+        "lnTo": 15,
+        "moveTo": 1
+      },
+      "pathFills": {
+        "norm": 1
+      },
+      "pathStrokes": {
+        "true": 1
+      },
+      "paths": 1
+    }
+  ],
+  "source": {
+    "geometryArchive": {
+      "bytes": 51672,
+      "outerPackageEntry": "OfficeOpenXML-DrawingMLGeometries.zip",
+      "repositoryPath": "scripts/ooxml-geometry/vendor/OfficeOpenXML-DrawingMLGeometries.zip",
+      "sha256": "a8517838a3a60492d267d1ff92e1ebd831adc04584de79a38a5532a68902abf6"
+    },
+    "presetShapeDefinitions": {
+      "archiveEntry": "presetShapeDefinitions.xml",
+      "bytes": 559368,
+      "sha256": "2f7c868d857c1e3c4b5a6068759fe0e07d77ad58377a6618d1b02ba3507b6939"
+    },
+    "standard": {
+      "downloadUrl": "https://ecma-international.org/wp-content/uploads/ECMA-376-1_5th_edition_december_2016.zip",
+      "edition": 5,
+      "id": "ECMA-376-1:2016",
+      "landingPage": "https://ecma-international.org/publications-and-standards/standards/ecma-376/",
+      "packageSha256": "9d0bcad9cf06054785b03762fcfadbf6bab7e54a5f9d69434e34b7fd464d4129",
+      "part": 1,
+      "publicationLabel": "5th edition, December 2016"
+    }
+  },
+  "summary": {
+    "formulaOperators": [
+      "*/",
+      "+-",
+      "+/",
+      "?:",
+      "abs",
+      "at2",
+      "cat2",
+      "cos",
+      "max",
+      "min",
+      "mod",
+      "pin",
+      "sat2",
+      "sin",
+      "sqrt",
+      "tan",
+      "val"
+    ],
+    "guideFormulas": 3910,
+    "multiPathShapes": 63,
+    "normalizedFormulas": 8,
+    "operatorUsage": {
+      "*/": 1084,
+      "+-": 1538,
+      "+/": 116,
+      "?:": 140,
+      "abs": 16,
+      "at2": 59,
+      "cat2": 27,
+      "cos": 146,
+      "max": 21,
+      "min": 21,
+      "mod": 48,
+      "pin": 194,
+      "sat2": 27,
+      "sin": 147,
+      "sqrt": 19,
+      "tan": 4,
+      "val": 303
+    },
+    "paths": 319,
+    "shadowedGuides": 12,
+    "sourceShapeEntries": 187,
+    "uniqueShapes": 186
+  }
+}

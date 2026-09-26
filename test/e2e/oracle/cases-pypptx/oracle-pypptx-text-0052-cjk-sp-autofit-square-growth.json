@@ -1,0 +1,26 @@
+{
+  "name": "oracle-pypptx-text-0052-cjk-sp-autofit-square-growth",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "requiredFonts": [
+      "Microsoft YaHei"
+    ],
+    "features": [
+      "text.cjk",
+      "bodyPr.wrap=square",
+      "bodyPr.spAutoFit",
+      "layout.aspectRatio=square",
+      "shape.growth"
+    ]
+  }
+}

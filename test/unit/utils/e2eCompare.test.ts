@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  resolveComparePanelState,
   mergeServerMetricsIntoSlides,
   resolveComparablePdfPages,
   resolveCompareSlideCounts,
@@ -54,6 +55,54 @@ describe('resolveComparablePdfPages', () => {
   });
 });
 
+describe('resolveComparePanelState', () => {
+  it('shows only the diff panel by default in diff-first mode when a diff exists', () => {
+    expect(resolveComparePanelState('diff-first', true, false)).toEqual({
+      truth: false,
+      render: false,
+      diff: true,
+      compact: true,
+      expanded: false,
+      fallback: false,
+    });
+  });
+
+  it('expands diff-first cards into truth and render panels while keeping diff visible', () => {
+    expect(resolveComparePanelState('diff-first', true, true)).toEqual({
+      truth: true,
+      render: true,
+      diff: true,
+      compact: false,
+      expanded: true,
+      fallback: false,
+    });
+  });
+
+  it('falls back to side-by-side in diff-first mode when no diff exists', () => {
+    expect(resolveComparePanelState('diff-first', false, false)).toEqual({
+      truth: true,
+      render: true,
+      diff: false,
+      compact: false,
+      expanded: false,
+      fallback: true,
+    });
+  });
+
+  it('preserves side-by-side and triple view behavior', () => {
+    expect(resolveComparePanelState('side-by-side', true, false)).toMatchObject({
+      truth: true,
+      render: true,
+      diff: false,
+    });
+    expect(resolveComparePanelState('triple', true, false)).toMatchObject({
+      truth: true,
+      render: true,
+      diff: true,
+    });
+  });
+});
+
 describe('mergeServerMetricsIntoSlides', () => {
   it('merges per-slide metrics without touching non-comparable slides', () => {
     const slides = [
@@ -93,6 +142,11 @@ describe('mergeServerMetricsIntoSlides', () => {
         chamferScore: 0.97,
         colorHistCorr: 0.95,
         needsReview: true,
+        cartesianChart: {
+          evaluable: true,
+          family: 'line',
+          passed: true,
+        },
       },
       {
         slideIdx: 1,
@@ -108,6 +162,11 @@ describe('mergeServerMetricsIntoSlides', () => {
       chamferScore: 0.97,
       colorHistCorr: 0.95,
       needsReview: true,
+      cartesianChart: {
+        evaluable: true,
+        family: 'line',
+        passed: true,
+      },
       hasDiff: true,
     });
     expect(merged[1]).toMatchObject({

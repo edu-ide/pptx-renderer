@@ -1,0 +1,37 @@
+{
+  "name": "oracle-pypptx-flowchart-0086-magnetic-disk",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "p:sp.prstGeom=flowChartMagneticDisk",
+      "a:avLst.adjustmentGuideCount=0",
+      "geometry.aspect=square|wide|tall",
+      "container=standalone|nonIdentityGroup",
+      "paint=explicitSolid|themeStyleReference"
+    ]
+  }
+}

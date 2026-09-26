@@ -1,0 +1,21 @@
+{
+  "name": "oracle-pypptx-shape3d-0001-flat-optout",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "p:pic",
+      "a:scene3d=absent",
+      "a:sp3d=absent"
+    ]
+  }
+}

@@ -6,6 +6,7 @@ import { ShapeNodeData, LineEndInfo, TextBody } from '../model/nodes/ShapeNode';
 import { RenderContext } from './RenderContext';
 import { parseOoxmlBool } from '../parser/booleans';
 import { isExternalTargetMode } from '../parser/RelParser';
+import { applyReflectionEffect } from './ReflectionRenderer';
 
 /** True if the text body has at least one non-empty run (avoids covering shapes with empty placeholder text). */
 function hasVisibleText(textBody: TextBody): boolean {
@@ -37,6 +38,10 @@ function hasExplicitCenteredParagraph(textBody: TextBody): boolean {
 }
 
 const IMPLICIT_SINGLE_LINE_LABEL_MAX_CHARS = 36;
+// Native PowerPoint CJK probes use slightly tighter boxes when separate paragraphs create
+// multiple browser line boxes. Explicit OOXML line spacing still overrides these defaults.
+const OFFICE_SINGLE_PARAGRAPH_LINE_HEIGHT = '1.18';
+const OFFICE_MULTI_PARAGRAPH_LINE_HEIGHT = '1.16';
 
 function visibleTextLength(textBody: TextBody): number {
   const text = textBody.paragraphs
@@ -55,6 +60,15 @@ function visibleParagraphCount(textBody: TextBody): number {
   return textBody.paragraphs.filter((paragraph) =>
     paragraph.runs.some((run) => run.text != null && run.text.length > 0),
   ).length;
+}
+
+function hasExplicitVisibleRunFontSize(textBody: TextBody): boolean {
+  return textBody.paragraphs.some((paragraph) =>
+    paragraph.runs.some(
+      (run) =>
+        run.text != null && run.text.length > 0 && run.properties?.numAttr('sz') !== undefined,
+    ),
+  );
 }
 
 function hasExplicitParagraphSpacing(textBody: TextBody): boolean {
@@ -108,8 +122,9 @@ import {
   resolveColorToCss,
   resolveColor,
   resolveThemeFillReference,
+  getFocusedGradientStops,
 } from './StyleResolver';
-import { renderTextBody } from './TextRenderer';
+import { renderTextBody, resolveTextFields, type DrawingMLVerticalTextMode } from './TextRenderer';
 import { renderCustomGeometry } from '../shapes/customGeometry';
 import {
   getPresetShapePath,
@@ -117,14 +132,119 @@ import {
   getMultiPathPreset,
   PresetSubPath,
 } from '../shapes/presets';
+import { ooxmlPresetRuntimeMultiPathShapeNames } from '../shapes/ooxmlGeometryRuntime';
 import { emuToPx } from '../parser/units';
 import { applyTint, hexToRgb, rgbToHex } from '../utils/color';
 import { SafeXmlNode } from '../parser/XmlParser';
 import { findMediaByTarget, findMediaByTargetAsync, getOrCreateBlobUrl } from '../utils/media';
 import { isAllowedExternalMediaUrl, isAllowedExternalUrl } from '../utils/urlSafety';
-import { getEffectiveBodyPrChild } from './TextBodyProperties';
+import { getEffectiveBodyPrChild, parseTextPercentage } from './TextBodyProperties';
 import { cssFontFamilyStack, resolveThemeFontStack } from './fontResolver';
 import { resolveSlideNavigationIndex, slideJumpTitle } from './navigation';
+import { scaleCssLengthForTransform } from './cssValues';
+import {
+  flipAbsoluteSvgPathData,
+  parseMoveArcPathData,
+  parseMoveCubicPathData,
+  parseMoveLinePathData,
+  parseSimpleMoveLinePathData,
+} from './pathData';
+import {
+  appendStaticShape3DEffects,
+  applyStaticShape3DTextPlane,
+  buildStaticShape3DPlan,
+  type StaticShape3DPlan,
+} from './Shape3DRenderer';
+
+const ooxmlRuntimeMultiPathShapeNameSet = new Set(
+  ooxmlPresetRuntimeMultiPathShapeNames.map((name) => name.toLowerCase()),
+);
+
+function classifyShape3DCustomGeometry(
+  customGeometry: SafeXmlNode | undefined,
+): 'multi-contour-cubic' | undefined {
+  if (!customGeometry?.exists()) return undefined;
+  for (const listName of ['avLst', 'gdLst', 'ahLst', 'cxnLst']) {
+    const list = customGeometry.child(listName);
+    if (!list.exists() || list.allChildren().length > 0) return undefined;
+  }
+  const textRect = customGeometry.child('rect');
+  if (
+    !textRect.exists() ||
+    textRect.element?.attributes.length !== 4 ||
+    textRect.attr('l') !== 'l' ||
+    textRect.attr('t') !== 't' ||
+    textRect.attr('r') !== 'r' ||
+    textRect.attr('b') !== 'b'
+  ) {
+    return undefined;
+  }
+  const paths = customGeometry.child('pathLst').children('path');
+  if (paths.length !== 1) return undefined;
+  const path = paths[0];
+  const coordinateWidth = path.numAttr('w');
+  const coordinateHeight = path.numAttr('h');
+  if (
+    coordinateWidth !== 1000 ||
+    coordinateHeight !== 1000 ||
+    path.element?.attributes.length !== 2 ||
+    path.attr('fill') !== undefined ||
+    path.attr('stroke') !== undefined
+  ) {
+    return undefined;
+  }
+
+  const commands = path.allChildren();
+  const allowedCommands = new Set(['moveTo', 'lnTo', 'cubicBezTo', 'close']);
+  let moveCount = 0;
+  let closeCount = 0;
+  let cubicCount = 0;
+  let contourOpen = false;
+  for (const command of commands) {
+    if (!allowedCommands.has(command.localName)) return undefined;
+    if (command.localName === 'close') {
+      if (!contourOpen || command.allChildren().length > 0) return undefined;
+      contourOpen = false;
+      closeCount += 1;
+      continue;
+    }
+    if (command.localName === 'moveTo') {
+      if (contourOpen) return undefined;
+      contourOpen = true;
+    } else if (!contourOpen) {
+      return undefined;
+    }
+    const points = command.children('pt');
+    const expectedPoints = command.localName === 'cubicBezTo' ? 3 : 1;
+    if (
+      points.length !== expectedPoints ||
+      command.allChildren().length !== expectedPoints ||
+      points.some((point) => {
+        const x = point.attr('x');
+        const y = point.attr('y');
+        const numericX = Number(x);
+        const numericY = Number(y);
+        return (
+          x === undefined ||
+          y === undefined ||
+          !Number.isFinite(numericX) ||
+          !Number.isFinite(numericY) ||
+          numericX < 0 ||
+          numericX > 1000 ||
+          numericY < 0 ||
+          numericY > 1000
+        );
+      })
+    ) {
+      return undefined;
+    }
+    if (command.localName === 'moveTo') moveCount += 1;
+    if (command.localName === 'cubicBezTo') cubicCount += 1;
+  }
+  return !contourOpen && moveCount >= 2 && closeCount === moveCount && cubicCount >= 1
+    ? 'multi-contour-cubic'
+    : undefined;
+}
 
 function appendTransform(el: HTMLElement, transform: string): void {
   el.style.transform = `${el.style.transform || ''} ${transform}`.trim();
@@ -133,6 +253,10 @@ function appendTransform(el: HTMLElement, transform: string): void {
 function appendCssFilter(el: HTMLElement, filter: string): void {
   const current = el.style.filter.trim();
   el.style.filter = current ? `${current} ${filter}` : filter;
+}
+
+function formatPathNumber(value: number): string {
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(6)));
 }
 
 function resolveGlowFilter(glow: SafeXmlNode, ctx: RenderContext): string | undefined {
@@ -154,25 +278,27 @@ function applyGlowFilter(el: HTMLElement, glow: SafeXmlNode, ctx: RenderContext)
 }
 
 function expandCssLengthForScale(length: string, scale: number): string {
-  if (!(scale > 0)) return length;
-
-  const trimmed = length.trim();
-  if (!trimmed) return `${100 / scale}%`;
-
-  const match = trimmed.match(/^(-?\d*\.?\d+(?:e[-+]?\d+)?)([a-z%]*)$/i);
-  if (!match) return length;
-
-  const value = Number(match[1]);
-  if (!Number.isFinite(value)) return length;
-
-  const unit = match[2] || '%';
-  return `${value / scale}${unit}`;
+  return scaleCssLengthForTransform(length, scale);
 }
 
-function applyVerticalTextFlow(el: HTMLElement, anchor: string | null | undefined): void {
-  el.style.writingMode = 'vertical-rl';
-  el.style.justifyContent = 'center';
-  el.style.alignItems = anchor === 'b' ? 'flex-end' : anchor === 'ctr' ? 'center' : 'flex-start';
+function applyVerticalTextFlow(
+  el: HTMLElement,
+  anchor: string | null | undefined,
+  textOrientation?: 'upright' | 'sideways',
+  writingMode: 'vertical-rl' | 'vertical-lr' = 'vertical-rl',
+): void {
+  el.style.writingMode = writingMode;
+  // In vertical writing the DrawingML anchor maps to the horizontal block axis.
+  // The inline axis still begins at the physical top of the text frame.
+  el.style.justifyContent =
+    anchor === 'b' ? 'flex-end' : anchor === 'ctr' ? 'center' : 'flex-start';
+  el.style.alignItems = 'flex-start';
+  if (textOrientation) {
+    el.style.textOrientation = textOrientation;
+  }
+  if (textOrientation === 'upright') {
+    el.style.whiteSpace = 'normal';
+  }
 }
 
 const WRAPPED_AUTOFIT_HEIGHT_TOLERANCE = 1.1;
@@ -182,6 +308,7 @@ const SINGLE_PARAGRAPH_WRAPPED_AUTOFIT_HEIGHT_TOLERANCE = 1.25;
 const WRAPPED_AUTOFIT_WIDTH_TOLERANCE_PX = 1;
 const NO_AUTOFIT_TITLE_METRIC_SCALE_FLOOR = 0.9;
 const SP_AUTOFIT_UNWRAPPED_WIDTH_SCALE_FLOOR = 0.9;
+const NEAR_FIT_SINGLE_LINE_WRAP_SCALE_FLOOR = 0.98;
 
 function getSupportedTextWarpPreset(textBody: TextBody): 'textArchDown' | 'textArchUp' | null {
   const prstTxWarp = textBody.bodyProperties?.child('prstTxWarp');
@@ -401,8 +528,194 @@ function appendShapeBlipImage(
 
 let markerIdCounter = 0;
 let gradientIdCounter = 0;
+const DEFAULT_OUTER_SHADOW_STDDEV_PER_BLUR_RADIUS = 1 / 2;
+const BOUNDED_ZERO_DISTANCE_OUTER_SHADOW_STDDEV_PER_BLUR_RADIUS = 3 / 8;
+const BOUNDED_SCALED_OUTER_SHADOW_STDDEV_PER_BLUR_RADIUS = 1 / 3;
+const BOUNDED_OUTER_SHADOW_GROUP_SCALE = 1.25;
+const BOUNDED_OUTER_SHADOW_BLUR_RADII = new Set([50800, 76200, 101600, 115455, 127000, 317500]);
+const BOUNDED_OUTER_SHADOW_DISTANCES = new Set([0, 38100, 46182, 50800, 76200, 127000]);
+const BOUNDED_OUTER_SHADOW_DIRECTIONS = new Set([0, 2700000, 5400000, 8100000]);
+const BOUNDED_OUTER_SHADOW_SCALES = new Set([92000, 100000, 102000]);
+const BOUNDED_OUTER_SHADOW_ALIGNMENTS = new Set<OuterShadowAlignment>(['b', 'ctr', 'tr']);
 
 function applySvgDropShadowFilter(
+  svgNs: string,
+  defs: SVGDefsElement,
+  target: SVGElement,
+  bounds: { x?: number; y?: number; w: number; h: number },
+  shadow: {
+    dx: number;
+    dy: number;
+    blur: number;
+    color: { r: number; g: number; b: number };
+    opacity: number;
+    colorInterpolation?: 'linearRGB' | 'sRGB';
+    stdDeviationScale?: number;
+  },
+): void {
+  const filterId = `shape-shadow-${++gradientIdCounter}`;
+  const filter = document.createElementNS(svgNs, 'filter');
+  const margin = Math.max(Math.abs(shadow.dx), Math.abs(shadow.dy)) + shadow.blur * 4 + 4;
+  const boundsX = bounds.x ?? 0;
+  const boundsY = bounds.y ?? 0;
+  filter.setAttribute('id', filterId);
+  filter.setAttribute('filterUnits', 'userSpaceOnUse');
+  if (shadow.colorInterpolation) {
+    filter.setAttribute('color-interpolation-filters', shadow.colorInterpolation);
+  }
+  filter.setAttribute('x', String(boundsX - margin));
+  filter.setAttribute('y', String(boundsY - margin));
+  filter.setAttribute('width', String(bounds.w + margin * 2));
+  filter.setAttribute('height', String(bounds.h + margin * 2));
+
+  const dropShadow = document.createElementNS(svgNs, 'feDropShadow');
+  dropShadow.setAttribute('dx', shadow.dx.toFixed(1));
+  dropShadow.setAttribute('dy', shadow.dy.toFixed(1));
+  dropShadow.setAttribute(
+    'stdDeviation',
+    Math.max(
+      0,
+      shadow.blur * (shadow.stdDeviationScale ?? DEFAULT_OUTER_SHADOW_STDDEV_PER_BLUR_RADIUS),
+    ).toFixed(2),
+  );
+  dropShadow.setAttribute(
+    'flood-color',
+    `rgb(${shadow.color.r},${shadow.color.g},${shadow.color.b})`,
+  );
+  dropShadow.setAttribute('flood-opacity', shadow.opacity.toFixed(4));
+  filter.appendChild(dropShadow);
+  defs.appendChild(filter);
+  if (!defs.parentNode && target.ownerSVGElement) {
+    target.ownerSVGElement.insertBefore(defs, target.ownerSVGElement.firstChild);
+  }
+  target.setAttribute('filter', `url(#${filterId})`);
+}
+
+type OuterShadowAlignment = 'tl' | 't' | 'tr' | 'l' | 'ctr' | 'r' | 'bl' | 'b' | 'br';
+
+function normalizeOuterShadowAlignment(value: string | undefined): OuterShadowAlignment {
+  const normalized = value?.toLowerCase();
+  if (
+    normalized === 'tl' ||
+    normalized === 't' ||
+    normalized === 'tr' ||
+    normalized === 'l' ||
+    normalized === 'ctr' ||
+    normalized === 'r' ||
+    normalized === 'bl' ||
+    normalized === 'b' ||
+    normalized === 'br'
+  ) {
+    return normalized;
+  }
+  return 'b';
+}
+
+function isBoundedOuterShadowAlignment(value: string | undefined): boolean {
+  if (value == null) return true;
+  const normalized = value.toLowerCase() as OuterShadowAlignment;
+  return BOUNDED_OUTER_SHADOW_ALIGNMENTS.has(normalized);
+}
+
+function isOpaqueCssColor(value: string): boolean {
+  return /^#[0-9a-f]{6}$/i.test(value);
+}
+
+function getOuterShadowAlignmentAnchor(
+  bounds: { x?: number; y?: number; w: number; h: number },
+  alignment: OuterShadowAlignment,
+): { x: number; y: number } {
+  const left = bounds.x ?? 0;
+  const top = bounds.y ?? 0;
+  const centerX = left + bounds.w / 2;
+  const centerY = top + bounds.h / 2;
+  const right = left + bounds.w;
+  const bottom = top + bounds.h;
+
+  const x =
+    alignment === 'tl' || alignment === 'l' || alignment === 'bl'
+      ? left
+      : alignment === 'tr' || alignment === 'r' || alignment === 'br'
+        ? right
+        : centerX;
+  const y =
+    alignment === 'tl' || alignment === 't' || alignment === 'tr'
+      ? top
+      : alignment === 'bl' || alignment === 'b' || alignment === 'br'
+        ? bottom
+        : centerY;
+  return { x, y };
+}
+
+function appendScaledOuterShadowSilhouette(
+  svgNs: string,
+  svg: SVGSVGElement,
+  defs: SVGDefsElement,
+  sourcePath: SVGPathElement,
+  bounds: { x?: number; y?: number; w: number; h: number },
+  shadow: {
+    dx: number;
+    dy: number;
+    blur: number;
+    scaleX: number;
+    scaleY: number;
+    alignment: OuterShadowAlignment;
+    color: { r: number; g: number; b: number };
+    opacity: number;
+  },
+): void {
+  const anchor = getOuterShadowAlignmentAnchor(bounds, shadow.alignment);
+  const filterId = `shape-shadow-blur-${++gradientIdCounter}`;
+  const filter = document.createElementNS(svgNs, 'filter');
+  const boundsX = bounds.x ?? 0;
+  const boundsY = bounds.y ?? 0;
+  const scaledLeft = anchor.x + (boundsX - anchor.x) * shadow.scaleX + shadow.dx;
+  const scaledTop = anchor.y + (boundsY - anchor.y) * shadow.scaleY + shadow.dy;
+  const scaledRight = anchor.x + (boundsX + bounds.w - anchor.x) * shadow.scaleX + shadow.dx;
+  const scaledBottom = anchor.y + (boundsY + bounds.h - anchor.y) * shadow.scaleY + shadow.dy;
+  const margin = shadow.blur * 4 + 4;
+  filter.setAttribute('id', filterId);
+  filter.setAttribute('filterUnits', 'userSpaceOnUse');
+  filter.setAttribute('x', String(Math.min(scaledLeft, scaledRight) - margin));
+  filter.setAttribute('y', String(Math.min(scaledTop, scaledBottom) - margin));
+  filter.setAttribute('width', String(Math.abs(scaledRight - scaledLeft) + margin * 2));
+  filter.setAttribute('height', String(Math.abs(scaledBottom - scaledTop) + margin * 2));
+
+  const gaussianBlur = document.createElementNS(svgNs, 'feGaussianBlur');
+  gaussianBlur.setAttribute(
+    'stdDeviation',
+    Math.max(0, shadow.blur * BOUNDED_SCALED_OUTER_SHADOW_STDDEV_PER_BLUR_RADIUS).toFixed(2),
+  );
+  filter.appendChild(gaussianBlur);
+  defs.appendChild(filter);
+  if (!defs.parentNode) svg.insertBefore(defs, svg.firstChild);
+
+  const group = document.createElementNS(svgNs, 'g');
+  group.setAttribute('data-pptx-outer-shadow', 'scaled-silhouette');
+  group.setAttribute('data-pptx-shadow-scale-x', String(shadow.scaleX));
+  group.setAttribute('data-pptx-shadow-scale-y', String(shadow.scaleY));
+  group.setAttribute('data-pptx-shadow-alignment', shadow.alignment);
+  group.setAttribute('data-pptx-shadow-anchor-x', String(anchor.x));
+  group.setAttribute('data-pptx-shadow-anchor-y', String(anchor.y));
+  group.setAttribute('transform', `translate(${shadow.dx} ${shadow.dy})`);
+  group.setAttribute('filter', `url(#${filterId})`);
+
+  const silhouette = document.createElementNS(svgNs, 'path');
+  silhouette.setAttribute('d', sourcePath.getAttribute('d') ?? '');
+  silhouette.setAttribute(
+    'transform',
+    `translate(${anchor.x} ${anchor.y}) scale(${shadow.scaleX} ${shadow.scaleY}) translate(${-anchor.x} ${-anchor.y})`,
+  );
+  silhouette.setAttribute('fill', `rgb(${shadow.color.r},${shadow.color.g},${shadow.color.b})`);
+  silhouette.setAttribute('fill-opacity', shadow.opacity.toFixed(4));
+  silhouette.setAttribute('stroke', 'none');
+  const fillRule = sourcePath.getAttribute('fill-rule');
+  if (fillRule) silhouette.setAttribute('fill-rule', fillRule);
+  group.appendChild(silhouette);
+  svg.insertBefore(group, sourcePath);
+}
+
+function applySvgInnerShadowFilter(
   svgNs: string,
   defs: SVGDefsElement,
   target: SVGElement,
@@ -415,7 +728,7 @@ function applySvgDropShadowFilter(
     opacity: number;
   },
 ): void {
-  const filterId = `shape-shadow-${++gradientIdCounter}`;
+  const filterId = `shape-inner-shadow-${++gradientIdCounter}`;
   const filter = document.createElementNS(svgNs, 'filter');
   const margin = Math.max(Math.abs(shadow.dx), Math.abs(shadow.dy)) + shadow.blur * 4 + 4;
   filter.setAttribute('id', filterId);
@@ -425,21 +738,88 @@ function applySvgDropShadowFilter(
   filter.setAttribute('width', String(bounds.w + margin * 2));
   filter.setAttribute('height', String(bounds.h + margin * 2));
 
-  const dropShadow = document.createElementNS(svgNs, 'feDropShadow');
-  dropShadow.setAttribute('dx', shadow.dx.toFixed(1));
-  dropShadow.setAttribute('dy', shadow.dy.toFixed(1));
-  dropShadow.setAttribute('stdDeviation', Math.max(0, shadow.blur / 2).toFixed(2));
-  dropShadow.setAttribute(
-    'flood-color',
-    `rgb(${shadow.color.r},${shadow.color.g},${shadow.color.b})`,
-  );
-  dropShadow.setAttribute('flood-opacity', shadow.opacity.toFixed(4));
-  filter.appendChild(dropShadow);
+  const offset = document.createElementNS(svgNs, 'feOffset');
+  offset.setAttribute('in', 'SourceAlpha');
+  offset.setAttribute('dx', shadow.dx.toFixed(1));
+  offset.setAttribute('dy', shadow.dy.toFixed(1));
+  offset.setAttribute('result', 'innerOffset');
+  filter.appendChild(offset);
+
+  const blur = document.createElementNS(svgNs, 'feGaussianBlur');
+  blur.setAttribute('in', 'innerOffset');
+  blur.setAttribute('stdDeviation', Math.max(0, shadow.blur / 2).toFixed(2));
+  blur.setAttribute('result', 'innerBlur');
+  filter.appendChild(blur);
+
+  const mask = document.createElementNS(svgNs, 'feComposite');
+  mask.setAttribute('in', 'innerBlur');
+  mask.setAttribute('in2', 'SourceAlpha');
+  mask.setAttribute('operator', 'in');
+  mask.setAttribute('result', 'innerMask');
+  filter.appendChild(mask);
+
+  const flood = document.createElementNS(svgNs, 'feFlood');
+  flood.setAttribute('flood-color', `rgb(${shadow.color.r},${shadow.color.g},${shadow.color.b})`);
+  flood.setAttribute('flood-opacity', shadow.opacity.toFixed(4));
+  flood.setAttribute('result', 'innerColor');
+  filter.appendChild(flood);
+
+  const coloredShadow = document.createElementNS(svgNs, 'feComposite');
+  coloredShadow.setAttribute('in', 'innerColor');
+  coloredShadow.setAttribute('in2', 'innerMask');
+  coloredShadow.setAttribute('operator', 'in');
+  coloredShadow.setAttribute('result', 'innerShadow');
+  filter.appendChild(coloredShadow);
+
+  const merge = document.createElementNS(svgNs, 'feMerge');
+  const sourceNode = document.createElementNS(svgNs, 'feMergeNode');
+  sourceNode.setAttribute('in', 'SourceGraphic');
+  const shadowNode = document.createElementNS(svgNs, 'feMergeNode');
+  shadowNode.setAttribute('in', 'innerShadow');
+  merge.appendChild(sourceNode);
+  merge.appendChild(shadowNode);
+  filter.appendChild(merge);
+
   defs.appendChild(filter);
   if (!defs.parentNode && target.ownerSVGElement) {
     target.ownerSVGElement.insertBefore(defs, target.ownerSVGElement.firstChild);
   }
   target.setAttribute('filter', `url(#${filterId})`);
+}
+
+function applySvgSoftEdgeFilter(
+  svgNs: string,
+  defs: SVGDefsElement,
+  target: SVGElement,
+  bounds: { w: number; h: number },
+  radius: number,
+): void {
+  const filterId = `shape-soft-edge-${++gradientIdCounter}`;
+  const filter = document.createElementNS(svgNs, 'filter');
+  const margin = Math.max(radius * 4 + 4, bounds.w, bounds.h);
+  filter.setAttribute('id', filterId);
+  filter.setAttribute('filterUnits', 'userSpaceOnUse');
+  filter.setAttribute('x', String(-margin));
+  filter.setAttribute('y', String(-margin));
+  filter.setAttribute('width', String(bounds.w + margin * 2));
+  filter.setAttribute('height', String(bounds.h + margin * 2));
+
+  const blur = document.createElementNS(svgNs, 'feGaussianBlur');
+  blur.setAttribute('in', 'SourceGraphic');
+  blur.setAttribute('stdDeviation', Math.max(0, radius / 2).toFixed(2));
+  filter.appendChild(blur);
+
+  defs.appendChild(filter);
+  if (!defs.parentNode && target.ownerSVGElement) {
+    target.ownerSVGElement.insertBefore(defs, target.ownerSVGElement.firstChild);
+  }
+
+  const parent = target.parentNode;
+  if (!parent) return;
+  const group = document.createElementNS(svgNs, 'g');
+  group.setAttribute('filter', `url(#${filterId})`);
+  parent.insertBefore(group, target);
+  group.appendChild(target);
 }
 
 function svgDashArrayForKind(dashKind: string, strokeWidth: number): string | null {
@@ -671,6 +1051,78 @@ function angleToSvgGradientCoords(angleDeg: number): {
   };
 }
 
+function appendGradientStrokePaint(
+  svgNs: string,
+  defs: SVGDefsElement,
+  gradientStroke: NonNullable<ReturnType<typeof resolveGradientStroke>>,
+  bounds: { w: number; h: number },
+  isLineLike: boolean,
+): { paint: string; width: number } {
+  const gradId = `grad-stroke-${++gradientIdCounter}`;
+  const linearGrad = document.createElementNS(svgNs, 'linearGradient');
+  linearGrad.setAttribute('id', gradId);
+  linearGrad.setAttribute('color-interpolation', gradientStroke.colorInterpolation ?? 'linearRGB');
+  linearGrad.setAttribute('gradientUnits', 'userSpaceOnUse');
+
+  if (isLineLike || bounds.w <= 1 || bounds.h <= 1) {
+    const rad = (gradientStroke.angle * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const cx = bounds.w / 2;
+    const cy = bounds.h / 2;
+    const halfLen = Math.max(bounds.w, bounds.h) / 2;
+    linearGrad.setAttribute('x1', String(cx - halfLen * cos));
+    linearGrad.setAttribute('y1', String(cy - halfLen * sin));
+    linearGrad.setAttribute('x2', String(cx + halfLen * cos));
+    linearGrad.setAttribute('y2', String(cy + halfLen * sin));
+  } else {
+    const coords = angleToSvgGradientCoords(gradientStroke.angle);
+    linearGrad.setAttribute('x1', String((parseFloat(coords.x1) / 100) * bounds.w));
+    linearGrad.setAttribute('y1', String((parseFloat(coords.y1) / 100) * bounds.h));
+    linearGrad.setAttribute('x2', String((parseFloat(coords.x2) / 100) * bounds.w));
+    linearGrad.setAttribute('y2', String((parseFloat(coords.y2) / 100) * bounds.h));
+  }
+
+  for (const stop of gradientStroke.stops) {
+    const svgStop = document.createElementNS(svgNs, 'stop');
+    svgStop.setAttribute('offset', `${stop.position}%`);
+    svgStop.setAttribute('stop-color', stop.color);
+    linearGrad.appendChild(svgStop);
+  }
+  defs.appendChild(linearGrad);
+
+  return {
+    paint: `url(#${gradId})`,
+    width:
+      isLineLike || bounds.w <= 1 || bounds.h <= 1
+        ? Math.max(gradientStroke.width, 1)
+        : gradientStroke.width,
+  };
+}
+
+function applySvgStrokePresentation(
+  path: SVGPathElement,
+  paint: string,
+  width: number,
+  dashKind: string,
+  legacyDash: string,
+  linecap: string,
+  linejoin: string,
+): void {
+  path.setAttribute('stroke', paint);
+  path.setAttribute('stroke-width', String(width));
+  if (linecap) path.setAttribute('stroke-linecap', linecap);
+  if (linejoin) path.setAttribute('stroke-linejoin', linejoin);
+  const svgDashArray = svgDashArrayForKind(dashKind, width);
+  if (svgDashArray) {
+    path.setAttribute('stroke-dasharray', svgDashArray);
+  } else if (legacyDash === 'dashed') {
+    path.setAttribute('stroke-dasharray', `${width * 4},${width * 2}`);
+  } else if (legacyDash === 'dotted') {
+    path.setAttribute('stroke-dasharray', `${width},${width * 2}`);
+  }
+}
+
 /**
  * Get the marker size multiplier based on OOXML size string.
  */
@@ -691,10 +1143,10 @@ function getMarkerDimensions(
 ): { markerW: number; markerH: number } {
   const wMul = getMarkerSize(info.w);
   const lenMul = getMarkerSize(info.len);
-  // Arrow size proportional to stroke width with balanced floor:
-  // avoid tiny markers, but do not overgrow relative to line length.
-  const baseLen = Math.max(strokeWidth * 3, 6.5);
-  const baseW = Math.max(strokeWidth * 2.5, 5);
+  // Arrow size proportional to stroke width with an Office-like floor for
+  // very thin connectors; otherwise default triangle markers look too skinny.
+  const baseLen = Math.max(strokeWidth * 3, 10);
+  const baseW = Math.max(strokeWidth * 2.5, 7.5);
   return {
     markerW: baseLen * lenMul,
     markerH: baseW * wMul,
@@ -740,6 +1192,24 @@ function getGradientMarkerColor(
 }
 
 type Point = { x: number; y: number };
+type CubicSegment = { c1: Point; c2: Point; end: Point };
+type ArcSegment = {
+  rx: number;
+  ry: number;
+  xAxisRotation: number;
+  largeArc: 0 | 1;
+  sweep: 0 | 1;
+  end: Point;
+};
+type ArcDescription = {
+  center: Point;
+  rx: number;
+  ry: number;
+  startAngle: number;
+  deltaAngle: number;
+  xAxisRotation: number;
+  sweep: 0 | 1;
+};
 
 function lerpPoint(a: Point, b: Point, t: number): Point {
   return {
@@ -769,18 +1239,130 @@ function approximateCubicLength(p0: Point, p1: Point, p2: Point, p3: Point, tEnd
   return length;
 }
 
-function insetCubicPathStart(pathD: string, inset: number): string {
-  const n = '-?\\d*\\.?\\d+(?:e[-+]?\\d+)?';
-  const match = pathD.match(
-    new RegExp(`^M(${n}),(${n}) C(${n}),(${n}) (${n}),(${n}) (${n}),(${n})(?: (.*))?$`, 'i'),
-  );
-  if (!match) return pathD;
+function parseMoveCubicPath(pathD: string): { start: Point; segments: CubicSegment[] } | null {
+  return parseMoveCubicPathData(pathD);
+}
 
-  const p0 = { x: Number(match[1]), y: Number(match[2]) };
-  const p1 = { x: Number(match[3]), y: Number(match[4]) };
-  const p2 = { x: Number(match[5]), y: Number(match[6]) };
-  const p3 = { x: Number(match[7]), y: Number(match[8]) };
-  const rest = match[9];
+function formatMoveCubicPath(start: Point, segments: CubicSegment[]): string {
+  const out = [`M${formatPathNumber(start.x)},${formatPathNumber(start.y)}`];
+  for (const segment of segments) {
+    out.push(
+      [
+        `C${formatPathNumber(segment.c1.x)},${formatPathNumber(segment.c1.y)}`,
+        `${formatPathNumber(segment.c2.x)},${formatPathNumber(segment.c2.y)}`,
+        `${formatPathNumber(segment.end.x)},${formatPathNumber(segment.end.y)}`,
+      ].join(' '),
+    );
+  }
+  return out.join(' ');
+}
+
+function parseMoveArcPath(pathD: string): { start: Point; arc: ArcSegment } | null {
+  return parseMoveArcPathData(pathD);
+}
+
+function vectorAngle(ux: number, uy: number, vx: number, vy: number): number {
+  const dot = ux * vx + uy * vy;
+  const len = Math.hypot(ux, uy) * Math.hypot(vx, vy);
+  const angle = Math.acos(Math.min(1, Math.max(-1, len > 0 ? dot / len : 1)));
+  return ux * vy - uy * vx < 0 ? -angle : angle;
+}
+
+function describeArc(start: Point, arc: ArcSegment): ArcDescription | null {
+  if (arc.xAxisRotation !== 0) return null;
+  let rx = Math.abs(arc.rx);
+  let ry = Math.abs(arc.ry);
+  if (!(rx > 0) || !(ry > 0)) return null;
+
+  const dx = (start.x - arc.end.x) / 2;
+  const dy = (start.y - arc.end.y) / 2;
+  const lambda = (dx * dx) / (rx * rx) + (dy * dy) / (ry * ry);
+  if (lambda > 1) {
+    const scale = Math.sqrt(lambda);
+    rx *= scale;
+    ry *= scale;
+  }
+
+  const rx2 = rx * rx;
+  const ry2 = ry * ry;
+  const dx2 = dx * dx;
+  const dy2 = dy * dy;
+  const denom = rx2 * dy2 + ry2 * dx2;
+  if (!(denom > 0)) return null;
+
+  const sign = arc.largeArc === arc.sweep ? -1 : 1;
+  const coef = sign * Math.sqrt(Math.max(0, (rx2 * ry2 - rx2 * dy2 - ry2 * dx2) / denom));
+  const cxp = (coef * rx * dy) / ry;
+  const cyp = (-coef * ry * dx) / rx;
+  const center = {
+    x: (start.x + arc.end.x) / 2 + cxp,
+    y: (start.y + arc.end.y) / 2 + cyp,
+  };
+  const ux = (dx - cxp) / rx;
+  const uy = (dy - cyp) / ry;
+  const vx = (-dx - cxp) / rx;
+  const vy = (-dy - cyp) / ry;
+  const startAngle = Math.atan2(uy, ux);
+  let deltaAngle = vectorAngle(ux, uy, vx, vy);
+  if (arc.sweep === 0 && deltaAngle > 0) deltaAngle -= Math.PI * 2;
+  if (arc.sweep === 1 && deltaAngle < 0) deltaAngle += Math.PI * 2;
+
+  return {
+    center,
+    rx,
+    ry,
+    startAngle,
+    deltaAngle,
+    xAxisRotation: arc.xAxisRotation,
+    sweep: arc.sweep,
+  };
+}
+
+function arcPoint(desc: ArcDescription, t: number): Point {
+  const angle = desc.startAngle + desc.deltaAngle * t;
+  return {
+    x: desc.center.x + desc.rx * Math.cos(angle),
+    y: desc.center.y + desc.ry * Math.sin(angle),
+  };
+}
+
+function approximateArcLength(desc: ArcDescription, tEnd: number): number {
+  const steps = 24;
+  let length = 0;
+  let prev = arcPoint(desc, 0);
+  for (let i = 1; i <= steps; i++) {
+    const point = arcPoint(desc, (tEnd * i) / steps);
+    length += Math.hypot(point.x - prev.x, point.y - prev.y);
+    prev = point;
+  }
+  return length;
+}
+
+function formatMoveArcPath(
+  start: Point,
+  desc: ArcDescription,
+  sweepFraction: number,
+  end: Point,
+): string {
+  const largeArc = Math.abs(desc.deltaAngle * sweepFraction) > Math.PI ? 1 : 0;
+  return [
+    `M${formatPathNumber(start.x)},${formatPathNumber(start.y)}`,
+    `A${formatPathNumber(desc.rx)},${formatPathNumber(desc.ry)}`,
+    formatPathNumber(desc.xAxisRotation),
+    `${largeArc},${desc.sweep}`,
+    `${formatPathNumber(end.x)},${formatPathNumber(end.y)}`,
+  ].join(' ');
+}
+
+function insetCubicPathStart(pathD: string, inset: number): string {
+  const parsed = parseMoveCubicPath(pathD);
+  if (!parsed) return pathD;
+
+  const p0 = parsed.start;
+  const first = parsed.segments[0];
+  const p1 = first.c1;
+  const p2 = first.c2;
+  const p3 = first.end;
   const totalLength = approximateCubicLength(p0, p1, p2, p3, 1);
   if (!(totalLength > 0)) return pathD;
 
@@ -800,22 +1382,100 @@ function insetCubicPathStart(pathD: string, inset: number): string {
   const d = lerpPoint(a, b, t);
   const e = lerpPoint(b, c, t);
   const start = lerpPoint(d, e, t);
-  const trimmed = `M${start.x},${start.y} C${e.x},${e.y} ${c.x},${c.y} ${p3.x},${p3.y}`;
-  return rest ? `${trimmed} ${rest}` : trimmed;
+  const nextSegments = parsed.segments.slice();
+  nextSegments[0] = { c1: e, c2: c, end: p3 };
+  return formatMoveCubicPath(start, nextSegments);
+}
+
+function insetArcPathStart(pathD: string, inset: number): string | null {
+  const parsed = parseMoveArcPath(pathD);
+  if (!parsed) return null;
+  const desc = describeArc(parsed.start, parsed.arc);
+  if (!desc) return null;
+  const totalLength = approximateArcLength(desc, 1);
+  if (!(totalLength > 0)) return null;
+
+  const target = Math.min(inset, totalLength * 0.95);
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2;
+    if (approximateArcLength(desc, mid) < target) lo = mid;
+    else hi = mid;
+  }
+
+  const t = hi;
+  return formatMoveArcPath(arcPoint(desc, t), desc, 1 - t, parsed.arc.end);
+}
+
+function insetCubicPathEnd(pathD: string, inset: number): string | null {
+  const parsed = parseMoveCubicPath(pathD);
+  if (!parsed) return null;
+
+  const lastIndex = parsed.segments.length - 1;
+  const lastStart = lastIndex === 0 ? parsed.start : parsed.segments[lastIndex - 1].end;
+  const last = parsed.segments[lastIndex];
+  const totalLength = approximateCubicLength(lastStart, last.c1, last.c2, last.end, 1);
+  if (!(totalLength > 0)) return null;
+
+  const target = totalLength - Math.min(inset, totalLength * 0.95);
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2;
+    if (approximateCubicLength(lastStart, last.c1, last.c2, last.end, mid) < target) lo = mid;
+    else hi = mid;
+  }
+
+  const t = hi;
+  const a = lerpPoint(lastStart, last.c1, t);
+  const b = lerpPoint(last.c1, last.c2, t);
+  const c = lerpPoint(last.c2, last.end, t);
+  const d = lerpPoint(a, b, t);
+  const trimmedEnd = lerpPoint(d, lerpPoint(b, c, t), t);
+  const nextSegments = parsed.segments.slice();
+  nextSegments[lastIndex] = { c1: a, c2: d, end: trimmedEnd };
+
+  return formatMoveCubicPath(parsed.start, nextSegments);
+}
+
+function insetArcPathEnd(pathD: string, inset: number): string | null {
+  const parsed = parseMoveArcPath(pathD);
+  if (!parsed) return null;
+  const desc = describeArc(parsed.start, parsed.arc);
+  if (!desc) return null;
+  const totalLength = approximateArcLength(desc, 1);
+  if (!(totalLength > 0)) return null;
+
+  const target = totalLength - Math.min(inset, totalLength * 0.95);
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2;
+    if (approximateArcLength(desc, mid) < target) lo = mid;
+    else hi = mid;
+  }
+
+  const t = hi;
+  return formatMoveArcPath(parsed.start, desc, t, arcPoint(desc, t));
 }
 
 function insetPathStart(pathD: string, inset: number): string {
   if (!(inset > 0)) return pathD;
 
-  const match = pathD.match(
-    /^M(-?\d*\.?\d+(?:e[-+]?\d+)?),(-?\d*\.?\d+(?:e[-+]?\d+)?) L(-?\d*\.?\d+(?:e[-+]?\d+)?),(-?\d*\.?\d+(?:e[-+]?\d+)?)$/i,
-  );
-  if (!match) return insetCubicPathStart(pathD, inset);
+  const simpleLine = parseSimpleMoveLinePathData(pathD);
+  if (!simpleLine) {
+    return (
+      insetMoveLinePathStart(pathD, inset) ??
+      insetArcPathStart(pathD, inset) ??
+      insetCubicPathStart(pathD, inset)
+    );
+  }
 
-  const x1 = Number(match[1]);
-  const y1 = Number(match[2]);
-  const x2 = Number(match[3]);
-  const y2 = Number(match[4]);
+  const x1 = simpleLine.start.x;
+  const y1 = simpleLine.start.y;
+  const x2 = simpleLine.end.x;
+  const y2 = simpleLine.end.y;
   const dx = x2 - x1;
   const dy = y2 - y1;
   const length = Math.hypot(dx, dy);
@@ -830,15 +1490,20 @@ function insetPathStart(pathD: string, inset: number): string {
 function insetPathEnd(pathD: string, inset: number): string {
   if (!(inset > 0)) return pathD;
 
-  const match = pathD.match(
-    /^M(-?\d*\.?\d+(?:e[-+]?\d+)?),(-?\d*\.?\d+(?:e[-+]?\d+)?) L(-?\d*\.?\d+(?:e[-+]?\d+)?),(-?\d*\.?\d+(?:e[-+]?\d+)?)$/i,
-  );
-  if (!match) return pathD;
+  const simpleLine = parseSimpleMoveLinePathData(pathD);
+  if (!simpleLine) {
+    return (
+      insetMoveLinePathEnd(pathD, inset) ??
+      insetCubicPathEnd(pathD, inset) ??
+      insetArcPathEnd(pathD, inset) ??
+      pathD
+    );
+  }
 
-  const x1 = Number(match[1]);
-  const y1 = Number(match[2]);
-  const x2 = Number(match[3]);
-  const y2 = Number(match[4]);
+  const x1 = simpleLine.start.x;
+  const y1 = simpleLine.start.y;
+  const x2 = simpleLine.end.x;
+  const y2 = simpleLine.end.y;
   const dx = x2 - x1;
   const dy = y2 - y1;
   const length = Math.hypot(dx, dy);
@@ -848,6 +1513,100 @@ function insetPathEnd(pathD: string, inset: number): string {
   const nextX = x2 - (dx / length) * clampedInset;
   const nextY = y2 - (dy / length) * clampedInset;
   return `M${x1},${y1} L${nextX},${nextY}`;
+}
+
+function parseMoveLinePath(pathD: string): Point[] | null {
+  return parseMoveLinePathData(pathD);
+}
+
+function formatMoveLinePath(points: Point[]): string {
+  return points
+    .map((point, index) => {
+      const command = index === 0 ? 'M' : 'L';
+      return `${command}${formatPathNumber(point.x)},${formatPathNumber(point.y)}`;
+    })
+    .join(' ');
+}
+
+function pointDistance(a: Point, b: Point): number {
+  return Math.hypot(b.x - a.x, b.y - a.y);
+}
+
+function insetMoveLinePathStart(pathD: string, inset: number): string | null {
+  const points = parseMoveLinePath(pathD);
+  if (!points || points.length < 3) return null;
+
+  const first = points[0];
+  const next = points[1];
+  const dx = next.x - first.x;
+  const dy = next.y - first.y;
+  const length = Math.hypot(dx, dy);
+  if (!(length > inset)) return null;
+
+  const nextStart = {
+    x: first.x + (dx / length) * inset,
+    y: first.y + (dy / length) * inset,
+  };
+  return formatMoveLinePath([nextStart, ...points.slice(1)]);
+}
+
+function insetMoveLinePathEnd(pathD: string, inset: number): string | null {
+  const points = parseMoveLinePath(pathD);
+  if (!points || points.length < 3) return null;
+
+  const last = points[points.length - 1];
+  const prev = points[points.length - 2];
+  const dx = last.x - prev.x;
+  const dy = last.y - prev.y;
+  const length = Math.hypot(dx, dy);
+  if (!(length > inset)) return null;
+
+  const nextEnd = {
+    x: last.x - (dx / length) * inset,
+    y: last.y - (dy / length) * inset,
+  };
+  return formatMoveLinePath([...points.slice(0, -1), nextEnd]);
+}
+
+const MIN_TINY_MARKER_SEGMENT_PX = 2;
+const MAX_TINY_MARKER_SEGMENT_PX = 4;
+
+function collapseTinyMarkerEndSegments(
+  pathD: string,
+  strokeWidth: number,
+  hasHeadEnd: boolean,
+  hasTailEnd: boolean,
+): string {
+  if (!hasHeadEnd && !hasTailEnd) return pathD;
+  const points = parseMoveLinePath(pathD);
+  if (!points || points.length < 3) return pathD;
+
+  // PowerPoint ignores sub-pixel connector residual legs for marker orientation,
+  // but intentional short elbows should still remain part of the visible path.
+  const threshold = Math.min(
+    Math.max(MIN_TINY_MARKER_SEGMENT_PX, strokeWidth * 1.5),
+    MAX_TINY_MARKER_SEGMENT_PX,
+  );
+  let nextPoints = points.slice();
+
+  if (hasHeadEnd && nextPoints.length >= 3) {
+    const firstLen = pointDistance(nextPoints[0], nextPoints[1]);
+    const nextLen = pointDistance(nextPoints[1], nextPoints[2]);
+    if (firstLen <= threshold && nextLen > threshold) {
+      nextPoints = nextPoints.slice(1);
+    }
+  }
+
+  if (hasTailEnd && nextPoints.length >= 3) {
+    const last = nextPoints.length - 1;
+    const lastLen = pointDistance(nextPoints[last - 1], nextPoints[last]);
+    const prevLen = pointDistance(nextPoints[last - 2], nextPoints[last - 1]);
+    if (lastLen <= threshold && prevLen > threshold) {
+      nextPoints = nextPoints.slice(0, -1);
+    }
+  }
+
+  return nextPoints.length === points.length ? pathD : formatMoveLinePath(nextPoints);
 }
 
 /**
@@ -1035,15 +1794,7 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
   wrapper.style.width = `${node.size.w}px`;
   // Line-like: preset line/connector, or cxnSp (connection shape), or flat extent (one dimension 0)
   const presetKey = node.presetGeometry?.toLowerCase() ?? '';
-  const outlineOnlyPresets = new Set([
-    'arc',
-    'leftbracket',
-    'rightbracket',
-    'leftbrace',
-    'rightbrace',
-    'bracketpair',
-    'bracepair',
-  ]);
+  const outlineOnlyPresets = new Set(['arc']);
   const presetIsLine =
     !!presetKey &&
     (presetKey === 'line' ||
@@ -1065,10 +1816,10 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
   if (node.rotation !== 0) {
     transforms.push(`rotate(${node.rotation}deg)`);
   }
-  if (node.flipH) {
+  if (node.flipH && !isLineLike) {
     transforms.push('scaleX(-1)');
   }
-  if (node.flipV) {
+  if (node.flipV && !isLineLike) {
     transforms.push('scaleY(-1)');
   }
   if (transforms.length > 0) {
@@ -1110,6 +1861,10 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
     };
     pathD = renderCustomGeometry(node.customGeometry, pathW, pathH, sourceExtentEmu);
   }
+  const usesOoxmlRuntimeMultiPath =
+    !!multiPaths &&
+    !!node.presetGeometry &&
+    ooxmlRuntimeMultiPathShapeNameSet.has(node.presetGeometry.toLowerCase());
   // Connectors (cxnSp) or flat-extent shapes with line style but no geometry: draw as line
   if (
     !pathD &&
@@ -1125,6 +1880,9 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
       pathH,
       undefined,
     );
+  }
+  if (pathD && isLineLike && (node.flipH || node.flipV)) {
+    pathD = flipAbsoluteSvgPathData(pathD, pathW, pathH, node.flipH, node.flipV);
   }
 
   // ---- Resolve fill and line styles ----
@@ -1164,7 +1922,7 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
     }
   }
   // fillRef fallback: when no explicit fill but fillRef idx > 0, use fillRef color
-  if (!fillCss && fillRef && fillRef.exists()) {
+  if (!fillCss && fillRef && fillRef.exists() && (fillRef.numAttr('idx') ?? 0) > 0) {
     const resolvedThemeFill = resolveThemeFillReference(fillRef, ctx);
     fillCss = resolvedThemeFill.fillCss;
     if (!gradientFillData) gradientFillData = resolvedThemeFill.gradientFillData;
@@ -1200,13 +1958,13 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
   if (lineIsNoFill) effectiveLine = undefined;
 
   if (effectiveLine?.exists()) {
+    const lineStyle = resolveLineStyle(effectiveLine, ctx, lnRef);
+    strokeDash = lineStyle.dash;
+    strokeDashKind = lineStyle.dashKind;
     gradientStroke = resolveGradientStroke(effectiveLine, ctx);
     if (!gradientStroke) {
-      const lineStyle = resolveLineStyle(effectiveLine, ctx, lnRef);
       strokeColor = lineStyle.color;
       strokeWidth = lineStyle.width;
-      strokeDash = lineStyle.dash;
-      strokeDashKind = lineStyle.dashKind;
     }
 
     // Line cap: a:ln@cap → SVG stroke-linecap
@@ -1252,7 +2010,9 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
   let mainSvgNs: string | null = null;
   let mainDefs: SVGDefsElement | null = null;
   let mainPath: SVGPathElement | null = null;
+  let mainSvg: SVGSVGElement | null = null;
   let mainSvgBounds: { w: number; h: number } | null = null;
+  let shape3dPlan: StaticShape3DPlan | undefined;
   if (pathD) {
     const svgNs = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(svgNs, 'svg');
@@ -1265,6 +2025,7 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
     svg.style.left = '0';
     svg.style.top = '0';
     svg.style.overflow = 'visible';
+    mainSvg = svg;
 
     const blipFill = spPr.child('blipFill');
     const blipUrl = blipFill.exists() ? resolveShapeBlipUrl(blipFill, ctx) : null;
@@ -1273,6 +2034,60 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
     if (blipUrl) {
       const defs = document.createElementNS(svgNs, 'defs');
       appendShapeBlipImage(svgNs, svg, defs, blipFill, pathD, { w: svgW, h: svgH }, blipUrl);
+
+      if (multiPaths && multiPaths.length > 1 && usesOoxmlRuntimeMultiPath) {
+        const detailGradientStroke =
+          gradientStroke && gradientStroke.stops.length > 0
+            ? appendGradientStrokePaint(
+                svgNs,
+                defs,
+                gradientStroke,
+                { w: svgW, h: svgH },
+                isLineLike,
+              )
+            : null;
+        for (const detail of multiPaths.slice(1)) {
+          const detailPath = document.createElementNS(svgNs, 'path');
+          detailPath.setAttribute('d', detail.d);
+          detailPath.setAttribute('fill', 'none');
+          const scale =
+            detail.strokeWidthScale &&
+            Number.isFinite(detail.strokeWidthScale) &&
+            detail.strokeWidthScale > 0
+              ? detail.strokeWidthScale
+              : 1;
+          if (detail.stroke && !lineIsNoFill && detailGradientStroke) {
+            applySvgStrokePresentation(
+              detailPath,
+              detailGradientStroke.paint,
+              detailGradientStroke.width * scale,
+              strokeDashKind,
+              strokeDash,
+              strokeLinecap,
+              strokeLinejoin,
+            );
+          } else if (
+            detail.stroke &&
+            !lineIsNoFill &&
+            strokeWidth > 0 &&
+            strokeColor !== 'none' &&
+            strokeColor !== 'transparent'
+          ) {
+            applySvgStrokePresentation(
+              detailPath,
+              strokeColor,
+              strokeWidth * scale,
+              strokeDashKind,
+              strokeDash,
+              strokeLinecap,
+              strokeLinejoin,
+            );
+          } else {
+            detailPath.setAttribute('stroke', 'none');
+          }
+          svg.appendChild(detailPath);
+        }
+      }
 
       const mainPathStrokeSuppressed = multiPaths && multiPaths[0]?.stroke === false;
       if (
@@ -1344,13 +2159,13 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
             // (per-channel max). max(dx, dy) = L∞ norm = rectangular contours.
             const gcx = gradientFillData.cx ?? 0.5;
             const gcy = gradientFillData.cy ?? 0.5;
-            const stops = gradientFillData.stops;
 
             // Mirror stops for center-out: original stop at N% → two stops at
             // (center - N%*distToEdge) and (center + N%*distToEdge) in gradient coords.
-            const mirrorStops = (centerFrac: number) => {
+            const mirrorStops = (centerFrac: number, axis: 'x' | 'y') => {
+              const focusedStops = getFocusedGradientStops(gradientFillData, { axis });
               const mirrored: Array<{ offset: number; color: string }> = [];
-              for (const s of stops) {
+              for (const s of focusedStops) {
                 const t = s.position / 100; // 0..1 from center to edge
                 const below = centerFrac - t * centerFrac;
                 const above = centerFrac + t * (1 - centerFrac);
@@ -1373,7 +2188,7 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
             hGrad.setAttribute('y1', '0%');
             hGrad.setAttribute('x2', '100%');
             hGrad.setAttribute('y2', '0%');
-            for (const ms of mirrorStops(gcx)) {
+            for (const ms of mirrorStops(gcx, 'x')) {
               const svgStop = document.createElementNS(svgNs, 'stop');
               svgStop.setAttribute('offset', `${(ms.offset * 100).toFixed(2)}%`);
               svgStop.setAttribute('stop-color', ms.color);
@@ -1393,7 +2208,7 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
             vGrad.setAttribute('y1', '0%');
             vGrad.setAttribute('x2', '0%');
             vGrad.setAttribute('y2', '100%');
-            for (const ms of mirrorStops(gcy)) {
+            for (const ms of mirrorStops(gcy, 'y')) {
               const svgStop = document.createElementNS(svgNs, 'stop');
               svgStop.setAttribute('offset', `${(ms.offset * 100).toFixed(2)}%`);
               svgStop.setAttribute('stop-color', ms.color);
@@ -1455,9 +2270,11 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
             // path="circle"/"shape": gradient reaches farthest corner
             const maxDx = Math.max(gcx, 1 - gcx);
             const maxDy = Math.max(gcy, 1 - gcy);
-            const r = Math.sqrt(maxDx * maxDx + maxDy * maxDy);
-            radialGrad.setAttribute('r', String(r * Math.max(svgW, svgH)));
-            for (const stop of gradientFillData.stops) {
+            radialGrad.setAttribute('r', String(Math.hypot(maxDx * svgW, maxDy * svgH)));
+            for (const stop of getFocusedGradientStops(gradientFillData, {
+              width: svgW,
+              height: svgH,
+            })) {
               const svgStop = document.createElementNS(svgNs, 'stop');
               svgStop.setAttribute('offset', `${stop.position}%`);
               svgStop.setAttribute('stop-color', stop.color);
@@ -1555,6 +2372,15 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
       }
       const effectiveStrokeLinecap =
         isLineLike && (effectiveHeadEnd || effectiveTailEnd) ? 'butt' : strokeLinecap;
+      if (isLineLike && (effectiveHeadEnd || effectiveTailEnd) && effectiveStrokeWidth > 0) {
+        pathD = collapseTinyMarkerEndSegments(
+          pathD,
+          effectiveStrokeWidth,
+          !!effectiveHeadEnd,
+          !!effectiveTailEnd,
+        );
+        path.setAttribute('d', pathD);
+      }
       if (isLineLike && effectiveHeadEnd && effectiveStrokeWidth > 0) {
         const headInset = getHeadEndStartInset(effectiveHeadEnd, effectiveStrokeWidth);
         if (headInset > 0) {
@@ -1575,62 +2401,29 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
       // accentCallout1/2/3), suppress stroke on the main path element — the leader line and accent
       // bar are rendered as separate sub-path elements with their own stroke settings.
       const mainPathStrokeSuppressed = multiPaths && multiPaths[0]?.stroke === false;
+      let sharedGradientStrokePaint: { paint: string; width: number } | null = null;
       if (
         !isCircularArrow &&
         !mainPathStrokeSuppressed &&
         gradientStroke &&
         gradientStroke.stops.length > 0
       ) {
-        // Create SVG linearGradient for the gradient stroke.
-        // Use userSpaceOnUse so the gradient is defined in SVG coordinate space rather
-        // than objectBoundingBox. This is critical for straight line paths (zero-width or
-        // zero-height bounding box) where objectBoundingBox produces degenerate coordinates
-        // and the gradient becomes invisible.
-        const gradId = `grad-stroke-${++gradientIdCounter}`;
-        const linearGrad = document.createElementNS(svgNs, 'linearGradient');
-        linearGrad.setAttribute('id', gradId);
-        linearGrad.setAttribute(
-          'color-interpolation',
-          gradientStroke.colorInterpolation ?? 'linearRGB',
+        sharedGradientStrokePaint = appendGradientStrokePaint(
+          svgNs,
+          defs,
+          gradientStroke,
+          { w: svgW, h: svgH },
+          isLineLike,
         );
-        linearGrad.setAttribute('gradientUnits', 'userSpaceOnUse');
-
-        if (isLineLike || svgW <= 1 || svgH <= 1) {
-          // Convert gradient angle to absolute coordinates in SVG user space.
-          // For straight connectors the path bbox may be zero on one axis, so use
-          // the long-axis strategy to avoid degenerate gradient coordinates.
-          const rad = (gradientStroke.angle * Math.PI) / 180;
-          const cos = Math.cos(rad);
-          const sin = Math.sin(rad);
-          const cx = svgW / 2;
-          const cy = svgH / 2;
-          const halfLen = Math.max(svgW, svgH) / 2;
-          linearGrad.setAttribute('x1', String(cx - halfLen * cos));
-          linearGrad.setAttribute('y1', String(cy - halfLen * sin));
-          linearGrad.setAttribute('x2', String(cx + halfLen * cos));
-          linearGrad.setAttribute('y2', String(cy + halfLen * sin));
-        } else {
-          const coords = angleToSvgGradientCoords(gradientStroke.angle);
-          linearGrad.setAttribute('x1', String((parseFloat(coords.x1) / 100) * svgW));
-          linearGrad.setAttribute('y1', String((parseFloat(coords.y1) / 100) * svgH));
-          linearGrad.setAttribute('x2', String((parseFloat(coords.x2) / 100) * svgW));
-          linearGrad.setAttribute('y2', String((parseFloat(coords.y2) / 100) * svgH));
-        }
-
-        for (const stop of gradientStroke.stops) {
-          const svgStop = document.createElementNS(svgNs, 'stop');
-          svgStop.setAttribute('offset', `${stop.position}%`);
-          svgStop.setAttribute('stop-color', stop.color);
-          linearGrad.appendChild(svgStop);
-        }
-
-        defs.appendChild(linearGrad);
-
-        const strokeW = Math.max(gradientStroke.width, 1);
-        path.setAttribute('stroke', `url(#${gradId})`);
-        path.setAttribute('stroke-width', String(strokeW));
-        if (effectiveStrokeLinecap) path.setAttribute('stroke-linecap', effectiveStrokeLinecap);
-        if (strokeLinejoin) path.setAttribute('stroke-linejoin', strokeLinejoin);
+        applySvgStrokePresentation(
+          path,
+          sharedGradientStrokePaint.paint,
+          sharedGradientStrokePaint.width,
+          strokeDashKind,
+          strokeDash,
+          effectiveStrokeLinecap,
+          strokeLinejoin,
+        );
       } else if (
         !isCircularArrow &&
         !mainPathStrokeSuppressed &&
@@ -1771,6 +2564,19 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
           defs.appendChild(linearGrad);
           return `url(#${gradId})`;
         };
+        const detailGradientStroke =
+          gradientStroke &&
+          gradientStroke.stops.length > 0 &&
+          multiPaths.slice(1).some(({ stroke }) => stroke)
+            ? (sharedGradientStrokePaint ??
+              appendGradientStrokePaint(
+                svgNs,
+                defs,
+                gradientStroke,
+                { w: svgW, h: svgH },
+                isLineLike,
+              ))
+            : null;
         // The first path was already rendered above as the main path.
         // Render additional sub-paths (darkenLess shadow, stroke-only detail lines).
         for (let pi = 1; pi < multiPaths.length; pi++) {
@@ -1843,8 +2649,26 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
             // 'norm' — same fill as main path
             extraPath.setAttribute('fill', mainPathFill || 'none');
           }
-          if (sp.stroke && effectiveStrokeWidth > 0 && strokeColor !== 'transparent') {
-            extraPath.setAttribute('stroke', strokeColor);
+          if (sp.stroke && !lineIsNoFill && detailGradientStroke) {
+            const scaledStrokeWidth =
+              sp.strokeWidthScale && Number.isFinite(sp.strokeWidthScale) && sp.strokeWidthScale > 0
+                ? detailGradientStroke.width * sp.strokeWidthScale
+                : detailGradientStroke.width;
+            applySvgStrokePresentation(
+              extraPath,
+              detailGradientStroke.paint,
+              scaledStrokeWidth,
+              strokeDashKind,
+              strokeDash,
+              strokeLinecap,
+              strokeLinejoin,
+            );
+          } else if (
+            sp.stroke &&
+            effectiveStrokeWidth > 0 &&
+            strokeColor !== 'none' &&
+            strokeColor !== 'transparent'
+          ) {
             const isBorderCalloutLeader =
               node.presetGeometry?.toLowerCase() === 'bordercallout1' && sp.fill === 'none';
             const scaledStrokeWidth =
@@ -1854,8 +2678,15 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
             const extraStrokeWidth = isBorderCalloutLeader
               ? Math.max(scaledStrokeWidth, 2.4)
               : scaledStrokeWidth;
-            extraPath.setAttribute('stroke-width', String(extraStrokeWidth));
-            if (isBorderCalloutLeader) extraPath.setAttribute('stroke-linecap', 'round');
+            applySvgStrokePresentation(
+              extraPath,
+              strokeColor,
+              extraStrokeWidth,
+              strokeDashKind,
+              strokeDash,
+              isBorderCalloutLeader ? 'round' : strokeLinecap,
+              strokeLinejoin,
+            );
             if (
               sp.maskToMainOutlineBandScale &&
               sp.maskToMainOutlineBandScale > 0 &&
@@ -1921,7 +2752,7 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
               defs.appendChild(mask);
               extraPath.setAttribute('mask', `url(#${maskId})`);
             }
-          } else if (sp.stroke && !lineIsNoFill) {
+          } else if (sp.stroke && !lineIsNoFill && !usesOoxmlRuntimeMultiPath) {
             // Detail lines without explicit line style: avoid using identical fill color,
             // otherwise guide lines (e.g. chartX diagonals) become visually invisible.
             const detailStroke = baseRgb ? mixRgb(baseRgb, { r: 0, g: 0, b: 0 }, 0.55) : '#666666';
@@ -1933,6 +2764,95 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
           svg.appendChild(extraPath);
         }
       }
+
+      const hasResolvedSolidShapeFill = !gradientFillData && /^#[0-9a-f]{6}$/i.test(fillCss);
+      const shape3dPaintKind = blipFill.exists()
+        ? 'picture'
+        : spPr.child('gradFill').exists() || gradientFillData
+          ? 'gradient'
+          : spPr.child('pattFill').exists()
+            ? 'pattern'
+            : spPr.child('grpFill').exists()
+              ? 'group'
+              : spPr.child('noFill').exists()
+                ? 'none'
+                : spPr.child('solidFill').exists() ||
+                    node.fill?.localName === 'solidFill' ||
+                    hasResolvedSolidShapeFill
+                  ? 'solid'
+                  : 'unknown';
+      const shape3dSourceTextBody = node.textBody;
+      const ownShape3dBodyPr = shape3dSourceTextBody?.bodyProperties;
+      const shape3dAutofit = (['spAutoFit', 'normAutofit', 'noAutofit'] as const).find((mode) =>
+        ownShape3dBodyPr?.child(mode).exists(),
+      );
+      const groupChildScale = ctx.groupChildScale;
+      const hasNonIdentityGroupScale = Boolean(
+        groupChildScale &&
+        Number.isFinite(groupChildScale.x) &&
+        Number.isFinite(groupChildScale.y) &&
+        groupChildScale.x > 0 &&
+        groupChildScale.y > 0 &&
+        (Math.abs(groupChildScale.x - 1) > 1e-6 || Math.abs(groupChildScale.y - 1) > 1e-6),
+      );
+      shape3dPlan = buildStaticShape3DPlan(
+        node.shape3d,
+        {
+          nodeType: 'shape',
+          presetGeometry: node.presetGeometry,
+          width: svgW,
+          height: svgH,
+          sourceBounds: hasNonIdentityGroupScale
+            ? {
+                width: svgW / groupChildScale!.x,
+                height: svgH / groupChildScale!.y,
+              }
+            : undefined,
+          isLineLike,
+          paintKind: shape3dPaintKind,
+          baseFill: /^#[0-9a-f]{6}$/i.test(fillCss) ? fillCss : undefined,
+          hasVisibleText:
+            node.textBody?.paragraphs.some((paragraph) =>
+              paragraph.runs.some((run) => run.text.trim().length > 0),
+            ) ?? false,
+          container:
+            (ctx.groupDepth ?? 0) > 0
+              ? 'group'
+              : ctx.nodeOrigin === 'master'
+                ? 'master'
+                : ctx.nodeOrigin === 'layout'
+                  ? 'layout'
+                  : node.placeholder
+                    ? 'placeholder'
+                    : 'standalone-slide',
+          hasStyleReference: styleNode.exists(),
+          hasCustomGeometry: node.customGeometry?.exists() ?? false,
+          customGeometryProfile: classifyShape3DCustomGeometry(node.customGeometry),
+          hasVisibleStroke: path.getAttribute('stroke') !== 'none',
+          rotation: node.rotation,
+          flipH: node.flipH,
+          flipV: node.flipV,
+          textPlane: shape3dSourceTextBody
+            ? {
+                wrap: ownShape3dBodyPr?.attr('wrap'),
+                anchor: ownShape3dBodyPr?.attr('anchor'),
+                autofit: shape3dAutofit ?? 'none',
+                vertical: ownShape3dBodyPr?.attr('vert'),
+                hasIndependentBounds: node.textBoxBounds !== undefined,
+              }
+            : undefined,
+        },
+        ctx,
+      );
+      appendStaticShape3DEffects({
+        svg,
+        defs,
+        basePath: path,
+        pathD,
+        bounds: { width: svgW, height: svgH },
+        plan: shape3dPlan,
+        ctx,
+      });
 
       // Some multi-path detail rendering adds masks/gradients after the initial defs population.
       if (defs.children.length > 0 && !defs.parentNode) {
@@ -1987,8 +2907,12 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
   }
 
   // ---- Render text overlay (only when there is visible text; skip for decorative shapes with empty txBody) ----
-  if (node.textBody && node.textBody.paragraphs.length > 0 && hasVisibleText(node.textBody)) {
-    const warpedText = renderWarpedTextBody(node, ctx);
+  const textBody = node.textBody ? resolveTextFields(node.textBody, ctx) : undefined;
+  if (textBody && textBody.paragraphs.length > 0 && hasVisibleText(textBody)) {
+    const warpedText = renderWarpedTextBody(
+      textBody === node.textBody ? node : { ...node, textBody },
+      ctx,
+    );
     if (warpedText) {
       wrapper.appendChild(warpedText);
     } else {
@@ -2008,19 +2932,21 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
       textContainer.style.display = 'flex';
       textContainer.style.flexDirection = 'column';
       textContainer.style.boxSizing = 'border-box';
+      // Isolate text layout from host pre/nowrap styles; bodyPr wrap=none overrides below.
+      textContainer.style.whiteSpace = 'normal';
       // Overflow handling based on bodyPr auto-fit mode:
       // - spAutoFit: shape resizes to fit text → overflow visible
       // - normAutofit: text shrinks to fit shape → apply fontScale, overflow hidden
-      // - noAutofit: text clips → overflow hidden
+      // - noAutofit: fixed font size, with independent explicit clip/overflow axes
       // - (default, no child): PowerPoint implicitly auto-shrinks simple single-line labels
-      const spAutoFit = getEffectiveBodyPrChild(node.textBody, 'spAutoFit');
+      const spAutoFit = getEffectiveBodyPrChild(textBody, 'spAutoFit');
       const hasSpAutoFit = spAutoFit?.exists();
-      const normAutofit = getEffectiveBodyPrChild(node.textBody, 'normAutofit');
+      const normAutofit = getEffectiveBodyPrChild(textBody, 'normAutofit');
       const hasNormAutofit = normAutofit?.exists();
-      const noAutofit = getEffectiveBodyPrChild(node.textBody, 'noAutofit');
+      const noAutofit = getEffectiveBodyPrChild(textBody, 'noAutofit');
       const hasNoAutofit = noAutofit?.exists();
-      const bodyPr = node.textBody.bodyProperties;
-      const fallbackBp = node.textBody.layoutBodyProperties;
+      const bodyPr = textBody.bodyProperties;
+      const fallbackBp = textBody.layoutBodyProperties;
       const textWrap =
         (bodyPr ? bodyPr.attr('wrap') : undefined) ??
         (fallbackBp ? fallbackBp.attr('wrap') : undefined);
@@ -2030,6 +2956,9 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
       const vertOverflow =
         (bodyPr ? bodyPr.attr('vertOverflow') : undefined) ??
         (fallbackBp ? fallbackBp.attr('vertOverflow') : undefined);
+      const ownTextAnchor = bodyPr ? bodyPr.attr('anchor') : undefined;
+      const fallbackTextAnchor = fallbackBp ? fallbackBp.attr('anchor') : undefined;
+      const resolvedTextAnchor = ownTextAnchor || fallbackTextAnchor;
       const spAutoFitAllowsHorizontalOverflow =
         hasSpAutoFit && !hasNormAutofit && horzOverflow === 'overflow';
       const spAutoFitAllowsVerticalOverflow =
@@ -2038,45 +2967,82 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
         !hasSpAutoFit &&
         !hasNormAutofit &&
         !hasNoAutofit &&
-        isSingleLineTextBody(node.textBody) &&
-        !hasBulletParagraph(node.textBody) &&
+        isSingleLineTextBody(textBody) &&
+        !hasBulletParagraph(textBody) &&
         (textWrap === 'none' ||
-          (textWrap === undefined && isShortImplicitSingleLineLabel(node.textBody)));
+          (textWrap === undefined && isShortImplicitSingleLineLabel(textBody)));
       const usesNoAutofitSingleLineTitleFit =
-        hasNoAutofit && isTitlePlaceholder(node.placeholder) && isSingleLineTextBody(node.textBody);
+        hasNoAutofit &&
+        horzOverflow !== 'clip' &&
+        vertOverflow !== 'clip' &&
+        isTitlePlaceholder(node.placeholder) &&
+        isSingleLineTextBody(textBody);
+      const usesNearFitSingleLineWrap =
+        !hasSpAutoFit &&
+        !hasNormAutofit &&
+        !hasNoAutofit &&
+        textWrap === 'square' &&
+        isSingleLineTextBody(textBody) &&
+        isShortImplicitSingleLineLabel(textBody) &&
+        !hasBulletParagraph(textBody);
       textContainer.style.overflowX = 'visible';
       // noAutofit means "don't auto-fit" — NOT "clip text". PowerPoint allows text to
       // overflow the shape boundary visibly.
       textContainer.style.overflowY = 'visible';
+      if (hasNoAutofit) {
+        textContainer.style.overflowX = horzOverflow === 'clip' ? 'clip' : 'visible';
+        textContainer.style.overflowY = vertOverflow === 'clip' ? 'clip' : 'visible';
+      }
 
       // normAutofit: PowerPoint stores the computed fontScale (1000ths of percent).
       // Apply it as a CSS transform to shrink text so it fits the shape.
       let needsDynamicAutofit = false;
+      let usesNativeShapeAutofitCandidate = false;
       if (hasNormAutofit && normAutofit) {
+        textContainer.style.overflowX = 'hidden';
         textContainer.style.overflowY = 'hidden';
-        const lnSpcReduction = normAutofit.numAttr('lnSpcReduction') ?? 0;
+        const lnSpcReduction = parseTextPercentage(normAutofit.attr('lnSpcReduction')) ?? 0;
         // renderTextBody applies normAutofit@fontScale to run and paragraph font sizes.
         // The container transform is reserved for additional browser-measured shrink.
         needsDynamicAutofit = true;
         if (lnSpcReduction > 0) {
-          const lnFactor = 1 - lnSpcReduction / 100000;
+          const lnFactor = Math.max(0, 1 - lnSpcReduction);
           textContainer.style.lineHeight = `${lnFactor}`;
         }
       }
-      // spAutoFit requests in-shape text fitting. In browser rendering we cannot
-      // resize the absolutely positioned shape like PowerPoint editor behavior,
-      // so use bounded dynamic scaling to prevent bleed across neighboring nodes.
+      // spAutoFit resizes the shape to contain the text. Keep the bounded measurement
+      // path for compact labels and explicit overflow axes; a standalone text box can
+      // switch to native shape growth after its wrapped and unwrapped bounds are known.
       if (hasSpAutoFit && !hasNormAutofit) {
-        if (!spAutoFitAllowsVerticalOverflow) {
-          textContainer.style.overflowY = 'hidden';
+        if (spAutoFitAllowsHorizontalOverflow === spAutoFitAllowsVerticalOverflow) {
+          const overflow = spAutoFitAllowsHorizontalOverflow ? 'visible' : 'hidden';
+          textContainer.style.overflowX = overflow;
+          textContainer.style.overflowY = overflow;
+        } else {
+          // CSS computes visible/hidden to auto/hidden (and the inverse), which creates
+          // a scroll container. `clip` bounds one axis without changing the visible axis.
+          textContainer.style.overflowX = spAutoFitAllowsHorizontalOverflow ? 'visible' : 'clip';
+          textContainer.style.overflowY = spAutoFitAllowsVerticalOverflow ? 'visible' : 'clip';
         }
         needsDynamicAutofit =
           !spAutoFitAllowsHorizontalOverflow || !spAutoFitAllowsVerticalOverflow;
+        const textFlow =
+          (bodyPr ? bodyPr.attr('vert') : undefined) ??
+          (fallbackBp ? fallbackBp.attr('vert') : undefined);
+        usesNativeShapeAutofitCandidate =
+          node.source.child('nvSpPr').child('cNvSpPr').attr('txBox') === '1' &&
+          !node.textBoxBounds &&
+          textWrap === 'square' &&
+          (textFlow === undefined || textFlow === 'horz') &&
+          (resolvedTextAnchor === undefined || resolvedTextAnchor === 't') &&
+          horzOverflow === undefined &&
+          vertOverflow === undefined;
       }
       // When no autofit mode is serialized, PowerPoint still keeps simple
       // single-line shape labels within the shape bounds instead of wrapping them
       // into neighboring content. Measure and apply the same bounded shrink.
       if (usesImplicitSingleLineFit) {
+        textContainer.style.overflowX = 'hidden';
         textContainer.style.overflowY = 'hidden';
         needsDynamicAutofit = true;
       }
@@ -2087,17 +3053,24 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
       if (usesNoAutofitSingleLineTitleFit) {
         needsDynamicAutofit = true;
       }
+      // Office can keep a short, square-wrapped heading on one line when its glyph
+      // metrics only narrowly exceed the text box. Measure these boxes, but accept
+      // at most a 2% width correction so deliberate multi-line layouts stay wrapped.
+      if (usesNearFitSingleLineWrap) {
+        needsDynamicAutofit = true;
+      }
 
       let isVerticalText = false;
+      let verticalTextMode: DrawingMLVerticalTextMode | undefined;
       let textAnchor: string | null | undefined;
       const isSingleLineSpAutoFit =
-        !!hasSpAutoFit && !hasNormAutofit && isSingleLineTextBody(node.textBody);
-      const hasCenteredParagraphs = hasExplicitCenteredParagraph(node.textBody);
+        !!hasSpAutoFit && !hasNormAutofit && isSingleLineTextBody(textBody);
+      const hasCenteredParagraphs = hasExplicitCenteredParagraph(textBody);
 
       // Apply bodyPr (text body properties)
       // Use layout/master bodyPr as fallback for missing attributes
       {
-        if (bodyPr) {
+        {
           // Text wrap: only wrap="none" should force single-line.
           // Title placeholders without explicit wrap should still be allowed to wrap.
           if (textWrap === 'none') {
@@ -2106,10 +3079,9 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
         }
 
         // Vertical alignment (anchor): prefer shape's own, then layout placeholder
-        const ownAnchor = bodyPr ? bodyPr.attr('anchor') : undefined;
-        const fallbackAnchor = fallbackBp ? fallbackBp.attr('anchor') : undefined;
-        const anchor = ownAnchor || fallbackAnchor;
-        const hasExplicitTextAnchor = ownAnchor !== undefined || fallbackAnchor !== undefined;
+        const anchor = resolvedTextAnchor;
+        const hasExplicitTextAnchor =
+          ownTextAnchor !== undefined || fallbackTextAnchor !== undefined;
         textAnchor = anchor;
         const vert =
           (bodyPr ? bodyPr.attr('vert') : null) || (fallbackBp ? fallbackBp.attr('vert') : null);
@@ -2161,19 +3133,35 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
         if (vert === 'eaVert') {
           applyVerticalTextFlow(textContainer, textAnchor);
           isVerticalText = true;
-        } else if (vert === 'vert' || vert === 'wordArtVert') {
-          applyVerticalTextFlow(textContainer, textAnchor);
+          verticalTextMode = vert;
+        } else if (vert === 'mongolianVert') {
+          applyVerticalTextFlow(textContainer, textAnchor, undefined, 'vertical-lr');
           isVerticalText = true;
+          verticalTextMode = vert;
+        } else if (vert === 'wordArtVert') {
+          applyVerticalTextFlow(textContainer, textAnchor, 'upright', 'vertical-lr');
+          isVerticalText = true;
+          verticalTextMode = vert;
+        } else if (vert === 'wordArtVertRtl') {
+          applyVerticalTextFlow(textContainer, textAnchor, 'upright');
+          isVerticalText = true;
+          verticalTextMode = vert;
+        } else if (vert === 'vert') {
+          applyVerticalTextFlow(textContainer, textAnchor, 'sideways');
+          isVerticalText = true;
+          verticalTextMode = vert;
         } else if (vert === 'vert270') {
-          applyVerticalTextFlow(textContainer, textAnchor);
+          applyVerticalTextFlow(textContainer, textAnchor, 'sideways');
           appendTransform(textContainer, 'rotate(180deg)');
           isVerticalText = true;
+          verticalTextMode = vert;
         }
 
         if (
           isSingleLineSpAutoFit &&
           !hasExplicitTextAnchor &&
           !isVerticalText &&
+          textWrap !== 'none' &&
           hasCenteredParagraphs
         ) {
           textContainer.style.justifyContent = 'center';
@@ -2186,14 +3174,11 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
         textContainer.style.transformOrigin = 'center center';
       }
 
-      // If text was flipped, un-flip the text so it reads correctly
-      // Append to existing transforms (don't overwrite vert270 rotation)
+      // PowerPoint counters the text's horizontal axis for flipped shapes. With flipH this
+      // keeps text readable; with flipV it produces the 180-degree upside-down text Office shows.
       if (node.flipH || node.flipV) {
         const existing = textContainer.style.transform || '';
-        const flipParts: string[] = [];
-        if (node.flipH) flipParts.push('scaleX(-1)');
-        if (node.flipV) flipParts.push('scaleY(-1)');
-        textContainer.style.transform = `${existing} ${flipParts.join(' ')}`.trim();
+        textContainer.style.transform = `${existing} scaleX(-1)`.trim();
       }
 
       // Resolve fontRef color from shape style element (used by SmartArt diagram shapes
@@ -2207,60 +3192,79 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
         }
       }
 
-      const textOptions =
-        fontRefColor || isVerticalText || (hasSpAutoFit && !hasNormAutofit)
-          ? {
-              ...(fontRefColor ? { fontRefColor } : {}),
-              ...(isVerticalText ? { isVerticalText } : {}),
-              ...(hasSpAutoFit && !hasNormAutofit
-                ? (() => {
-                    const paragraphCount = visibleParagraphCount(node.textBody);
-                    const hasExplicitSpacing = hasExplicitParagraphSpacing(node.textBody);
-                    const shouldUseOfficeWrappedLineHeight =
-                      !hasExplicitSpacing &&
-                      textWrap !== 'none' &&
-                      (paragraphCount > 1 ||
-                        visibleTextLength(node.textBody) > IMPLICIT_SINGLE_LINE_LABEL_MAX_CHARS);
+      const paragraphCount = visibleParagraphCount(textBody);
+      const textOptions = {
+        trimOuterParagraphSpacing: true,
+        defaultLineHeight:
+          paragraphCount > 1
+            ? OFFICE_MULTI_PARAGRAPH_LINE_HEIGHT
+            : OFFICE_SINGLE_PARAGRAPH_LINE_HEIGHT,
+        ...(fontRefColor ? { fontRefColor } : {}),
+        ...(isVerticalText ? { isVerticalText } : {}),
+        ...(verticalTextMode ? { verticalTextMode } : {}),
+        ...(hasSpAutoFit && !hasNormAutofit
+          ? (() => {
+              const hasExplicitSpacing = hasExplicitParagraphSpacing(textBody);
+              const shouldUseOfficeWrappedLineHeight =
+                !hasExplicitSpacing &&
+                textWrap !== 'none' &&
+                (paragraphCount > 1 ||
+                  visibleTextLength(textBody) > IMPLICIT_SINGLE_LINE_LABEL_MAX_CHARS);
 
-                    return {
-                      trimOuterParagraphSpacing: true,
-                      ...(isSingleLineSpAutoFit &&
-                      !isVerticalText &&
-                      (textWrap === 'none' || hasCenteredParagraphs)
-                        ? {
-                            compactSingleLineSpacing: true,
-                            defaultLineHeight: '1',
-                          }
-                        : shouldUseOfficeWrappedLineHeight
-                          ? {
-                              defaultLineHeight: '1.1',
-                            }
-                          : {}),
-                    };
-                  })()
-                : {}),
-            }
-          : undefined;
+              return isSingleLineSpAutoFit &&
+                !isVerticalText &&
+                (textWrap === 'none' || hasCenteredParagraphs)
+                ? {
+                    compactSingleLineSpacing: true,
+                    defaultLineHeight: '1',
+                  }
+                : shouldUseOfficeWrappedLineHeight
+                  ? {
+                      defaultLineHeight: '1.1',
+                    }
+                  : {};
+            })()
+          : {}),
+      };
 
-      renderTextBody(node.textBody, node.placeholder, ctx, textContainer, textOptions);
+      renderTextBody(textBody, node.placeholder, ctx, textContainer, textOptions);
+      applyStaticShape3DTextPlane(textContainer, shape3dPlan);
       wrapper.appendChild(textContainer);
 
       // Dynamic text fit: measure rendered text and compute any additional scale
       // needed after OOXML fontScale, spAutoFit, or implicit single-line fitting.
       if (needsDynamicAutofit) {
+        const baseWrapperWidth = wrapper.style.width;
+        const baseWrapperHeight = wrapper.style.height;
         const baseTransform = textContainer.style.transform;
         const baseTransformOrigin = textContainer.style.transformOrigin;
         const baseWidth = textContainer.style.width;
         const baseHeight = textContainer.style.height;
         const baseWhiteSpace = textContainer.style.whiteSpace;
         const baseOverflowY = textContainer.style.overflowY;
+        const baseSvgWidth = mainSvg?.getAttribute('width') ?? null;
+        const baseSvgHeight = mainSvg?.getAttribute('height') ?? null;
+        const baseSvgPreserveAspectRatio = mainSvg?.getAttribute('preserveAspectRatio') ?? null;
         const applyDynamicAutofit = () => {
+          wrapper.style.width = baseWrapperWidth;
+          wrapper.style.height = baseWrapperHeight;
           textContainer.style.transform = baseTransform;
           textContainer.style.transformOrigin = baseTransformOrigin;
           textContainer.style.width = baseWidth;
           textContainer.style.height = baseHeight;
           textContainer.style.whiteSpace = baseWhiteSpace;
           textContainer.style.overflowY = baseOverflowY;
+          if (mainSvg) {
+            if (baseSvgWidth === null) mainSvg.removeAttribute('width');
+            else mainSvg.setAttribute('width', baseSvgWidth);
+            if (baseSvgHeight === null) mainSvg.removeAttribute('height');
+            else mainSvg.setAttribute('height', baseSvgHeight);
+            if (baseSvgPreserveAspectRatio === null) {
+              mainSvg.removeAttribute('preserveAspectRatio');
+            } else {
+              mainSvg.setAttribute('preserveAspectRatio', baseSvgPreserveAspectRatio);
+            }
+          }
 
           // The wrapper is not always in the DOM yet, so temporarily attach it offscreen to measure.
           const wasConnected = wrapper.isConnected;
@@ -2318,7 +3322,8 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
               !wrappedHeightFits ||
               isSingleLineSpAutoFit ||
               usesImplicitSingleLineFit ||
-              usesNoAutofitSingleLineTitleFit);
+              usesNoAutofitSingleLineTitleFit ||
+              usesNearFitSingleLineWrap);
           let measuredUnwrappedWidth = false;
           if (shouldMeasureUnwrappedWidth) {
             textContainer.style.whiteSpace = 'nowrap';
@@ -2334,8 +3339,37 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
             }
             wrapper.style.visibility = savedWrapperVisibility;
           }
+          const unwrappedWidthScale =
+            measuredUnwrappedWidth && contentW > 0 ? containerW / contentW : 1;
+          const shouldGrowStandaloneTextBox =
+            usesNativeShapeAutofitCandidate &&
+            !wrappedFits &&
+            (visibleParagraphCount(textBody) > 1 ||
+              (measuredUnwrappedWidth &&
+                (contentH <= containerH || hasExplicitVisibleRunFontSize(textBody)) &&
+                unwrappedWidthScale < SP_AUTOFIT_UNWRAPPED_WIDTH_SCALE_FLOOR));
+          if (shouldGrowStandaloneTextBox) {
+            const fittedWrapperWidth =
+              textWrap === 'none' ? Math.max(minW, contentW) : Math.max(minW, containerW);
+            const fittedWrapperHeight = Math.max(minH, wrappedContentH);
+            wrapper.style.width = `${fittedWrapperWidth}px`;
+            wrapper.style.height = `${fittedWrapperHeight}px`;
+            textContainer.style.overflowX = 'visible';
+            textContainer.style.overflowY = 'visible';
+            if (mainSvg) {
+              mainSvg.setAttribute('width', String(fittedWrapperWidth));
+              mainSvg.setAttribute('height', String(fittedWrapperHeight));
+              if (fittedWrapperWidth !== minW || fittedWrapperHeight !== minH) {
+                mainSvg.setAttribute('preserveAspectRatio', 'none');
+              }
+            }
+            return;
+          }
           let scale = 1;
-          const fitWidthOnly = usesNoAutofitSingleLineTitleFit || usesImplicitSingleLineFit;
+          const fitWidthOnly =
+            usesNoAutofitSingleLineTitleFit ||
+            usesImplicitSingleLineFit ||
+            usesNearFitSingleLineWrap;
           const usesUnwrappedNoScaleFit =
             hasSpAutoFit &&
             !hasNormAutofit &&
@@ -2370,18 +3404,19 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
               canFitWrappedLinesByWidth ||
               usesSingleLineSpAutoFitWidthFit ||
               usesImplicitSingleLineFit ||
-              usesNoAutofitSingleLineTitleFit;
+              usesNoAutofitSingleLineTitleFit ||
+              usesNearFitSingleLineWrap;
             if (
               canUseUnwrappedWidthScale &&
               (!usesNoAutofitSingleLineTitleFit ||
-                widthScale >= NO_AUTOFIT_TITLE_METRIC_SCALE_FLOOR)
+                widthScale >= NO_AUTOFIT_TITLE_METRIC_SCALE_FLOOR) &&
+              (!usesNearFitSingleLineWrap || widthScale >= NEAR_FIT_SINGLE_LINE_WRAP_SCALE_FLOOR)
             ) {
               scale = Math.min(scale, widthScale);
             }
           }
           const usesUnwrappedWidthFit =
-            hasSpAutoFit &&
-            !hasNormAutofit &&
+            ((hasSpAutoFit && !hasNormAutofit) || usesNearFitSingleLineWrap) &&
             scale < 1 &&
             contentH <= containerH &&
             !wrappedHeightFits;
@@ -2422,6 +3457,12 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
             hasToleratedVerticalMetricOverhang ||
             hasIgnoredImplicitSingleLineVerticalOverflow
           ) {
+            // Pair visible vertical overflow with clip rather than hidden on the
+            // other axis. CSS otherwise computes hidden/visible as hidden/auto,
+            // creating a scrollbar that also steals text wrapping width.
+            if (textContainer.style.overflowX === 'hidden') {
+              textContainer.style.overflowX = 'clip';
+            }
             textContainer.style.overflowY = 'visible';
           }
         };
@@ -2460,6 +3501,28 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
   if (effectiveEffectLst.exists()) {
     const outerShdw = effectiveEffectLst.child('outerShdw');
     if (outerShdw.exists()) {
+      // A supported camera plane replaces the ordinary path with a projected polygon. Keep the
+      // resolved OOXML shadow on the visible surface instead of filtering the hidden source path.
+      const outerShadowPath =
+        shape3dPlan?.mode === 'camera-projected-plane'
+          ? (mainSvg?.querySelector<SVGPathElement>('path[data-pptx-shape3d-projected-plane]') ??
+            mainPath)
+          : mainPath;
+      const outerShadowBounds =
+        shape3dPlan?.mode === 'camera-projected-plane'
+          ? (() => {
+              const xs = shape3dPlan.corners.map((point) => point.x);
+              const ys = shape3dPlan.corners.map((point) => point.y);
+              const x = Math.min(...xs);
+              const y = Math.min(...ys);
+              return {
+                x,
+                y,
+                w: Math.max(...xs) - x,
+                h: Math.max(...ys) - y,
+              };
+            })()
+          : mainSvgBounds;
       const dir = outerShdw.numAttr('dir') ?? 0; // direction in 60000ths of degree
       const dist = outerShdw.numAttr('dist') ?? 0; // distance in EMU
       const blurRad = outerShdw.numAttr('blurRad') ?? 0; // blur radius in EMU
@@ -2470,8 +3533,29 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
       const dirDeg = dir / 60000;
       const distPx = emuToPx(dist);
       const blurPx = emuToPx(blurRad);
-      const offsetX = distPx * Math.cos((dirDeg * Math.PI) / 180);
-      const offsetY = distPx * Math.sin((dirDeg * Math.PI) / 180);
+      // The projected replacement path is emitted directly in camera-space coordinates while the
+      // OOXML effect lengths are still expressed for the source plane. Carry the measured
+      // horizontal projection scale into blur and distance. Native orthographic planes contract
+      // that effect footprint slightly even when the projected width is unchanged.
+      const cameraShadowScale =
+        shape3dPlan?.mode === 'camera-projected-plane' && outerShadowBounds
+          ? shape3dPlan.camera.kind === 'perspective'
+            ? Math.min(4, Math.max(1, outerShadowBounds.w / Math.max(shape3dPlan.bounds.width, 1)))
+            : Math.min(
+                4,
+                Math.max(
+                  0.25,
+                  (outerShadowBounds.w / Math.max(shape3dPlan.bounds.width, 1)) * 0.95,
+                ),
+              )
+          : 1;
+      const cameraShadowFilterOptions =
+        shape3dPlan?.mode === 'camera-projected-plane'
+          ? ({ colorInterpolation: 'sRGB' } as const)
+          : {};
+      const svgBlurPx = blurPx * cameraShadowScale;
+      const offsetX = distPx * cameraShadowScale * Math.cos((dirDeg * Math.PI) / 180);
+      const offsetY = distPx * cameraShadowScale * Math.sin((dirDeg * Math.PI) / 180);
 
       // Resolve shadow color
       let shadowColor = 'rgba(0,0,0,0.4)';
@@ -2484,87 +3568,270 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
         shadowColor = `rgba(${sr},${sg},${sb},${shdAlpha.toFixed(3)})`;
       }
 
+      const explicitEffectLst = spPr.child('effectLst');
+      const effectChildren = explicitEffectLst.children();
+      const preset = node.presetGeometry?.toLowerCase() ?? '';
+      const groupScale = ctx.groupChildScale;
+      const groupDepth = ctx.groupDepth ?? 0;
+      const hasVerifiedGroupScale =
+        (groupDepth === 0 && !groupScale) ||
+        (groupDepth === 1 &&
+          !!groupScale &&
+          Number.isFinite(groupScale.x) &&
+          Number.isFinite(groupScale.y) &&
+          Math.abs(groupScale.x - BOUNDED_OUTER_SHADOW_GROUP_SCALE) <= 0.000001 &&
+          Math.abs(groupScale.y - BOUNDED_OUTER_SHADOW_GROUP_SCALE) <= 0.000001);
+      const isStandaloneShape = groupDepth === 0 && !groupScale;
+      const isVerifiedGroupChild = groupDepth === 1 && hasVerifiedGroupScale;
+      const normalizedDirection = ((dir % 21600000) + 21600000) % 21600000;
+      const hasVerifiedScale =
+        (sx == null && sy == null) ||
+        (sx != null &&
+          sy != null &&
+          sx > 0 &&
+          sy > 0 &&
+          Math.abs(sx - sy) <= 0.000001 &&
+          BOUNDED_OUTER_SHADOW_SCALES.has(sx));
+      const hasOpaqueDirectSolidFill =
+        spPr.child('solidFill').exists() && isOpaqueCssColor(fillCss);
+      const hasOpaqueDirectLinearGradient =
+        spPr.child('gradFill').exists() &&
+        gradientFillData?.type === 'linear' &&
+        gradientFillData.stops.length === 2 &&
+        gradientFillData.stops.every((stop) => isOpaqueCssColor(stop.color));
+      const shadowColorChildren = outerShdw.children();
+      const shadowColorNode = shadowColorChildren.length === 1 ? shadowColorChildren[0] : undefined;
+      const shadowColorModifiers = shadowColorNode?.children() ?? [];
+      const hasVerifiedSrgbShadowColor =
+        shadowColorNode?.localName === 'srgbClr' &&
+        /^[0-9a-f]{6}$/i.test(shadowColorNode.attr('val') ?? '') &&
+        shadowColorModifiers.length === 1 &&
+        shadowColorModifiers[0].localName === 'alpha' &&
+        shadowColorModifiers[0].numAttr('val') === 35000;
+      const hasVerifiedSchemeShadowColor =
+        shadowColorNode?.localName === 'schemeClr' &&
+        !!shadowColorNode.attr('val') &&
+        shadowColorModifiers.length === 3 &&
+        shadowColorNode.child('lumMod').numAttr('val') === 60000 &&
+        shadowColorNode.child('lumOff').numAttr('val') === 10000 &&
+        shadowColorNode.child('alpha').numAttr('val') === 35000;
+      const hasAbsentScale = sx == null && sy == null;
+      const normalizedAlignment = algn?.toLowerCase();
+      const matchesVerifiedMatrixRow =
+        (isStandaloneShape &&
+          preset === 'rect' &&
+          hasOpaqueDirectSolidFill &&
+          hasVerifiedSrgbShadowColor &&
+          blurRad === 127000 &&
+          outerShdw.attr('dist') == null &&
+          outerShdw.attr('dir') == null &&
+          hasAbsentScale &&
+          algn == null) ||
+        (isStandaloneShape &&
+          preset === 'roundrect' &&
+          hasOpaqueDirectSolidFill &&
+          hasVerifiedSrgbShadowColor &&
+          blurRad === 50800 &&
+          dist === 38100 &&
+          normalizedDirection === 5400000 &&
+          hasAbsentScale &&
+          algn == null) ||
+        (isStandaloneShape &&
+          preset === 'ellipse' &&
+          hasOpaqueDirectLinearGradient &&
+          hasVerifiedSrgbShadowColor &&
+          blurRad === 101600 &&
+          dist === 76200 &&
+          normalizedDirection === 2700000 &&
+          hasAbsentScale &&
+          normalizedAlignment === 'ctr') ||
+        (isStandaloneShape &&
+          preset === 'rect' &&
+          hasOpaqueDirectSolidFill &&
+          hasVerifiedSrgbShadowColor &&
+          blurRad === 115455 &&
+          dist === 46182 &&
+          outerShdw.attr('dir') == null &&
+          sx === 102000 &&
+          sy === 102000 &&
+          normalizedAlignment === 'ctr') ||
+        (isStandaloneShape &&
+          preset === 'rect' &&
+          hasOpaqueDirectSolidFill &&
+          hasVerifiedSrgbShadowColor &&
+          blurRad === 317500 &&
+          dist === 127000 &&
+          normalizedDirection === 8100000 &&
+          sx === 92000 &&
+          sy === 92000 &&
+          normalizedAlignment === 'tr') ||
+        (isVerifiedGroupChild &&
+          preset === 'roundrect' &&
+          hasOpaqueDirectSolidFill &&
+          hasVerifiedSrgbShadowColor &&
+          blurRad === 76200 &&
+          dist === 50800 &&
+          normalizedDirection === 2700000 &&
+          hasAbsentScale &&
+          algn == null) ||
+        (isStandaloneShape &&
+          preset === 'rect' &&
+          hasOpaqueDirectSolidFill &&
+          hasVerifiedSchemeShadowColor &&
+          blurRad === 101600 &&
+          dist === 50800 &&
+          normalizedDirection === 5400000 &&
+          sx === 100000 &&
+          sy === 100000 &&
+          normalizedAlignment === 'b');
+      const supportsBoundedOrdinaryOuterShadow =
+        BOUNDED_OUTER_SHADOW_BLUR_RADII.has(blurRad) &&
+        BOUNDED_OUTER_SHADOW_DISTANCES.has(dist) &&
+        BOUNDED_OUTER_SHADOW_DIRECTIONS.has(normalizedDirection) &&
+        isBoundedOuterShadowAlignment(algn) &&
+        hasVerifiedScale &&
+        Math.abs(shdAlpha - 0.35) <= 0.000001 &&
+        (outerShdw.numAttr('kx') ?? 0) === 0 &&
+        (outerShdw.numAttr('ky') ?? 0) === 0 &&
+        outerShdw.attr('rotWithShape') === '0' &&
+        explicitEffectLst.exists() &&
+        explicitEffectLst.child('outerShdw').element === outerShdw.element &&
+        effectChildren.length === 1 &&
+        effectChildren[0].localName === 'outerShdw' &&
+        (preset === 'rect' || preset === 'roundrect' || preset === 'ellipse') &&
+        (hasOpaqueDirectSolidFill || hasOpaqueDirectLinearGradient) &&
+        (hasVerifiedSrgbShadowColor || hasVerifiedSchemeShadowColor) &&
+        node.line?.child('noFill').exists() === true &&
+        (!node.textBody || !hasVisibleText(node.textBody)) &&
+        node.rotation === 0 &&
+        !node.flipH &&
+        !node.flipV &&
+        !node.shape3d &&
+        !ctx.groupTransformHasRotationOrFlip &&
+        hasVerifiedGroupScale &&
+        matchesVerifiedMatrixRow;
+
       // PowerPoint outerShdw with sx/sy creates a scaled shadow copy, then draws the
-      // shape on top.  When dist=0 and scale ≈ 100%, only the thin edge overhang is
-      // visible – far subtler than a CSS drop-shadow with the full blur radius.
-      // Approximate with box-shadow using spread derived from scale and reduced blur.
+      // shape on top. Use a real silhouette clone for the narrow verified lane and
+      // retain the existing approximation for more complex combinations.
       if (sx != null && sy != null && sx > 0 && sy > 0) {
         const scaleX = sx / 100000;
         const scaleY = sy / 100000;
-        const shapeW = node.size?.w ?? 100;
-        const shapeH = node.size?.h ?? 100;
+        const supportsScaledSilhouette =
+          supportsBoundedOrdinaryOuterShadow &&
+          Math.abs(scaleX - scaleY) <= 0.000001 &&
+          Math.abs(scaleX - 1) > 0.000001 &&
+          !!mainSvgNs &&
+          !!mainSvg &&
+          !!mainDefs &&
+          !!mainPath &&
+          !!mainSvgBounds;
 
-        // For line-like shapes, sx/sy should scale line thickness, not full line length.
-        // Using shape width here can explode spread on long connectors (slide 68 regression).
-        let spreadBasisW = shapeW;
-        let spreadBasisH = shapeH;
-        if (isLineLike || shapeW <= 1 || shapeH <= 1) {
-          const lineWEmu = node.line?.numAttr('w') ?? 12700;
-          const lineThickness = Math.max(1, emuToPx(lineWEmu));
-          spreadBasisW = lineThickness;
-          spreadBasisH = lineThickness;
-        }
-
-        // Spread = how far the shadow extends beyond the shape on each side
-        const spreadX = (spreadBasisW * (scaleX - 1)) / 2;
-        const spreadY = (spreadBasisH * (scaleY - 1)) / 2;
-        const spread = Math.max(0, (spreadX + spreadY) / 2);
-
-        // Alignment shifts the shadow anchor point; compute extra offset
-        let alignOffX = 0;
-        let alignOffY = 0;
-        if (algn) {
-          // OOXML algn is an enum (t, b, l, r, tl, tr, bl, br, ctr), not a substring bag.
-          // Exact matching avoids misinterpreting "ctr" as containing both "t" and "r".
-          const a = algn.toLowerCase();
-          if (a === 't' || a === 'tl' || a === 'tr') alignOffY = (spreadBasisH * (scaleY - 1)) / 2;
-          if (a === 'b' || a === 'bl' || a === 'br') alignOffY = (-spreadBasisH * (scaleY - 1)) / 2;
-          if (a === 'l' || a === 'tl' || a === 'bl') alignOffX = (spreadBasisW * (scaleX - 1)) / 2;
-          if (a === 'r' || a === 'tr' || a === 'br') alignOffX = (-spreadBasisW * (scaleX - 1)) / 2;
-        }
-
-        // When spread is tiny relative to blurPx, PowerPoint's Gaussian blur
-        // distributes energy across the full blur area.  The visible edge (only
-        // `spread` wide) receives only a fraction of the original alpha.
-        // Attenuate alpha accordingly so thin-edge shadows are nearly invisible.
-        const effectiveBlur = Math.min(blurPx, spread * 3);
-        let effectiveAlpha = shdAlpha;
-        if (blurPx > 0 && spread < blurPx) {
-          effectiveAlpha = shdAlpha * (spread / blurPx);
-        }
-
-        // Skip shadow entirely if effective alpha is negligible
-        if (effectiveAlpha >= 0.01) {
-          const bsX = offsetX + alignOffX;
-          const bsY = offsetY + alignOffY;
-          // Recompute shadow color with attenuated alpha
-          let attenuatedColor = shadowColor;
-          if (shdColor) {
-            const hex2 = shdColor.startsWith('#') ? shdColor : `#${shdColor}`;
-            const { r: sr2, g: sg2, b: sb2 } = hexToRgb(hex2);
-            shadowRgb = { r: sr2, g: sg2, b: sb2 };
-            attenuatedColor = `rgba(${sr2},${sg2},${sb2},${effectiveAlpha.toFixed(4)})`;
-          }
-          if (!isLineLike && mainSvgNs && mainDefs && mainPath && mainSvgBounds) {
-            applySvgDropShadowFilter(mainSvgNs, mainDefs, mainPath, mainSvgBounds, {
-              dx: bsX,
-              dy: bsY,
-              blur: effectiveBlur,
-              color: shadowRgb,
-              opacity: effectiveAlpha,
-            });
-          } else {
-            wrapper.style.boxShadow = `${bsX.toFixed(1)}px ${bsY.toFixed(1)}px ${effectiveBlur.toFixed(1)}px ${spread.toFixed(1)}px ${attenuatedColor}`;
-          }
-        }
-      } else {
-        if (!isLineLike && mainSvgNs && mainDefs && mainPath && mainSvgBounds) {
-          applySvgDropShadowFilter(mainSvgNs, mainDefs, mainPath, mainSvgBounds, {
+        if (
+          supportsScaledSilhouette &&
+          mainSvgNs &&
+          mainSvg &&
+          mainDefs &&
+          mainPath &&
+          mainSvgBounds
+        ) {
+          appendScaledOuterShadowSilhouette(mainSvgNs, mainSvg, mainDefs, mainPath, mainSvgBounds, {
             dx: offsetX,
             dy: offsetY,
             blur: blurPx,
+            scaleX,
+            scaleY,
+            alignment: normalizeOuterShadowAlignment(algn),
             color: shadowRgb,
             opacity: shdAlpha,
+          });
+        } else {
+          const shapeW = node.size?.w ?? 100;
+          const shapeH = node.size?.h ?? 100;
+
+          // For line-like shapes, sx/sy should scale line thickness, not full line length.
+          // Using shape width here can explode spread on long connectors (slide 68 regression).
+          let spreadBasisW = shapeW;
+          let spreadBasisH = shapeH;
+          if (isLineLike || shapeW <= 1 || shapeH <= 1) {
+            const lineWEmu = node.line?.numAttr('w') ?? 12700;
+            const lineThickness = Math.max(1, emuToPx(lineWEmu));
+            spreadBasisW = lineThickness;
+            spreadBasisH = lineThickness;
+          }
+
+          // Spread = how far the shadow extends beyond the shape on each side
+          const spreadX = (spreadBasisW * (scaleX - 1)) / 2;
+          const spreadY = (spreadBasisH * (scaleY - 1)) / 2;
+          const spread = Math.max(0, (spreadX + spreadY) / 2);
+
+          // Alignment shifts the shadow anchor point; compute extra offset
+          let alignOffX = 0;
+          let alignOffY = 0;
+          if (algn) {
+            // OOXML algn is an enum (t, b, l, r, tl, tr, bl, br, ctr), not a substring bag.
+            // Exact matching avoids misinterpreting "ctr" as containing both "t" and "r".
+            const a = algn.toLowerCase();
+            if (a === 't' || a === 'tl' || a === 'tr')
+              alignOffY = (spreadBasisH * (scaleY - 1)) / 2;
+            if (a === 'b' || a === 'bl' || a === 'br')
+              alignOffY = (-spreadBasisH * (scaleY - 1)) / 2;
+            if (a === 'l' || a === 'tl' || a === 'bl')
+              alignOffX = (spreadBasisW * (scaleX - 1)) / 2;
+            if (a === 'r' || a === 'tr' || a === 'br')
+              alignOffX = (-spreadBasisW * (scaleX - 1)) / 2;
+          }
+
+          // When a scaled-up shadow overhang is tiny relative to blurPx, PowerPoint's
+          // Gaussian blur distributes energy across the full blur area. The visible
+          // edge receives only a fraction of the original alpha. Scaled-down shadows
+          // still remain visible through their offset/blur, so do not attenuate them
+          // to zero just because they have no positive spread.
+          const effectiveBlur = spread > 0 ? Math.min(blurPx, spread * 3) : blurPx;
+          let effectiveAlpha = shdAlpha;
+          if (spread > 0 && blurPx > 0 && spread < blurPx) {
+            effectiveAlpha = shdAlpha * (spread / blurPx);
+          }
+
+          // Skip shadow entirely if effective alpha is negligible
+          if (effectiveAlpha >= 0.01) {
+            const bsX = offsetX + alignOffX;
+            const bsY = offsetY + alignOffY;
+            // Recompute shadow color with attenuated alpha
+            let attenuatedColor = shadowColor;
+            if (shdColor) {
+              const hex2 = shdColor.startsWith('#') ? shdColor : `#${shdColor}`;
+              const { r: sr2, g: sg2, b: sb2 } = hexToRgb(hex2);
+              shadowRgb = { r: sr2, g: sg2, b: sb2 };
+              attenuatedColor = `rgba(${sr2},${sg2},${sb2},${effectiveAlpha.toFixed(4)})`;
+            }
+            if (!isLineLike && mainSvgNs && mainDefs && outerShadowPath && outerShadowBounds) {
+              applySvgDropShadowFilter(mainSvgNs, mainDefs, outerShadowPath, outerShadowBounds, {
+                dx: bsX,
+                dy: bsY,
+                blur: effectiveBlur * cameraShadowScale,
+                color: shadowRgb,
+                opacity: effectiveAlpha,
+                ...cameraShadowFilterOptions,
+              });
+            } else {
+              wrapper.style.boxShadow = `${bsX.toFixed(1)}px ${bsY.toFixed(1)}px ${effectiveBlur.toFixed(1)}px ${spread.toFixed(1)}px ${attenuatedColor}`;
+            }
+          }
+        }
+      } else {
+        if (!isLineLike && mainSvgNs && mainDefs && outerShadowPath && outerShadowBounds) {
+          applySvgDropShadowFilter(mainSvgNs, mainDefs, outerShadowPath, outerShadowBounds, {
+            dx: offsetX,
+            dy: offsetY,
+            blur: svgBlurPx,
+            color: shadowRgb,
+            opacity: shdAlpha,
+            stdDeviationScale:
+              supportsBoundedOrdinaryOuterShadow && dist === 0
+                ? BOUNDED_ZERO_DISTANCE_OUTER_SHADOW_STDDEV_PER_BLUR_RADIUS
+                : undefined,
+            ...cameraShadowFilterOptions,
           });
         } else {
           appendCssFilter(
@@ -2580,20 +3847,38 @@ export function renderShape(node: ShapeNodeData, ctx: RenderContext): HTMLElemen
       applyGlowFilter(wrapper, glow, ctx);
     }
 
-    // Reflection is not directly representable in standard CSS across browsers.
-    // Approximate via -webkit-box-reflect when available (Chromium/WebKit).
+    const softEdge = effectiveEffectLst.child('softEdge');
+    if (softEdge.exists() && !isLineLike && mainSvgNs && mainDefs && mainPath && mainSvgBounds) {
+      const radiusPx = emuToPx(softEdge.numAttr('rad') ?? 0);
+      if (radiusPx > 0) {
+        applySvgSoftEdgeFilter(mainSvgNs, mainDefs, mainPath, mainSvgBounds, radiusPx);
+      }
+    }
+
+    const innerShdw = effectiveEffectLst.child('innerShdw');
+    if (innerShdw.exists() && !isLineLike && mainSvgNs && mainDefs && mainPath && mainSvgBounds) {
+      const dir = innerShdw.numAttr('dir') ?? 0;
+      const distPx = emuToPx(innerShdw.numAttr('dist') ?? 0);
+      const blurPx = emuToPx(innerShdw.numAttr('blurRad') ?? 0);
+      const dirDeg = dir / 60000;
+      const offsetX = distPx * Math.cos((dirDeg * Math.PI) / 180);
+      const offsetY = distPx * Math.sin((dirDeg * Math.PI) / 180);
+      const { color, alpha } = resolveColor(innerShdw, ctx);
+      if (color && alpha > 0) {
+        const hex = color.startsWith('#') ? color : `#${color}`;
+        applySvgInnerShadowFilter(mainSvgNs, mainDefs, mainPath, mainSvgBounds, {
+          dx: offsetX,
+          dy: offsetY,
+          blur: blurPx,
+          color: hexToRgb(hex),
+          opacity: alpha,
+        });
+      }
+    }
+
     const reflection = effectiveEffectLst.child('reflection');
     if (reflection.exists()) {
-      const dist = emuToPx(reflection.numAttr('dist') ?? 0);
-      const stA = (reflection.numAttr('stA') ?? 50000) / 100000;
-      const endA = (reflection.numAttr('endA') ?? 0) / 100000;
-      const stPos = Math.max(0, Math.min(100, (reflection.numAttr('stPos') ?? 0) / 1000));
-      const endPos = Math.max(0, Math.min(100, (reflection.numAttr('endPos') ?? 100000) / 1000));
-      const mask = `linear-gradient(to bottom, rgba(255,255,255,${stA.toFixed(3)}) ${stPos.toFixed(1)}%, rgba(255,255,255,${endA.toFixed(3)}) ${endPos.toFixed(1)}%)`;
-      const reflectValue = `below ${dist.toFixed(1)}px ${mask}`;
-      wrapper.style.setProperty('-webkit-box-reflect', reflectValue);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (wrapper.style as any).webkitBoxReflect = reflectValue;
+      applyReflectionEffect(wrapper, reflection, { w: minW, h: minH });
     }
   }
 

@@ -24,18 +24,18 @@ import { hexToRgb } from '../utils/color';
 import { SafeXmlNode } from '../parser/XmlParser';
 import { getPredefinedTableStyle } from './predefinedTableStyles';
 import { resolveThemeFontStack } from './fontResolver';
+import { splitTiledPatternFillCss } from './cssValues';
 
 function applyCssFillBackground(el: HTMLElement, fillCss: string): void {
   clearCssFillBackground(el);
 
   if (fillCss.includes('gradient') && fillCss.includes(' 0 0 / ')) {
-    const bgMatch = fillCss.match(/,\s*(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|[a-zA-Z]+)\s*$/);
-    if (bgMatch && bgMatch.index !== undefined) {
-      const imageLayers = fillCss.slice(0, bgMatch.index).replace(/\s+0 0\s*\/\s*8px 8px/g, '');
-      el.style.backgroundImage = imageLayers;
+    const tiled = splitTiledPatternFillCss(fillCss);
+    if (tiled) {
+      el.style.backgroundImage = tiled.imageLayers;
       el.style.backgroundSize = '8px 8px';
       el.style.backgroundRepeat = 'repeat';
-      el.style.backgroundColor = bgMatch[1];
+      el.style.backgroundColor = tiled.color;
       return;
     }
   }
@@ -163,6 +163,18 @@ function getStyleSections(
   if (isLastCol && colIdx === totalCols - 1) {
     const s = tblStyle.child('lastCol');
     if (s.exists()) sections.push(s);
+  }
+
+  // Corner sections require both intersecting row/column options.
+  const corners: Array<[string, boolean]> = [
+    ['nwCell', isFirstRow && isFirstCol && rowIdx === 0 && colIdx === 0],
+    ['swCell', isLastRow && isFirstCol && rowIdx === totalRows - 1 && colIdx === 0],
+    ['neCell', isFirstRow && isLastCol && rowIdx === 0 && colIdx === totalCols - 1],
+    ['seCell', isLastRow && isLastCol && rowIdx === totalRows - 1 && colIdx === totalCols - 1],
+  ];
+  for (const [name, applies] of corners) {
+    const section = tblStyle.child(name);
+    if (applies && section.exists()) sections.push(section);
   }
 
   return sections;
@@ -312,6 +324,8 @@ function applyStyleBorders(
   colIdx?: number,
   totalRows?: number,
   totalCols?: number,
+  rowSpan = 1,
+  gridSpan = 1,
 ): void {
   const tcBdr = tcStyle.child('tcBdr');
   if (!tcBdr.exists()) return;
@@ -328,7 +342,7 @@ function applyStyleBorders(
   // insideV → borderRight for non-last cols, borderLeft for non-first cols
   const insideH = tcBdr.child('insideH');
   if (insideH.exists() && rowIdx !== undefined && totalRows !== undefined) {
-    if (rowIdx < totalRows - 1) {
+    if (rowIdx + rowSpan < totalRows) {
       borderMap.push(['insideH', 'borderBottom']);
     }
     if (rowIdx > 0) {
@@ -337,7 +351,7 @@ function applyStyleBorders(
   }
   const insideV = tcBdr.child('insideV');
   if (insideV.exists() && colIdx !== undefined && totalCols !== undefined) {
-    if (colIdx < totalCols - 1) {
+    if (colIdx + gridSpan < totalCols) {
       borderMap.push(['insideV', 'borderRight']);
     }
     if (colIdx > 0) {
@@ -353,7 +367,10 @@ function applyStyleBorders(
     const ln = side.child('ln');
     if (ln.exists()) {
       const noFill = ln.child('noFill');
-      if (noFill.exists()) continue;
+      if (noFill.exists()) {
+        td.style[cssProp] = 'none';
+        continue;
+      }
 
       const style = resolveLineStyle(ln, ctx);
       if (style.width > 0 && style.color !== 'transparent') {
@@ -366,7 +383,10 @@ function applyStyleBorders(
     const lnRef = side.child('lnRef');
     if (lnRef.exists()) {
       const idx = lnRef.numAttr('idx') ?? 0;
-      if (idx === 0) continue; // idx 0 = no line
+      if (idx === 0) {
+        td.style[cssProp] = 'none';
+        continue;
+      }
 
       // Resolve color from the lnRef's child color element
       const { color, alpha } = resolveColor(lnRef, ctx);
@@ -428,6 +448,13 @@ function applyTableBackground(table: HTMLElement, tblStyle: SafeXmlNode, ctx: Re
   }
 }
 
+function tableFlipTransform(node: TableNodeData): string {
+  const transforms: string[] = [];
+  if (node.flipH) transforms.push('scaleX(-1)');
+  if (node.flipV) transforms.push('scaleY(-1)');
+  return transforms.join(' ');
+}
+
 // ---------------------------------------------------------------------------
 // Table Rendering
 // ---------------------------------------------------------------------------
@@ -436,6 +463,9 @@ function applyTableBackground(table: HTMLElement, tblStyle: SafeXmlNode, ctx: Re
  * Render a table node into an absolutely-positioned HTML element.
  */
 export function renderTable(node: TableNodeData, ctx: RenderContext): HTMLElement {
+  const totalWidth = node.columns.reduce((sum, w) => sum + w, 0);
+  const totalRowHeight = node.rows.reduce((sum, r) => sum + r.height, 0);
+
   const wrapper = document.createElement('div');
   wrapper.style.position = 'absolute';
   wrapper.style.left = `${node.position.x}px`;
@@ -478,7 +508,6 @@ export function renderTable(node: TableNodeData, ctx: RenderContext): HTMLElemen
   }
 
   // Column widths
-  const totalWidth = node.columns.reduce((sum, w) => sum + w, 0);
   if (totalWidth > 0 && node.columns.length > 0) {
     const colgroup = document.createElement('colgroup');
     for (const colW of node.columns) {
@@ -488,9 +517,6 @@ export function renderTable(node: TableNodeData, ctx: RenderContext): HTMLElemen
     }
     table.appendChild(colgroup);
   }
-
-  // Compute total row height so we can express each row as a proportion
-  const totalRowHeight = node.rows.reduce((sum, r) => sum + r.height, 0);
 
   // Render rows
   const tbody = document.createElement('tbody');
@@ -537,7 +563,17 @@ export function renderTable(node: TableNodeData, ctx: RenderContext): HTMLElemen
           const tcStyle = section.child('tcStyle');
           if (tcStyle.exists()) {
             applyStyleFill(td, tcStyle, ctx);
-            applyStyleBorders(td, tcStyle, ctx, rowIdx, colIdx, totalRows, totalCols);
+            applyStyleBorders(
+              td,
+              tcStyle,
+              ctx,
+              rowIdx,
+              colIdx,
+              totalRows,
+              totalCols,
+              cell.rowSpan,
+              cell.gridSpan,
+            );
           }
         }
       }
@@ -551,8 +587,17 @@ export function renderTable(node: TableNodeData, ctx: RenderContext): HTMLElemen
 
       // Render text inside cell
       if (cell.textBody) {
+        const textTarget = tableFlipTransform(node) ? document.createElement('div') : td;
+        const counterFlip = tableFlipTransform(node);
+        if (counterFlip && textTarget !== td) {
+          textTarget.style.width = '100%';
+          textTarget.style.height = '100%';
+          textTarget.style.transform = counterFlip;
+          textTarget.style.transformOrigin = 'center center';
+        }
         const opts = {
           defaultLineHeight: '1',
+          trimOuterParagraphSpacing: true,
           ...(textProps
             ? {
                 cellTextColor: textProps.color,
@@ -562,7 +607,10 @@ export function renderTable(node: TableNodeData, ctx: RenderContext): HTMLElemen
               }
             : {}),
         };
-        renderTextBody(cell.textBody, undefined, ctx, td, opts);
+        renderTextBody(cell.textBody, undefined, ctx, textTarget, opts);
+        if (textTarget !== td) {
+          td.appendChild(textTarget);
+        }
       }
 
       tr.appendChild(td);

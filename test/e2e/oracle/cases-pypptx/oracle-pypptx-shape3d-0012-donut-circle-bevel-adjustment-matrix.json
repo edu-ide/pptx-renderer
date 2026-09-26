@@ -1,0 +1,55 @@
+{
+  "name": "oracle-pypptx-shape3d-0012-donut-circle-bevel-adjustment-matrix",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "p:sp.prstGeom=donut",
+      "geometry.adjustment=0|10000|default25000|32000|50000",
+      "geometry.aspect=square|wide|tall",
+      "container=standalone|nonIdentityGroup",
+      "paint=explicitSolid|themeStyleReference",
+      "a:scene3d.camera=orthographicFront",
+      "a:scene3d.lightRig=threePt:t",
+      "a:sp3d.extrusionH=0",
+      "a:sp3d.bevelT=circle"
+    ]
+  }
+}

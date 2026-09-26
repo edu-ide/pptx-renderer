@@ -13,9 +13,11 @@ Usage:
 import asyncio
 import io
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 import cv2
 import fitz  # PyMuPDF
@@ -50,10 +52,15 @@ sys.path.insert(0, str(E2E_DIR))
 
 import testdata_paths as tdp  # noqa: E402
 from extract_ground_truth import extract_ground_truth  # noqa: E402
+from oracle.chart_metrics import (  # noqa: E402
+    compute_cartesian_chart_metrics,
+    extract_cartesian_chart_profiles,
+)
 from oracle.metrics import (  # noqa: E402
     compute_foreground_shape_metrics,
     compute_visual_metrics,
 )
+from oracle.provenance import collect_evaluation_provenance, fingerprint_file  # noqa: E402
 from oracle.support_catalog import (  # noqa: E402
     load_or_init_support_catalog,
     merge_case_results_into_catalog,
@@ -66,17 +73,25 @@ from test_visual import build_slide_to_pdf_mapping  # noqa: E402
 # Config
 # ---------------------------------------------------------------------------
 
-PYTHON_SERVER_PORT = 8080
-VITE_SERVER_URL = "http://localhost:5173"
+PYTHON_SERVER_PORT = int(os.getenv("PPTX_E2E_API_PORT", "8080"))
+VITE_SERVER_URL = os.getenv("PPTX_E2E_VITE_SERVER_URL", "http://localhost:5173").rstrip("/")
 VISUAL_EVAL_THRESHOLDS = {
     "ssim": 0.95,
     "color_hist_corr": 0.80,
 }
+BROWSER_CSS_DPI = 96
+PDF_RASTER_DPI = int(os.getenv("PPTX_E2E_PDF_DPI", "150"))
+if PDF_RASTER_DPI <= 0:
+    raise ValueError("PPTX_E2E_PDF_DPI must be a positive integer")
 # Warning threshold: shapes below this SSIM are flagged for human review
 # but do NOT auto-fail.  Catches subtle dark-on-dark internal detail bugs
 # (e.g. action button shrunken icons) that pixel metrics cannot reliably
 # distinguish from correct-but-complex renders (3D gradients, etc.).
 SSIM_WARNING_THRESHOLD = 0.99
+ORACLE_MISMATCH_CURRENT_SSIM_MAX = 0.50
+ORACLE_MISMATCH_CANDIDATE_SSIM_MIN = 0.70
+ORACLE_MISMATCH_MIN_DELTA = 0.20
+ORACLE_MISMATCH_NEIGHBOR_RADIUS = 2
 
 # ---------------------------------------------------------------------------
 # FastAPI app
@@ -97,30 +112,97 @@ app.add_middleware(
 
 _browser = None
 _playwright = None
+_browser_init_lock = asyncio.Lock()
+
+
+def _browser_is_connected(browser) -> bool:
+    if browser is None:
+        return False
+    try:
+        return bool(browser.is_connected())
+    except Exception:
+        return False
+
+
+async def _close_browser_unlocked():
+    global _browser, _playwright
+    browser = _browser
+    playwright = _playwright
+    _browser = None
+    _playwright = None
+    if browser is not None:
+        try:
+            await browser.close()
+        except Exception:
+            pass
+    if playwright is not None:
+        try:
+            await playwright.stop()
+        except Exception:
+            pass
 
 
 async def get_browser():
     global _browser, _playwright
-    if _browser is None:
-        _playwright = await async_playwright().start()
-        _browser = await _playwright.chromium.launch(headless=True)
+    if _browser_is_connected(_browser):
+        return _browser
+
+    async with _browser_init_lock:
+        if _browser_is_connected(_browser):
+            return _browser
+        await _close_browser_unlocked()
+        playwright = await async_playwright().start()
+        launch_options = {"headless": True}
+        if channel := os.getenv("PPTX_E2E_BROWSER_CHANNEL", "").strip():
+            launch_options["channel"] = channel
+        try:
+            browser = await playwright.chromium.launch(**launch_options)
+        except BaseException:
+            await playwright.stop()
+            raise
+        _playwright = playwright
+        _browser = browser
     return _browser
 
 
 async def close_browser():
-    global _browser, _playwright
-    if _browser:
-        try:
-            await _browser.close()
-        except Exception:
-            pass
-        _browser = None
-    if _playwright:
-        try:
-            await _playwright.stop()
-        except Exception:
-            pass
-        _playwright = None
+    async with _browser_init_lock:
+        await _close_browser_unlocked()
+
+
+def _evaluation_errors(per_slide: list[dict]) -> list[dict]:
+    return [
+        {
+            "slideIdx": slide.get("slideIdx"),
+            "error": str(slide["error"]).strip() or "Unknown slide evaluation error",
+        }
+        for slide in per_slide
+        if "error" in slide
+    ]
+
+
+def _cartesian_chart_evidence(
+    reference: np.ndarray,
+    candidate: np.ndarray,
+    profile: dict,
+    *,
+    oracle_mismatch: dict | None = None,
+) -> dict:
+    if oracle_mismatch is not None:
+        return {
+            "evaluable": False,
+            "reason": "oracle-ground-truth-mismatch",
+        }
+    if not profile.get("evaluable"):
+        return dict(profile)
+    try:
+        return compute_cartesian_chart_metrics(reference, candidate, profile)
+    except Exception as error:
+        return {
+            "evaluable": False,
+            "reason": "metric-error",
+            "error": str(error).strip() or type(error).__name__,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -165,6 +247,25 @@ def _validate_case_stem(test_file: str) -> str:
     if "/" in stem or "\\" in stem:
         raise HTTPException(400, "Invalid test file")
     return stem
+
+
+def _configured_font_profile_ref() -> str | None:
+    value = os.getenv("PPTX_E2E_FONT_PROFILE", "").strip()
+    if not value:
+        return None
+    allowed_chars = frozenset(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-/"
+    )
+    if (
+        "\x00" in value
+        or Path(value).is_absolute()
+        or "://" in value
+        or ".." in Path(value).parts
+        or any(char not in allowed_chars for char in value)
+        or not value.endswith(".json")
+    ):
+        raise ValueError("PPTX_E2E_FONT_PROFILE must be a local testdata-relative JSON path")
+    return value
 
 
 def _load_manual_review_store() -> dict:
@@ -227,7 +328,7 @@ PAGE_TIMEOUT_MS = 120_000
 SLIDE_CAPTURE_SELECTOR = "#slide-container .slide-wrapper > div"
 
 
-def pdf_page_to_image(pdf_path: Path, page_idx: int, dpi: int = 150) -> np.ndarray:
+def pdf_page_to_image(pdf_path: Path, page_idx: int, dpi: int = PDF_RASTER_DPI) -> np.ndarray:
     doc = fitz.open(str(pdf_path))
     page = doc[page_idx]
     pix = page.get_pixmap(dpi=dpi)
@@ -242,32 +343,90 @@ def png_slide_to_image(png_path: Path) -> np.ndarray:
     return np.array(img)
 
 
-async def screenshot_slide(browser, test_file: str, slide_idx: int, source: str | None = None) -> np.ndarray:
+def _classify_oracle_page_mismatch(
+    current_score: float,
+    pdf_page_idx: int,
+    candidate_scores: dict[int, float],
+) -> dict | None:
+    """Detect likely PDF/PPTX ground-truth page drift without masking renderer bugs."""
+    if current_score >= ORACLE_MISMATCH_CURRENT_SSIM_MAX:
+        return None
+    if not candidate_scores:
+        return None
+
+    candidate_page, candidate_score = max(candidate_scores.items(), key=lambda item: item[1])
+    if candidate_score < ORACLE_MISMATCH_CANDIDATE_SSIM_MIN:
+        return None
+    if candidate_score - current_score < ORACLE_MISMATCH_MIN_DELTA:
+        return None
+
+    return {
+        "currentPdfPage": pdf_page_idx,
+        "currentSsim": round(float(current_score), 4),
+        "candidatePdfPage": candidate_page,
+        "candidateSsim": round(float(candidate_score), 4),
+    }
+
+
+def _capture_device_scale_factor(using_png_ground_truth: bool) -> float:
+    if using_png_ground_truth:
+        return 1.0
+    return PDF_RASTER_DPI / BROWSER_CSS_DPI
+
+
+def _capture_profile() -> dict[str, float | int]:
+    return {
+        "browserCssDpi": BROWSER_CSS_DPI,
+        "pdfRasterDpi": PDF_RASTER_DPI,
+        "pdfDeviceScaleFactor": _capture_device_scale_factor(False),
+        "pngDeviceScaleFactor": _capture_device_scale_factor(True),
+    }
+
+
+async def screenshot_slide(
+    browser,
+    test_file: str,
+    slide_idx: int,
+    source: str | None = None,
+    *,
+    device_scale_factor: float = 1.0,
+) -> np.ndarray:
     test_file = _validate_case_stem(test_file)
-    ctx = await browser.new_context(viewport={"width": 1920, "height": 1080})
-    page = await ctx.new_page()
-    page.set_default_timeout(PAGE_TIMEOUT_MS)
-    try:
-        subdir = _testdata_subdir(source)
-        url = f"{VITE_SERVER_URL}/test/pages/render-slide.html?file=testdata/{subdir}/{test_file}/source.pptx&slide={slide_idx}"
-        await page.goto(url)
-        await page.wait_for_function(
-            "() => window.__renderDone === true || window.__renderError !== undefined",
-            timeout=PAGE_TIMEOUT_MS,
+    for attempt in range(2):
+        ctx = await browser.new_context(
+            viewport={"width": 1920, "height": 1080},
+            device_scale_factor=device_scale_factor,
         )
-        error = await page.evaluate("() => window.__renderError")
-        if error:
-            raise RuntimeError(f"Render failed for {test_file} slide {slide_idx}: {error}")
-        # Capture rendered slide only; avoid container padding/shadows that pollute SSIM.
-        target = page.locator(SLIDE_CAPTURE_SELECTOR)
-        if await target.count() == 0:
-            target = page.locator("#slide-container")
-        screenshot_bytes = await target.first.screenshot()
-        img = Image.open(io.BytesIO(screenshot_bytes))
-        return np.array(img.convert("RGB"))
-    finally:
-        await page.close()
-        await ctx.close()
+        page = await ctx.new_page()
+        page.set_default_timeout(PAGE_TIMEOUT_MS)
+        try:
+            url = _render_slide_url(test_file, slide_idx, source)
+            await page.goto(url)
+            await page.wait_for_function(
+                "() => window.__renderDone === true || window.__renderError !== undefined",
+                timeout=PAGE_TIMEOUT_MS,
+            )
+            error = await page.evaluate("() => window.__renderError")
+            if error:
+                raise RuntimeError(
+                    f"Render failed for {test_file} slide {slide_idx}: {error}"
+                )
+            # Capture rendered slide only; avoid container padding/shadows that pollute SSIM.
+            target = page.locator(SLIDE_CAPTURE_SELECTOR)
+            if await target.count() == 0:
+                target = page.locator("#slide-container")
+            screenshot_bytes = await target.first.screenshot()
+            img = Image.open(io.BytesIO(screenshot_bytes))
+            return np.array(img.convert("RGB"))
+        except RuntimeError as error:
+            retryable = "Visual output did not stabilize within" in str(error)
+            if attempt > 0 or not retryable:
+                raise
+        finally:
+            await page.close()
+            await ctx.close()
+
+    raise RuntimeError(f"Render failed for {test_file} slide {slide_idx}")
 
 
 def compute_ssim(img1: np.ndarray, img2: np.ndarray) -> float:
@@ -310,8 +469,27 @@ def _save_image(arr: np.ndarray, path: Path):
     Image.fromarray(arr).save(str(path))
 
 
+def _render_artifacts(reference_path: Path, candidate_path: Path) -> dict:
+    """Fingerprint the exact raster pair used for one visual metric row."""
+    return {
+        "reference": fingerprint_file(reference_path, PROJECT_ROOT),
+        "candidate": fingerprint_file(candidate_path, PROJECT_ROOT),
+    }
+
+
 def _testdata_subdir(source: str | None) -> str:
     return "windows-cases" if source == "windows" else "cases"
+
+
+def _render_slide_url(test_file: str, slide_idx: int, source: str | None) -> str:
+    subdir = _testdata_subdir(source)
+    url = (
+        f"{VITE_SERVER_URL}/test/pages/render-slide.html?"
+        f"file=testdata/{subdir}/{test_file}/source.pptx&slide={slide_idx}"
+    )
+    if profile_ref := _configured_font_profile_ref():
+        url += f"&fontProfile={quote(profile_ref, safe='')}"
+    return url
 
 
 def _report_prefix(test_file: str, source: str | None) -> str:
@@ -428,6 +606,44 @@ async def evaluate_file(test_file: str, source: str | None = Query(None)):
         if pdf_path.exists()
         else len(slide_to_pdf)
     )
+    visible_slide_indexes = [
+        slide_idx for slide_idx, pdf_page_idx in enumerate(slide_to_pdf) if pdf_page_idx is not None
+    ]
+    png_ground_truth_paths = [
+        tdp.slide_png(test_file, slide_idx + 1, source)
+        for slide_idx in visible_slide_indexes
+        if tdp.slide_png(test_file, slide_idx + 1, source).exists()
+    ]
+    if png_ground_truth_paths and len(png_ground_truth_paths) == len(visible_slide_indexes):
+        ground_truth_kind = "png"
+        ground_truth_paths = png_ground_truth_paths
+    elif png_ground_truth_paths:
+        ground_truth_kind = "mixed"
+        ground_truth_paths = [*png_ground_truth_paths, pdf_path]
+    else:
+        ground_truth_kind = "pdf"
+        ground_truth_paths = [pdf_path]
+
+    browser_channel = os.getenv("PPTX_E2E_BROWSER_CHANNEL", "").strip()
+    provenance = await asyncio.to_thread(
+        collect_evaluation_provenance,
+        project_root=PROJECT_ROOT,
+        testdata_dir=TESTDATA_DIR,
+        pptx_path=pptx_path,
+        ground_truth_paths=ground_truth_paths,
+        ground_truth_kind=ground_truth_kind,
+        browser_name=browser_channel or "chromium",
+        browser_version=browser.version,
+        capture_profile=_capture_profile(),
+        font_profile_ref=_configured_font_profile_ref(),
+    )
+    try:
+        cartesian_chart_profiles = await asyncio.to_thread(
+            extract_cartesian_chart_profiles,
+            pptx_path,
+        )
+    except Exception:
+        cartesian_chart_profiles = {}
 
     per_slide = []
     ssim_scores = []
@@ -436,6 +652,7 @@ async def evaluate_file(test_file: str, source: str | None = Query(None)):
     fg_iou_tolerant_scores = []
     chamfer_scores = []
     color_hist_corr_scores = []
+    oracle_mismatch_count = 0
 
     for slide_idx, pdf_page_idx in enumerate(slide_to_pdf):
         if pdf_page_idx is None:
@@ -453,12 +670,22 @@ async def evaluate_file(test_file: str, source: str | None = Query(None)):
             # Prefer PNG ground truth (direct PowerPoint export, no PDF intermediate)
             png_gt_path = tdp.slide_png(test_file, slide_idx + 1, source)
             if png_gt_path.exists():
+                using_png_ground_truth = True
                 gt_img = await asyncio.to_thread(png_slide_to_image, png_gt_path)
             else:
+                using_png_ground_truth = False
                 gt_img = await asyncio.to_thread(pdf_page_to_image, pdf_path, pdf_page_idx)
-            html_img = await screenshot_slide(browser, test_file, slide_idx, source)
+            capture_device_scale_factor = _capture_device_scale_factor(using_png_ground_truth)
+            html_img = await screenshot_slide(
+                browser,
+                test_file,
+                slide_idx,
+                source,
+                device_scale_factor=capture_device_scale_factor,
+            )
             visual = compute_visual_metrics(gt_img, html_img)
             fg = compute_foreground_shape_metrics(gt_img, html_img)
+            cartesian_profile = cartesian_chart_profiles.get(slide_idx)
 
             score = float(visual["ssim"])
             mae = float(visual["mae"])
@@ -466,13 +693,6 @@ async def evaluate_file(test_file: str, source: str | None = Query(None)):
             fg_iou = float(fg["fg_iou"])
             fg_iou_tolerant = float(fg["fg_iou_tolerant"])
             chamfer = float(fg["chamfer_score"])
-
-            ssim_scores.append(score)
-            mae_scores.append(mae)
-            color_hist_corr_scores.append(color_hist_corr)
-            fg_iou_scores.append(fg_iou)
-            fg_iou_tolerant_scores.append(fg_iou_tolerant)
-            chamfer_scores.append(chamfer)
 
             # Save diff heatmap
             diff_img = make_diff_heatmap(gt_img, html_img)
@@ -485,8 +705,64 @@ async def evaluate_file(test_file: str, source: str | None = Query(None)):
             pdf_img_path = REPORTS_DIR / f"{prefix}_slide{slide_idx}_pdf.png"
             _save_image(html_img, html_path)
             _save_image(gt_img, pdf_img_path)
+            render_artifacts = _render_artifacts(pdf_img_path, html_path)
 
-            per_slide.append({
+            oracle_mismatch = None
+            if (
+                not using_png_ground_truth
+                and pdf_path.exists()
+                and score < ORACLE_MISMATCH_CURRENT_SSIM_MAX
+            ):
+                candidate_scores: dict[int, float] = {}
+                for delta in range(-ORACLE_MISMATCH_NEIGHBOR_RADIUS, ORACLE_MISMATCH_NEIGHBOR_RADIUS + 1):
+                    candidate_page = pdf_page_idx + delta
+                    if candidate_page == pdf_page_idx or candidate_page < 0 or candidate_page >= num_pages:
+                        continue
+                    candidate_gt_img = await asyncio.to_thread(pdf_page_to_image, pdf_path, candidate_page)
+                    candidate_visual = compute_visual_metrics(candidate_gt_img, html_img)
+                    candidate_scores[candidate_page] = float(candidate_visual["ssim"])
+                oracle_mismatch = _classify_oracle_page_mismatch(
+                    score,
+                    pdf_page_idx,
+                    candidate_scores,
+                )
+
+            if oracle_mismatch:
+                oracle_mismatch_count += 1
+                slide_result = {
+                    "slideIdx": slide_idx,
+                    "pdfPage": pdf_page_idx,
+                    "ssim": round(score, 4),
+                    "mae": round(mae, 4),
+                    "colorHistCorr": round(color_hist_corr, 4),
+                    "fgIou": round(fg_iou, 4),
+                    "fgIouTolerant": round(fg_iou_tolerant, 4),
+                    "chamferScore": round(chamfer, 4),
+                    "needsReview": True,
+                    "hidden": False,
+                    "captureDeviceScaleFactor": capture_device_scale_factor,
+                    "renderArtifacts": render_artifacts,
+                    "oracleMismatch": oracle_mismatch,
+                    "excludedFromAverage": True,
+                }
+                if cartesian_profile is not None:
+                    slide_result["cartesianChart"] = _cartesian_chart_evidence(
+                        gt_img,
+                        html_img,
+                        cartesian_profile,
+                        oracle_mismatch=oracle_mismatch,
+                    )
+                per_slide.append(slide_result)
+                continue
+
+            ssim_scores.append(score)
+            mae_scores.append(mae)
+            color_hist_corr_scores.append(color_hist_corr)
+            fg_iou_scores.append(fg_iou)
+            fg_iou_tolerant_scores.append(fg_iou_tolerant)
+            chamfer_scores.append(chamfer)
+
+            slide_result = {
                 "slideIdx": slide_idx,
                 "pdfPage": pdf_page_idx,
                 "ssim": round(score, 4),
@@ -497,7 +773,16 @@ async def evaluate_file(test_file: str, source: str | None = Query(None)):
                 "chamferScore": round(chamfer, 4),
                 "needsReview": score < SSIM_WARNING_THRESHOLD,
                 "hidden": False,
-            })
+                "captureDeviceScaleFactor": capture_device_scale_factor,
+                "renderArtifacts": render_artifacts,
+            }
+            if cartesian_profile is not None:
+                slide_result["cartesianChart"] = _cartesian_chart_evidence(
+                    gt_img,
+                    html_img,
+                    cartesian_profile,
+                )
+            per_slide.append(slide_result)
         except Exception as e:
             per_slide.append({
                 "slideIdx": slide_idx,
@@ -518,21 +803,26 @@ async def evaluate_file(test_file: str, source: str | None = Query(None)):
     avg_fg_iou_tolerant = sum(fg_iou_tolerant_scores) / len(fg_iou_tolerant_scores) if fg_iou_tolerant_scores else 0.0
     avg_chamfer = sum(chamfer_scores) / len(chamfer_scores) if chamfer_scores else 0.0
 
+    evaluation_errors = _evaluation_errors(per_slide)
     summary = {
         "ssim": avg_ssim,
         "color_hist_corr": avg_color_hist_corr,
         "fg_iou": avg_fg_iou,
     }
-    triage_reasons = classify_case_outcome(
-        summary,
-        {"ssim": VISUAL_EVAL_THRESHOLDS["ssim"]},
-    )
-    # --- Pass/fail: only SSIM + color_hist_corr (conservative, zero false positives) ---
-    metric_reasons = []
-    if avg_ssim < VISUAL_EVAL_THRESHOLDS["ssim"]:
-        metric_reasons.append("metric:ssim")
-    if avg_color_hist_corr < VISUAL_EVAL_THRESHOLDS["color_hist_corr"]:
-        metric_reasons.append("metric:color_hist_corr")
+    if evaluation_errors:
+        triage_reasons = []
+        metric_reasons = []
+    else:
+        triage_reasons = classify_case_outcome(
+            summary,
+            {"ssim": VISUAL_EVAL_THRESHOLDS["ssim"]},
+        )
+        # Pass/fail combines spatial structure with quantization-tolerant foreground color.
+        metric_reasons = []
+        if avg_ssim < VISUAL_EVAL_THRESHOLDS["ssim"]:
+            metric_reasons.append("metric:ssim")
+        if avg_color_hist_corr < VISUAL_EVAL_THRESHOLDS["color_hist_corr"]:
+            metric_reasons.append("metric:color_hist_corr")
 
     hard_reasons: list[str] = []
     for reason in [*metric_reasons, *triage_reasons]:
@@ -540,12 +830,25 @@ async def evaluate_file(test_file: str, source: str | None = Query(None)):
             continue
         if reason not in hard_reasons:
             hard_reasons.append(reason)
+    if evaluation_errors:
+        hard_reasons.append("runtime:evaluation_error")
 
     # --- Warning layer: flag for human review (does NOT auto-fail) ---
     warning_reasons = [reason for reason in triage_reasons if reason.startswith("warn:")]
-    needs_review = avg_ssim < SSIM_WARNING_THRESHOLD
-    if needs_review:
+    ssim_needs_review = any(
+        slide.get("needsReview") is True and not slide.get("oracleMismatch")
+        for slide in per_slide
+    )
+    needs_review = (
+        bool(evaluation_errors)
+        or bool(warning_reasons)
+        or ssim_needs_review
+        or oracle_mismatch_count > 0
+    )
+    if not evaluation_errors and ssim_needs_review:
         warning_reasons.append("warn:ssim_below_review_threshold")
+    if oracle_mismatch_count:
+        warning_reasons.append("warn:oracle_ground_truth_mismatch")
 
     passed = len(hard_reasons) == 0
 
@@ -553,6 +856,9 @@ async def evaluate_file(test_file: str, source: str | None = Query(None)):
         "testFile": test_file,
         "slideCount": len(slide_to_pdf),
         "visibleSlideCount": sum(1 for s in slide_to_pdf if s is not None),
+        "evaluationErrorCount": len(evaluation_errors),
+        "evaluationErrors": evaluation_errors,
+        "oracleMismatchCount": oracle_mismatch_count,
         "avgSsim": round(avg_ssim, 4),
         "avgMae": round(avg_mae, 4),
         "avgColorHistCorr": round(avg_color_hist_corr, 4),
@@ -561,13 +867,16 @@ async def evaluate_file(test_file: str, source: str | None = Query(None)):
         "avgChamferScore": round(avg_chamfer, 4),
         "supported": passed,
         "quality": {
-            "status": "supported" if passed else "unsupported",
+            "status": (
+                "error" if evaluation_errors else "supported" if passed else "unsupported"
+            ),
             "passed": passed,
             "thresholds": VISUAL_EVAL_THRESHOLDS,
             "reasons": hard_reasons,
             "warnings": warning_reasons,
             "needsReview": needs_review,
         },
+        "provenance": provenance,
         "perSlide": per_slide,
     }
     _eval_cache[_cache_key(test_file, source)] = result

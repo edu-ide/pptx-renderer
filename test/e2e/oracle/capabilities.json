@@ -1,0 +1,828 @@
+{
+  "schemaVersion": 2,
+  "capabilities": [
+    {
+      "id": "drawingml.chart.2d.common",
+      "component": "chart",
+      "renderMode": "approximate",
+      "impact": "fidelity",
+      "selectors": [
+        {
+          "partGlob": "ppt/charts/chart*.xml",
+          "namespace": "http://schemas.openxmlformats.org/drawingml/2006/chart",
+          "localName": "areaChart"
+        },
+        {
+          "partGlob": "ppt/charts/chart*.xml",
+          "namespace": "http://schemas.openxmlformats.org/drawingml/2006/chart",
+          "localName": "barChart"
+        },
+        {
+          "partGlob": "ppt/charts/chart*.xml",
+          "namespace": "http://schemas.openxmlformats.org/drawingml/2006/chart",
+          "localName": "bubbleChart"
+        },
+        {
+          "partGlob": "ppt/charts/chart*.xml",
+          "namespace": "http://schemas.openxmlformats.org/drawingml/2006/chart",
+          "localName": "doughnutChart"
+        },
+        {
+          "partGlob": "ppt/charts/chart*.xml",
+          "namespace": "http://schemas.openxmlformats.org/drawingml/2006/chart",
+          "localName": "lineChart"
+        },
+        {
+          "partGlob": "ppt/charts/chart*.xml",
+          "namespace": "http://schemas.openxmlformats.org/drawingml/2006/chart",
+          "localName": "pieChart"
+        },
+        {
+          "partGlob": "ppt/charts/chart*.xml",
+          "namespace": "http://schemas.openxmlformats.org/drawingml/2006/chart",
+          "localName": "radarChart"
+        },
+        {
+          "partGlob": "ppt/charts/chart*.xml",
+          "namespace": "http://schemas.openxmlformats.org/drawingml/2006/chart",
+          "localName": "scatterChart"
+        },
+        {
+          "partGlob": "ppt/charts/chart*.xml",
+          "namespace": "http://schemas.openxmlformats.org/drawingml/2006/chart",
+          "localName": "stockChart"
+        }
+      ],
+      "scope": {
+        "families": ["area", "bar-column", "bubble", "doughnut", "line", "pie", "radar", "scatter", "stock"],
+        "matrix": ["oracle-pypptx-chart-0001-through-0022"],
+        "runtime": ["echarts-canvas"],
+        "cartesianLocalEvidence": ["single-chart", "bar-column-line-area", "one-to-eight-series", "direct-chart-frame-roi", "chromatic-series", "neutral-axis-grid", "neutral-or-solid-plot-background"]
+      },
+      "fallback": "Render supported chart families through ECharts while retaining an explicit approximation status for Office plot-area, axis, label, and legend layout differences.",
+      "verificationCases": ["oracle-pypptx-chart-0002-column-negative-values", "oracle-pypptx-chart-0022-bar-negative-literal-zero-crossing"],
+      "affectedPaths": ["src/model/nodes/ChartNode.ts", "src/renderer/ChartRenderer.ts", "src/renderer/chart/echartsRuntime.ts", "src/utils/e2eCompare.ts", "test/browser/chart-table-coverage.spec.ts", "test/e2e/oracle/cases-pypptx/oracle-pypptx-chart-*.json", "test/e2e/oracle/chart_metrics.py", "test/e2e/scripts/generate_pypptx_cases.py", "test/e2e/server.py", "test/e2e/test_cartesian_chart_metrics.py", "test/pages/e2e-compare.html", "test/unit/renderer/ChartRenderer.test.ts", "test/unit/utils/e2eCompare.test.ts"],
+      "requiredGates": ["source", "structural", "unit", "browser", "native-powerpoint", "manual-visual", "regression", "docs"],
+      "issueUrls": []
+    },
+    {
+      "id": "drawingml.chart.3d.bar",
+      "component": "chart",
+      "renderMode": "fallback",
+      "impact": "fidelity",
+      "selectors": [
+        {
+          "partGlob": "ppt/charts/chart*.xml",
+          "namespace": "http://schemas.openxmlformats.org/drawingml/2006/chart",
+          "localName": "bar3DChart"
+        }
+      ],
+      "scope": {
+        "families": ["bar3DChart"],
+        "matrix": ["oracle-pypptx-chart-0023-column-3d-fallback-view"]
+      },
+      "fallback": "Render the chart series as a two-dimensional bar chart and record omitted depth and scene semantics.",
+      "verificationCases": ["oracle-pypptx-chart-0023-column-3d-fallback-view"],
+      "affectedPaths": ["src/renderer/ChartRenderer.ts", "src/renderer/chart/types.ts"],
+      "requiredGates": ["source", "unit", "browser", "native-powerpoint", "manual-visual", "docs"],
+      "issueUrls": []
+    },
+    {
+      "id": "drawingml.chart.3d.pie",
+      "component": "chart",
+      "renderMode": "fallback",
+      "impact": "fidelity",
+      "selectors": [
+        {
+          "partGlob": "ppt/charts/chart*.xml",
+          "namespace": "http://schemas.openxmlformats.org/drawingml/2006/chart",
+          "localName": "pie3DChart"
+        }
+      ],
+      "scope": {
+        "families": ["pie3DChart"],
+        "matrix": ["oracle-pypptx-chart-0024-pie-3d-fallback-view"]
+      },
+      "fallback": "Render the chart series as a two-dimensional pie chart and record omitted depth and scene semantics.",
+      "verificationCases": ["oracle-pypptx-chart-0024-pie-3d-fallback-view"],
+      "affectedPaths": ["src/renderer/ChartRenderer.ts", "src/renderer/chart/types.ts"],
+      "requiredGates": ["source", "unit", "browser", "native-powerpoint", "manual-visual", "docs"],
+      "issueUrls": []
+    },
+    {
+      "id": "drawingml.chart.3d.view",
+      "component": "chart",
+      "renderMode": "fallback",
+      "impact": "fidelity",
+      "selectors": [
+        {
+          "partGlob": "ppt/charts/chart*.xml",
+          "namespace": "http://schemas.openxmlformats.org/drawingml/2006/chart",
+          "localName": "view3D"
+        }
+      ],
+      "scope": {
+        "properties": ["rotX", "rotY", "rAngAx", "perspective", "depthPercent", "hPercent"],
+        "matrix": ["oracle-pypptx-chart-0023-column-3d-fallback-view", "oracle-pypptx-chart-0024-pie-3d-fallback-view"]
+      },
+      "fallback": "Ignore the three-dimensional chart camera while preserving the chart's two-dimensional series.",
+      "verificationCases": ["oracle-pypptx-chart-0023-column-3d-fallback-view", "oracle-pypptx-chart-0024-pie-3d-fallback-view"],
+      "affectedPaths": ["src/renderer/ChartRenderer.ts"],
+      "requiredGates": ["source", "structural", "unit", "browser", "native-powerpoint", "manual-visual", "docs"],
+      "issueUrls": []
+    },
+    {
+      "id": "drawingml.model3d.office2017",
+      "component": "media",
+      "renderMode": "none",
+      "impact": "missing",
+      "selectors": [
+        {
+          "partGlob": "ppt/slides/slide*.xml",
+          "namespace": "http://schemas.microsoft.com/office/drawing/2017/model3d",
+          "localName": "model3d"
+        }
+      ],
+      "scope": {
+        "extensionNamespace": ["http://schemas.microsoft.com/office/drawing/2017/model3d"]
+      },
+      "fallback": "Render an available poster or raster preview; otherwise retain slide layout and report the omitted model.",
+      "affectedPaths": ["src/model/Slide.ts", "src/renderer/SlideRenderer.ts"],
+      "requiredGates": ["source", "structural", "unit", "browser", "security", "performance", "native-powerpoint", "manual-visual", "package-size", "docs"],
+      "issueUrls": []
+    },
+    {
+      "id": "drawingml.shape.3d.bottom-bevel-front-material",
+      "component": "shape",
+      "renderMode": "native",
+      "impact": "fidelity",
+      "selectors": [
+        {
+          "partGlob": "ppt/slides/slide*.xml",
+          "namespace": "http://schemas.openxmlformats.org/drawingml/2006/main",
+          "localName": "bevelB"
+        }
+      ],
+      "scope": {
+        "backdrop": ["absent"],
+        "bevelBottomPresets": ["relaxedInset", "circle"],
+        "bevelDimensionEncoding": ["implicit-76200-emu-per-axis", "explicit-76200-emu-per-axis"],
+        "camera": ["orthographicFront"],
+        "cameraFieldOfView": ["absent"],
+        "cameraRotation": ["absent"],
+        "cameraZoom": ["absent"],
+        "contour": ["absent-or-zero"],
+        "extrusionColor": ["absent"],
+        "extrusionHeight": ["absent-or-zero"],
+        "frontFaceResponse": ["dkEdge:#4472C4-to-#4676CB", "implicit-material:#4472C4-to-#4B7BD0"],
+        "geometry": ["rect"],
+        "light": ["threePt:t:rotation-absent", "threePt:t:lat0-lon0-rev50"],
+        "metricNegativeControls": ["restore-source-flat-fill"],
+        "nodeContainer": ["standalone-slide-non-placeholder"],
+        "presetMaterial": ["dkEdge", "absent-implicit-material"],
+        "rendering": ["uniform-front-face-without-invented-bottom-rim"],
+        "shapeAspectRatio": ["2:1-wide", "1:1-square", "3.2:5.2-tall"],
+        "shapeFill": ["explicit-opaque-srgb-4472C4"],
+        "shapeStroke": ["noFill"],
+        "shapeText": ["absent-or-empty", "single-centered-20pt-bold-white-live-run"],
+        "shapeTransform": ["rotation-0", "flipH-false", "flipV-false"],
+        "transparentFill": ["5pct-overlay-remains-diagnostic-flat-fallback-native-delta-at-or-below-one-rgb-level"],
+        "zPosition": ["absent-or-zero"]
+      },
+      "fallback": "Keep the existing flat two-dimensional shape and report the first unsupported camera, light, geometry, aspect, parent container, paint, text-body, bevel, material, contour, depth, or effect reason outside the verified front-face tuple.",
+      "affectedPaths": ["src/model/nodes/Shape3D.ts", "src/renderer/GroupRenderer.ts", "src/renderer/RenderContext.ts", "src/renderer/Shape3DRenderer.ts", "src/renderer/ShapeRenderer.ts", "src/renderer/SlideRenderer.ts", "test/browser/rendering-coverage.spec.ts", "test/e2e/oracle/capability_verification.py", "test/e2e/scripts/generate_pypptx_cases.py", "test/e2e/scripts/shape3d_camera_metrics.py", "test/e2e/test_capability_verification.py", "test/e2e/test_pypptx_generator_cases.py", "test/e2e/test_shape3d_camera_metrics.py", "test/unit/renderer/GroupRenderer.test.ts", "test/unit/renderer/Shape3DRenderer.test.ts", "test/unit/renderer/ShapeRenderer.test.ts"],
+      "requiredGates": ["source", "structural", "unit", "browser", "camera-local", "native-powerpoint", "manual-visual", "regression", "performance", "package-size", "docs"],
+      "issueUrls": []
+    },
+    {
+      "id": "drawingml.shape.3d.camera-projected-plane",
+      "component": "shape",
+      "renderMode": "native",
+      "impact": "fidelity",
+      "selectors": [
+        {
+          "partGlob": "ppt/slides/slide*.xml",
+          "namespace": "http://schemas.openxmlformats.org/drawingml/2006/main",
+          "localName": "sp3d",
+          "parent": {
+            "namespace": "http://schemas.openxmlformats.org/presentationml/2006/main",
+            "localNames": ["spPr"]
+          },
+          "attributes": {
+            "contourW": ["$absent", "0"],
+            "extrusionH": ["$absent", "0"],
+            "prstMaterial": ["$absent"]
+          }
+        },
+        {
+          "partGlob": "ppt/slides/slide*.xml",
+          "namespace": "http://schemas.openxmlformats.org/drawingml/2006/main",
+          "localName": "scene3d",
+          "parent": {
+            "namespace": "http://schemas.openxmlformats.org/presentationml/2006/main",
+            "localNames": ["spPr", "grpSpPr"]
+          }
+        }
+      ],
+      "scope": {
+        "camera": ["orthographicFront", "perspectiveRelaxedModerately", "perspectiveContrastingRightFacing", "perspectiveLeft", "perspectiveRight"],
+        "cameraFieldOfView": ["orthographicFront:absent", "perspectiveRelaxedModerately:120deg", "perspectiveContrastingRightFacing:85deg", "perspectiveLeft:120deg", "perspectiveLeft:group:95deg", "perspectiveRight:95deg"],
+        "cameraPaintRows": ["orthographicFront:#2F75B5", "perspectiveRelaxedModerately:#2F75B5", "perspectiveRelaxedModerately:theme-accent1:#4F81BD", "perspectiveRelaxedModerately:custom-geometry:#2F75B5", "perspectiveRelaxedModerately:custom-geometry:#FFFFFF", "perspectiveContrastingRightFacing:no-fill-live-text", "perspectiveLeft:no-fill-live-text", "perspectiveLeft:two-live-picture-group", "perspectiveRight:stretch-picture"],
+        "cameraRotation": ["orthographicFront:absent", "orthographicFront:lat20-lon30-rev0", "perspectiveRelaxedModerately:lat18590633-lon0-rev0", "perspectiveContrastingRightFacing:lat0-lon19532225-rev0", "perspectiveLeft:implicit-lat0-lon20-rev0", "perspectiveLeft:group:lat0-lon25-rev0", "perspectiveRight:implicit-lat0-lon-20-rev0"],
+        "cameraZoom": ["absent"],
+        "coexistingEffects": ["no-explicit-effect-list", "solid-plane:theme-effectRef-idx2:exact-outer-shadow", "custom-plane:no-style-reference:no-effect-list", "live-text:no-style-reference", "picture:no-style-reference:no-blip-effects", "picture-group-target:no-effect-list:verified-ancestor-no-effects"],
+        "customGeometryBounds": ["403.2x403.2px", "768x307.2px", "307.2x518.4px"],
+        "customGeometryCurveApproximation": ["adaptive-projected-cubic-max-error-0.25px"],
+        "customGeometryProfile": ["one-path:1000x1000:at-least-two-closed-contours:numeric-moveTo-lnTo-cubicBezTo-close:no-guides:identity-text-rect:no-path-paint-attributes"],
+        "light": ["threePt:t:no-rotation"],
+        "groupChildCount": ["2"],
+        "groupChildProfile": ["two-direct-embedded-png-pictures:rect-stretch"],
+        "groupLighting": ["threePt:t:log-aspect-brightness-1.04-to-1.09:white-overlay-alpha-0.02"],
+        "groupSceneTarget": ["p:grpSpPr"],
+        "metricNegativeControls": ["solid-plane:erase-exterior-shadow", "custom-plane:vertical-squash-20pct", "picture-plane:left-crop-12pct-and-rescale", "picture-group:left-crop-12pct-and-rescale"],
+        "modalityRows": ["solid-plane:standalone-or-nonidentity-group:resolved-opaque-solid:no-visible-text", "custom-geometry-plane:standalone:multi-contour-cubic:no-style-reference:explicit-solid-blue-or-white", "live-text-plane:standalone:noFill:no-style-reference:local-wrap-none:local-anchor-ctr:local-spAutoFit", "live-text-plane:standalone:noFill:no-style-reference:local-wrap-none:local-anchor-absent:local-spAutoFit", "live-picture-plane:standalone:rect:stretch:no-fillRect:no-style-reference:no-blip-effects:finite-nonnegative-source-crop", "live-picture-group:standalone-or-coordinate-only-ancestor:two-direct-embedded-pictures:rect:stretch:optional-empty-fillRect:no-style-reference:no-blip-effects:finite-nonnegative-source-crop"],
+        "nodeKinds": ["shape", "picture", "group"],
+        "pictureSourceCrop": ["absent", "horizontal-nonnegative", "vertical-nonnegative", "asymmetric-nonnegative-positive-visible-extent"],
+        "projection": ["zero-depth-svg-plane", "zero-depth-svg-custom-path-projection", "zero-depth-live-dom-text-homography", "zero-depth-live-dom-picture-homography", "zero-depth-live-dom-picture-group-homography"],
+        "shape3d": ["no-backdrop", "zero-z", "no-extrusion-color", "no-top-or-bottom-bevel", "zero-extrusion", "zero-contour", "no-material", "absent-implicit-zero-for-exact-scene-only-tuples", "group-target:no-sp3d"],
+        "shapeAspectRatio": ["square", "wide", "tall"],
+        "shapeContainer": ["standalone", "nonidentity-group", "coordinate-only-ancestor-group"],
+        "shapeFill": ["resolved-opaque-solid", "noFill-live-text"],
+        "shapeFillSource": ["explicit-solid", "theme-style-reference", "explicit-noFill"],
+        "shapeFillValues": ["#2F75B5", "#FFFFFF", "theme-accent1:#4F81BD", "none"],
+        "shapePresets": ["rect"],
+        "shapeStroke": ["noFill", "line-element-absent-live-text"],
+        "shapeText": ["absent-or-empty", "live-text:local-wrap-none:local-anchor-ctr:local-spAutoFit:no-vertical-mode:no-independent-bounds:no-style-reference", "live-text:local-wrap-none:local-anchor-absent:local-spAutoFit:no-vertical-mode:no-independent-bounds:no-style-reference"],
+        "shapeTransform": ["rotation-0", "flipH-false", "flipV-false"]
+      },
+      "fallback": "Render the existing flat two-dimensional shape, picture, or group, or retain a bounded diagnostic composition path, when camera, light, preset/custom geometry profile, group child profile or coordinate space, physical bounds, paint, text-body, style-reference, stroke, transform, depth, bevel, contour, material, source-crop, stretch, blip-effect, or effect values fall outside the verified matrix.",
+      "affectedPaths": ["src/export/serializePresentation.ts", "src/model/nodes/GroupNode.ts", "src/model/nodes/Shape3D.ts", "src/renderer/GroupRenderer.ts", "src/renderer/ImageRenderer.ts", "src/renderer/pathData.ts", "src/renderer/RenderContext.ts", "src/renderer/Shape3DRenderer.ts", "src/renderer/ShapeRenderer.ts", "src/renderer/shape3d/CameraProjection.ts", "test/browser/rendering-coverage.spec.ts", "test/e2e/oracle/capability_contract.py", "test/e2e/oracle/capability_verification.py", "test/e2e/oracle/cases-pypptx/oracle-pypptx-shape3d-0013-camera-projection-matrix.json", "test/e2e/oracle/cases-pypptx/oracle-pypptx-shape3d-0014-scene-only-plane-matrix.json", "test/e2e/oracle/cases-pypptx/oracle-pypptx-shape3d-0015-perspective-left-text-plane-matrix.json", "test/e2e/oracle/cases-pypptx/oracle-pypptx-shape3d-0016-perspective-right-picture-plane-matrix.json", "test/e2e/oracle/cases-pypptx/oracle-pypptx-shape3d-0019-perspective-custom-geometry-plane-matrix.json", "test/e2e/oracle/cases-pypptx/oracle-pypptx-shape3d-0020-perspective-left-picture-group-matrix.json", "test/e2e/scripts/generate_pypptx_cases.py", "test/e2e/scripts/run_capability_loop.py", "test/e2e/scripts/shape3d_camera_metrics.py", "test/e2e/test_capability_inventory.py", "test/e2e/test_capability_verification.py", "test/e2e/test_pypptx_generator_cases.py", "test/e2e/test_shape3d_camera_metrics.py", "test/unit/export/serializePresentation.test.ts", "test/unit/model/nodes/GroupNode.test.ts", "test/unit/model/nodes/Shape3D.test.ts", "test/unit/renderer/GroupRenderer.test.ts", "test/unit/renderer/Shape3DRenderer.test.ts", "test/unit/renderer/ShapeRenderer.test.ts", "test/unit/renderer/shape3d/CameraProjection.test.ts"],
+      "requiredGates": ["source", "structural", "unit", "browser", "camera-local", "native-powerpoint", "manual-visual", "regression", "performance", "package-size", "docs"],
+      "issueUrls": []
+    },
+    {
+      "id": "drawingml.shape.3d.extrusion-perspective",
+      "component": "shape",
+      "renderMode": "fallback",
+      "impact": "fidelity",
+      "selectors": [
+        {
+          "partGlob": "ppt/slides/slide*.xml",
+          "namespace": "http://schemas.openxmlformats.org/drawingml/2006/main",
+          "localName": "sp3d",
+          "attributes": {
+            "extrusionH": ["$nonzero"]
+          }
+        }
+      ],
+      "scope": {
+        "cameraFamilies": ["perspective"],
+        "extrusionHeight": ["nonzero"],
+        "projection": ["perspective"]
+      },
+      "fallback": "Render the existing flat two-dimensional shape and report omitted extrusion or perspective semantics.",
+      "affectedPaths": ["src/model/nodes/ShapeNode.ts", "src/renderer/ShapeRenderer.ts"],
+      "requiredGates": ["source", "structural", "unit", "browser", "security", "performance", "native-powerpoint", "manual-visual", "package-size", "docs"],
+      "issueUrls": []
+    },
+    {
+      "id": "drawingml.shape.3d.scene",
+      "component": "shape",
+      "renderMode": "fallback",
+      "planningMode": "observation-only",
+      "impact": "fidelity",
+      "selectors": [
+        {
+          "partGlob": "ppt/slides/slide*.xml",
+          "namespace": "http://schemas.openxmlformats.org/drawingml/2006/main",
+          "localName": "scene3d",
+          "parent": {
+            "namespace": "http://schemas.openxmlformats.org/presentationml/2006/main",
+            "localNames": ["grpSpPr", "spPr"]
+          }
+        }
+      ],
+      "scope": {
+        "properties": ["camera", "lightRig", "backdrop"],
+        "role": ["residual-scene-detection-including-values-outside-bounded-native-capabilities"]
+      },
+      "fallback": "Render child shapes in two dimensions and report omitted scene camera and lighting semantics outside any separately verified bounded capability.",
+      "affectedPaths": ["src/model/nodes/ShapeNode.ts", "src/renderer/ShapeRenderer.ts"],
+      "requiredGates": ["source", "structural", "unit", "browser", "native-powerpoint", "manual-visual", "docs"],
+      "issueUrls": []
+    },
+    {
+      "id": "drawingml.shape.3d.top-bevel-contour",
+      "component": "shape-picture",
+      "renderMode": "native",
+      "impact": "fidelity",
+      "selectors": [
+        {
+          "partGlob": "ppt/slides/slide*.xml",
+          "namespace": "http://schemas.openxmlformats.org/drawingml/2006/main",
+          "localName": "bevelT"
+        }
+      ],
+      "scope": {
+        "bevelTopPresets": ["circle"],
+        "bevelPresetEncoding": ["explicit-circle", "implicit-circle-default"],
+        "bevelDimensionEncoding": ["explicit-positive", "implicit-76200-emu-per-axis"],
+        "bevelDefaultRows": ["rect:square:w+h+prst", "roundRect:wide:w", "ellipse:tall:h"],
+        "bevelWidthSemantics": ["inward-face-extent"],
+        "bevelHeightSemantics": ["lighting-contrast"],
+        "bevelShading": ["circle-cross-section", "continuous-perimeter-normals", "silhouette-interior-distance-field", "grouped-donut-child-coordinate-raster"],
+        "backdrop": ["absent"],
+        "camera": ["orthographicFront"],
+        "cameraRotation": ["absent"],
+        "coexistingEffects": ["outerShdw"],
+        "contour": ["absent-or-zero", "positive-with-resolvable-color"],
+        "donutInterpolationAspectRatios": [0.75, 1.25, 2.0],
+        "donutInterpolationAdjustments": [10000, 25000, 40000],
+        "donutShadowGate": ["mean-negative-energy-overshoot-lte-1.05", "p05-amplitude-overshoot-lte-1.01", "local-excess-relative-to-native-mean-shadow-energy-lte-0.30", "salient-30deg-sector-overshoot-lte-1.60"],
+        "extrusionColor": ["absent"],
+        "extrusionHeight": [0],
+        "lightDirection": ["t"],
+        "lightRig": ["twoPt", "threePt"],
+        "lightRotation": ["absent", "twoPt:t:lat0-lon0-rev120"],
+        "materialResponse": ["shape-hue-preserving", "picture-relative-overlay"],
+        "nodeKinds": ["shape", "picture"],
+        "pictureFill": ["stretch"],
+        "picturePresets": ["rect"],
+        "pictureSourceCrop": ["absent", "srcRect-nonnegative-positive-visible-area"],
+        "presetMaterial": ["absent"],
+        "shapeAspectRatio": ["square", "wide", "tall"],
+        "shapeContainer": ["standalone", "nonidentity-group"],
+        "shapeFill": ["resolved-opaque-solid"],
+        "shapeFillSource": ["explicit-solid", "theme-style-reference"],
+        "shapePresets": ["donut", "ellipse", "rect", "roundRect"],
+        "shapeAdjustmentValues": ["donut:0", "donut:10000", "donut:25000-default", "donut:32000", "donut:40000", "donut:50000"],
+        "zPosition": [0]
+      },
+      "fallback": "Render the existing flat two-dimensional shape or picture when any camera, light, bevel, material, extrusion, effect, geometry, paint, or source-crop value falls outside this bounded tuple.",
+      "affectedPaths": ["src/export/serializePresentation.ts", "src/index.ts", "src/model/nodes/PicNode.ts", "src/model/nodes/Shape3D.ts", "src/model/nodes/ShapeNode.ts", "src/renderer/GroupRenderer.ts", "src/renderer/ImageRenderer.ts", "src/renderer/RenderContext.ts", "src/renderer/Shape3DRenderer.ts", "src/renderer/ShapeRenderer.ts", "src/renderer/shape3d/*.ts", "test/browser/rendering-coverage.spec.ts", "test/e2e/oracle/capability_contract.py", "test/e2e/oracle/capability_verification.py", "test/e2e/oracle/cases-pypptx/oracle-pypptx-shape3d-*.json", "test/e2e/scripts/generate_pypptx_cases.py", "test/e2e/scripts/run_capability_loop.py", "test/e2e/scripts/shape3d_bevel_metrics.py", "test/e2e/server.py", "test/e2e/test_capability_verification.py", "test/e2e/test_pypptx_generator_cases.py", "test/e2e/test_server_provenance.py", "test/e2e/test_shape3d_bevel_metrics.py", "test/unit/export/serializePresentation.test.ts", "test/unit/model/nodes/PicNode.test.ts", "test/unit/model/nodes/Shape3D.test.ts", "test/unit/model/nodes/ShapeNode.test.ts", "test/unit/renderer/GroupRenderer.test.ts", "test/unit/renderer/ImageRenderer.test.ts", "test/unit/renderer/Shape3DRenderer.test.ts", "test/unit/renderer/ShapeRenderer.test.ts", "test/unit/renderer/shape3d/*.test.ts"],
+      "requiredGates": ["source", "structural", "unit", "browser", "bevel-local", "native-powerpoint", "manual-visual", "regression", "performance", "package-size", "docs"],
+      "issueUrls": []
+    },
+    {
+      "id": "drawingml.shape.effect.outer-shadow",
+      "component": "shape",
+      "renderMode": "native",
+      "impact": "fidelity",
+      "selectors": [
+        {
+          "partGlob": "ppt/slides/slide*.xml",
+          "namespace": "http://schemas.openxmlformats.org/drawingml/2006/main",
+          "localName": "outerShdw",
+          "ancestorPath": [
+            {
+              "namespace": "http://schemas.openxmlformats.org/presentationml/2006/main",
+              "localNames": ["sp"]
+            },
+            {
+              "namespace": "http://schemas.openxmlformats.org/presentationml/2006/main",
+              "localNames": ["spPr"]
+            },
+            {
+              "namespace": "http://schemas.openxmlformats.org/drawingml/2006/main",
+              "localNames": ["effectLst"]
+            }
+          ]
+        }
+      ],
+      "scope": {
+        "alignment": ["absent-default-b", "b", "ctr", "tr"],
+        "blurRadiusEmu": [50800, 76200, 101600, 115455, 127000, 317500],
+        "coexistingEffects": ["outer-shadow-only"],
+        "combinationPolicy": ["only-listed-verified-matrix-rows"],
+        "directionOoxmlUnits": ["absent-default-zero", 2700000, 5400000, 8100000],
+        "distanceEmu": ["absent-default-zero", 38100, 46182, 50800, 76200, 127000],
+        "geometry": ["ellipse", "rect", "roundRect"],
+        "geometryRows": ["rect-standard", "roundRect-wide", "ellipse-tall"],
+        "groupTransform": ["rotation-0", "flipH-false", "flipV-false"],
+        "groupScale": ["absent-standalone", "single-level-uniform-1.25"],
+        "nodeContainer": ["standalone-slide-shape", "single-level-group-child-shape"],
+        "rotWithShape": ["explicit-zero"],
+        "scaleOoxmlPercent": ["absent-default-100000", 92000, 100000, 102000],
+        "shapeFill": ["explicit-opaque-solid", "explicit-two-stop-opaque-linear-gradient"],
+        "shapeStroke": ["explicit-noFill"],
+        "shapeText": ["absent-or-empty"],
+        "shapeTransform": ["rotation-0", "flipH-false", "flipV-false"],
+        "shadowAlphaOoxmlPercent": [35000],
+        "shadowColorEncoding": ["srgbClr", "schemeClr-with-lumMod-lumOff"],
+        "skew": ["absent-or-zero"],
+        "source": ["direct-shape-effect-list"],
+        "verifiedMatrixRows": [
+          "rect-solid-srgb-blur-127000-default-offset-scale-alignment",
+          "roundRect-wide-solid-srgb-blur-50800-dist-38100-dir-5400000",
+          "ellipse-tall-gradient-srgb-blur-101600-dist-76200-dir-2700000-ctr",
+          "rect-solid-srgb-blur-115455-dist-46182-scale-102000-ctr",
+          "rect-solid-srgb-blur-317500-dist-127000-dir-8100000-scale-92000-tr",
+          "roundRect-solid-srgb-blur-76200-dist-50800-dir-2700000-group-1.25",
+          "rect-solid-scheme-modified-blur-101600-dist-50800-dir-5400000-scale-100000-b"
+        ]
+      },
+      "fallback": "Use the existing SVG/CSS approximation outside the verified matrix bounds; keep other alignments, directions, blur/distance/scale values, text-bearing or stroked shapes, picture fills, custom geometry, nested or differently scaled groups, rotation/flip, skew, 3D, effect DAGs, and compound effects as separate follow-on lanes.",
+      "affectedPaths": ["src/renderer/GroupRenderer.ts", "src/renderer/RenderContext.ts", "src/renderer/ShapeRenderer.ts", "src/renderer/StyleResolver.ts", "test/browser/rendering-coverage.spec.ts", "test/e2e/oracle/capability_contract.py", "test/e2e/oracle/capability_inventory.py", "test/e2e/oracle/capability_verification.py", "test/e2e/scripts/generate_pypptx_cases.py", "test/e2e/scripts/outer_shadow_metrics.py", "test/e2e/scripts/run_capability_loop.py", "test/e2e/test_capability_contract.py", "test/e2e/test_capability_inventory.py", "test/e2e/test_capability_verification.py", "test/e2e/test_outer_shadow_metrics.py", "test/e2e/test_pypptx_generator_cases.py", "test/unit/renderer/GroupRenderer.test.ts", "test/unit/renderer/ShapeRenderer.test.ts"],
+      "requiredGates": ["source", "structural", "unit", "browser", "native-powerpoint", "manual-visual", "regression", "shadow-local", "performance", "package", "package-size", "typecheck", "lint", "build", "docs"],
+      "issueUrls": []
+    },
+    {
+      "id": "drawingml.shape.effect.reflection",
+      "component": "shape",
+      "renderMode": "native",
+      "impact": "fidelity",
+      "selectors": [
+        {
+          "partGlob": "ppt/slides/slide*.xml",
+          "namespace": "http://schemas.openxmlformats.org/drawingml/2006/main",
+          "localName": "reflection",
+          "ancestorPath": [
+            {
+              "namespace": "http://schemas.openxmlformats.org/presentationml/2006/main",
+              "localNames": [
+                "sp"
+              ]
+            },
+            {
+              "namespace": "http://schemas.openxmlformats.org/presentationml/2006/main",
+              "localNames": [
+                "spPr"
+              ]
+            },
+            {
+              "namespace": "http://schemas.openxmlformats.org/drawingml/2006/main",
+              "localNames": [
+                "effectLst"
+              ]
+            }
+          ]
+        }
+      ],
+      "scope": {
+        "alignment": [
+          "bl"
+        ],
+        "blurRadiusEmu": [
+          6350,
+          177800
+        ],
+        "coexistingEffects": [
+          "reflection-only"
+        ],
+        "combinationPolicy": [
+          "only-listed-verified-matrix-rows"
+        ],
+        "directionOoxmlUnits": [
+          5400000
+        ],
+        "distanceEmu": [
+          "absent-default-zero",
+          38100
+        ],
+        "endAlphaOoxmlPercent": [
+          "absent-default-zero",
+          300
+        ],
+        "endPositionOoxmlPercent": [
+          28000,
+          35000,
+          40000
+        ],
+        "fadeDirectionOoxmlUnits": [
+          "absent-default-5400000"
+        ],
+        "geometry": [
+          "ellipse",
+          "rect",
+          "roundRect",
+          "upArrow"
+        ],
+        "geometryRows": [
+          "rect-standard",
+          "roundRect-wide",
+          "ellipse-tall",
+          "upArrow-wide"
+        ],
+        "groupTransform": [
+          "rotation-0",
+          "flipH-false",
+          "flipV-false"
+        ],
+        "groupScale": [
+          "absent-standalone",
+          "single-level-uniform-1.25"
+        ],
+        "nodeContainer": [
+          "standalone-slide-shape",
+          "single-level-group-child-shape"
+        ],
+        "rotWithShape": [
+          "explicit-zero"
+        ],
+        "scaleXOoxmlPercent": [
+          "absent-default-100000"
+        ],
+        "scaleYOoxmlPercent": [
+          -100000
+        ],
+        "shapeFill": [
+          "explicit-opaque-solid",
+          "explicit-two-stop-opaque-linear-gradient"
+        ],
+        "shapeStroke": [
+          "explicit-noFill"
+        ],
+        "shapeText": [
+          "absent-or-empty"
+        ],
+        "shapeTransform": [
+          "rotation-0",
+          "flipH-false",
+          "flipV-false"
+        ],
+        "skew": [
+          "absent-or-zero"
+        ],
+        "source": [
+          "direct-shape-effect-list"
+        ],
+        "startAlphaOoxmlPercent": [
+          40000,
+          52000
+        ],
+        "startPositionOoxmlPercent": [
+          "absent-default-zero"
+        ],
+        "verifiedMatrixRows": [
+          "rect-solid-blur-6350-alpha-52000-to-300-end-35000",
+          "roundRect-wide-solid-blur-6350-alpha-52000-to-300-end-35000",
+          "ellipse-tall-gradient-blur-6350-alpha-52000-to-300-end-35000",
+          "upArrow-wide-gradient-blur-177800-alpha-40000-end-default-zero-position-28000",
+          "roundRect-solid-blur-6350-alpha-52000-to-300-end-35000-group-1.25",
+          "rect-solid-blur-6350-alpha-52000-to-300-end-40000-dist-38100"
+        ]
+      },
+      "fallback": "Use the explicit cloned-layer approximation outside the verified matrix bounds; keep live text without a visible surface, pictures, group-level effects, other alignment/direction/fade/scale/skew tuples, nested or non-uniform groups, rotation/flip, 3D, effect DAGs, and compound effects as separate follow-on lanes.",
+      "affectedPaths": ["src/renderer/GroupRenderer.ts", "src/renderer/ReflectionRenderer.ts", "src/renderer/ShapeRenderer.ts", "test/browser/rendering-coverage.spec.ts", "test/e2e/oracle/capability_contract.py", "test/e2e/oracle/capability_inventory.py", "test/e2e/oracle/capability_verification.py", "test/e2e/scripts/generate_pypptx_cases.py", "test/e2e/scripts/reflection_metrics.py", "test/e2e/scripts/run_capability_loop.py", "test/e2e/test_capability_contract.py", "test/e2e/test_capability_inventory.py", "test/e2e/test_capability_verification.py", "test/e2e/test_pypptx_generator_cases.py", "test/e2e/test_reflection_metrics.py", "test/unit/renderer/GroupRenderer.test.ts", "test/unit/renderer/ShapeRenderer.test.ts"],
+      "requiredGates": [
+        "source",
+        "structural",
+        "unit",
+        "browser",
+        "native-powerpoint",
+        "manual-visual",
+        "regression",
+        "reflection-local",
+        "performance",
+        "package",
+        "package-size",
+        "typecheck",
+        "lint",
+        "build",
+        "docs"
+      ],
+      "issueUrls": []
+    },
+    {
+      "id": "drawingml.shape.geometry.adjustment.donut",
+      "component": "shape",
+      "renderMode": "native",
+      "impact": "fidelity",
+      "selectors": [
+        {
+          "partGlob": "ppt/slides/slide*.xml",
+          "namespace": "http://schemas.openxmlformats.org/drawingml/2006/main",
+          "localName": "prstGeom",
+          "attributes": {
+            "prst": ["donut"]
+          }
+        }
+      ],
+      "scope": {
+        "adjustment": ["adj"],
+        "bounds": [0, 50000],
+        "default": [25000],
+        "presets": ["donut"]
+      },
+      "fallback": "Use the existing handwritten donut geometry for invalid or degenerate generated-runtime inputs.",
+      "affectedPaths": ["src/model/nodes/PicNode.ts", "src/model/nodes/ShapeNode.ts", "src/renderer/ImageRenderer.ts", "src/renderer/ShapeRenderer.ts", "src/shapes/generated/ooxmlPresetGeometrySubset.ts", "src/shapes/ooxmlGeometryRuntime.ts", "src/shapes/presets.ts", "scripts/ooxml-geometry/formula-contract.mjs", "scripts/ooxml-geometry/formula-evaluator.mjs", "scripts/ooxml-geometry/generate.mjs", "scripts/ooxml-geometry/geometry-ir.mjs", "scripts/ooxml-geometry/path-emitter.mjs", "test/browser/rendering-coverage.spec.ts", "test/unit/build/ooxmlGeometryPathEmitter.test.ts", "test/unit/model/nodes/PicNode.test.ts", "test/unit/renderer/GroupRenderer.test.ts", "test/unit/renderer/ImageRenderer.test.ts", "test/unit/shapes/ooxmlGeometryRuntime.test.ts"],
+      "requiredGates": ["source", "structural", "unit", "browser", "native-powerpoint", "manual-visual", "regression", "docs"],
+      "issueUrls": []
+    },
+    {
+      "id": "drawingml.shape.geometry.flowchart-zero-adjustment",
+      "component": "shape",
+      "renderMode": "native",
+      "impact": "fidelity",
+      "selectors": [
+        {
+          "partGlob": "ppt/slides/slide*.xml",
+          "namespace": "http://schemas.openxmlformats.org/drawingml/2006/main",
+          "localName": "prstGeom",
+          "attributes": {
+            "prst": ["flowChartAlternateProcess", "flowChartCollate", "flowChartConnector", "flowChartDecision", "flowChartDelay", "flowChartDisplay", "flowChartDocument", "flowChartExtract", "flowChartInputOutput", "flowChartInternalStorage", "flowChartMagneticDisk", "flowChartMagneticDrum", "flowChartMagneticTape", "flowChartManualInput", "flowChartManualOperation", "flowChartMerge", "flowChartMultidocument", "flowChartOffpageConnector", "flowChartOnlineStorage", "flowChartOr", "flowChartPredefinedProcess", "flowChartPreparation", "flowChartProcess", "flowChartPunchedCard", "flowChartPunchedTape", "flowChartSort", "flowChartSummingJunction", "flowChartTerminator"]
+          }
+        }
+      ],
+      "scope": {
+        "adjustmentGuideCount": [0],
+        "aspectRatios": ["square", "wide", "tall"],
+        "containers": ["standalone", "non-identity-group"],
+        "paint": ["explicit-solid", "theme-style-reference"],
+        "presetCount": [28]
+      },
+      "fallback": "Use the handwritten preset implementation when generated runtime evaluation rejects invalid dimensions.",
+      "affectedPaths": ["src/shapes/generated/ooxmlPresetGeometrySubset.ts", "src/shapes/ooxmlGeometryRuntime.ts", "src/shapes/presets.ts", "scripts/ooxml-geometry/generate.mjs", "test/browser/rendering-coverage.spec.ts", "test/e2e/oracle/cases-pypptx/oracle-pypptx-flowchart-*.json", "test/e2e/scripts/generate_pypptx_cases.py", "test/e2e/test_pypptx_generator_cases.py", "test/unit/renderer/GroupRenderer.test.ts", "test/unit/renderer/ShapeRenderer.test.ts", "test/unit/shapes/ooxmlGeometryRuntime.test.ts"],
+      "requiredGates": ["source", "structural", "unit", "browser", "native-powerpoint", "manual-visual", "regression", "docs"],
+      "issueUrls": []
+    },
+    {
+      "id": "drawingml.table.common",
+      "component": "table",
+      "renderMode": "native",
+      "impact": "semantics",
+      "selectors": [
+        {
+          "partGlob": "ppt/slides/slide*.xml",
+          "namespace": "http://schemas.openxmlformats.org/drawingml/2006/main",
+          "localName": "tbl"
+        }
+      ],
+      "scope": {
+        "borders": ["direct-solid", "direct-dashed", "direct-no-fill", "theme-and-conditional"],
+        "cellLayout": ["margins", "top-middle-bottom-anchor", "wrapped-text"],
+        "grid": ["equal", "variable-column-width", "variable-row-height"],
+        "merges": ["horizontal", "vertical"],
+        "styleOptions": ["first-row", "first-column", "last-column", "banded-rows"],
+        "text": ["latin", "cjk", "mixed-script"]
+      },
+      "fallback": "Render combinations outside the native matrix through the same HTML table path without extending the verified fidelity claim.",
+      "affectedPaths": ["src/model/nodes/TableNode.ts", "src/renderer/TableRenderer.ts", "test/browser/chart-table-coverage.spec.ts", "test/e2e/oracle/cases-pypptx/oracle-pypptx-table-*.json", "test/e2e/scripts/generate_pypptx_cases.py", "test/e2e/test_pypptx_generator_cases.py", "test/unit/renderer/ChartTableCoverage.test.ts", "test/unit/renderer/TableRenderer.test.ts"],
+      "requiredGates": ["source", "structural", "unit", "browser", "native-powerpoint", "manual-visual", "regression", "docs"],
+      "issueUrls": []
+    },
+    {
+      "id": "drawingml.text.3d.scene",
+      "component": "text",
+      "renderMode": "fallback",
+      "planningMode": "observation-only",
+      "impact": "fidelity",
+      "selectors": [
+        {
+          "partGlob": "ppt/slides/slide*.xml",
+          "namespace": "http://schemas.openxmlformats.org/drawingml/2006/main",
+          "localName": "scene3d",
+          "parent": {
+            "namespace": "http://schemas.openxmlformats.org/drawingml/2006/main",
+            "localNames": ["bodyPr"]
+          }
+        }
+      ],
+      "scope": {
+        "properties": ["camera", "lightRig", "backdrop"],
+        "target": ["text-body"]
+      },
+      "fallback": "Preserve the two-dimensional text layout while omitting text-body camera and lighting semantics.",
+      "affectedPaths": ["src/model/nodes/ShapeNode.ts", "src/renderer/ShapeRenderer.ts", "src/renderer/TextRenderer.ts"],
+      "requiredGates": ["source", "structural", "unit", "browser", "native-powerpoint", "manual-visual", "docs"],
+      "issueUrls": []
+    },
+    {
+      "id": "drawingml.text.body.wrap-overflow",
+      "component": "text",
+      "renderMode": "native",
+      "impact": "semantics",
+      "selectors": [
+        {
+          "partGlob": "ppt/slides/slide*.xml",
+          "namespace": "http://schemas.openxmlformats.org/drawingml/2006/main",
+          "localName": "bodyPr"
+        }
+      ],
+      "scope": {
+        "properties": ["wrap", "horzOverflow", "vertOverflow", "spAutoFit", "normAutofit", "noAutofit", "eaLnBrk"],
+        "spAutoFitGrowthAspectRatios": ["square", "wide", "tall"],
+        "spAutoFitGrowthAnchors": ["absent", "top"],
+        "spAutoFitGrowthContainers": ["standalone-horizontal-textbox"],
+        "spAutoFitGrowthWrap": ["square"],
+        "spAutoFitGrowthTriggers": ["multiple-visible-paragraphs", "explicit-visible-run-font-size-with-material-width-overflow"],
+        "spAutoFitGrowthExclusions": ["non-square-wrap", "center-or-bottom-anchor", "explicit-overflow-axis", "vertical-text", "diagram-text-bounds", "non-textbox-shape", "inherited-compact-label"]
+      },
+      "fallback": "Use explicit inline text-container styles so host white-space rules cannot replace PowerPoint wrapping semantics; unsupported spAutoFit growth contexts retain the bounded measurement path.",
+      "affectedPaths": ["src/renderer/ShapeRenderer.ts", "src/renderer/TextRenderer.ts", "test/browser/browser-package.spec.ts", "test/browser/rendering-coverage.spec.ts", "test/browser/text-line-break.spec.ts", "test/e2e/oracle/cases-pypptx/oracle-pypptx-text-00*.json", "test/e2e/scripts/generate_pypptx_cases.py", "test/e2e/test_pypptx_generator_cases.py", "test/fixtures/text-coverage.ts", "test/unit/renderer/ShapeRenderer.test.ts", "test/unit/renderer/TextRenderer.branches.test.ts"],
+      "requiredGates": ["source", "structural", "unit", "browser", "native-powerpoint", "manual-visual", "regression", "docs"],
+      "issueUrls": ["https://github.com/aiden0z/pptx-renderer/issues/17", "https://github.com/aiden0z/pptx-renderer/issues/23"]
+    },
+    {
+      "id": "drawingml.text.math.omml",
+      "component": "text",
+      "renderMode": "approximate",
+      "impact": "fidelity",
+      "selectors": [
+        {
+          "partGlob": "ppt/slides/slide*.xml",
+          "namespace": "http://schemas.microsoft.com/office/drawing/2010/main",
+          "localName": "m"
+        }
+      ],
+      "scope": {
+        "directOmmlRendering": ["m:r", "m:f", "m:rad", "m:sSub", "m:sSup", "m:sSubSup", "m:d", "m:nary", "m:m", "m:func"],
+        "fallbackContainers": ["mc:Fallback/p:sp", "mc:Fallback/p:graphicFrame"],
+        "fractionTypes": ["bar", "noBar", "skw", "lin"],
+        "formulaRoots": ["m:oMath", "m:oMathPara"],
+        "nativeMatrixConstructs": ["m:r", "m:f", "m:rad", "m:sSubSup", "m:d", "m:nary", "m:m", "m:func"],
+        "output": ["Presentation MathML"],
+        "styleBoundary": ["single-inherited-formula-run-style"]
+      },
+      "fallback": "Render a fully recognized math subtree as Presentation MathML; if any semantic OMML construct is unknown, select the package-authored MCE fallback shape or graphic frame. Formulas without a usable fallback remain unrendered.",
+      "affectedPaths": ["src/model/RenderableChild.ts", "src/model/nodes/MathNode.ts", "src/model/nodes/ShapeNode.ts", "src/renderer/MathRenderer.ts", "src/renderer/TextRenderer.ts", "test/browser/compatible-content-package.spec.ts", "test/e2e/oracle/cases-pypptx/oracle-pypptx-formula-*.json", "test/e2e/scripts/generate_pypptx_cases.py", "test/e2e/server.py", "test/e2e/test_pypptx_generator_cases.py", "test/e2e/test_server_provenance.py", "test/unit/model/RenderableChild.test.ts", "test/unit/model/nodes/MathNode.test.ts", "test/unit/renderer/MathRenderer.test.ts"],
+      "requiredGates": ["source", "structural", "unit", "browser", "native-powerpoint", "manual-visual", "regression", "docs"],
+      "issueUrls": []
+    },
+    {
+      "id": "drawingml.text.run.defrpr-color-precedence",
+      "component": "text",
+      "renderMode": "native",
+      "impact": "semantics",
+      "selectors": [
+        {
+          "partGlob": "ppt/slides/slide*.xml",
+          "namespace": "http://schemas.openxmlformats.org/drawingml/2006/main",
+          "localName": "defRPr"
+        }
+      ],
+      "scope": {
+        "aspectRatios": ["square", "wide", "tall"],
+        "precedence": [
+          "run-rPr-over-paragraph-defRPr",
+          "paragraph-defRPr-over-shape-fontRef",
+          "shape-fontRef-fallback-when-local-color-absent"
+        ],
+        "properties": ["solidFill", "schemeClr", "srgbClr"]
+      },
+      "fallback": "Use the shape fontRef only when neither the run nor paragraph defRPr declares a local text fill.",
+      "affectedPaths": ["src/renderer/StyleResolver.ts", "src/renderer/TextRenderer.ts", "test/browser/rendering-coverage.spec.ts", "test/e2e/oracle/cases-pypptx/oracle-pypptx-text-005[6-9]-*.json", "test/e2e/scripts/generate_pypptx_cases.py", "test/e2e/test_pypptx_generator_cases.py", "test/unit/renderer/TextRenderer.branches.test.ts"],
+      "requiredGates": ["source", "structural", "unit", "browser", "native-powerpoint", "manual-visual", "regression", "docs"],
+      "issueUrls": ["https://github.com/aiden0z/pptx-renderer/issues/21", "https://github.com/aiden0z/pptx-renderer/issues/23"]
+    },
+    {
+      "id": "presentation.animation.entrance.fade",
+      "component": "presentation",
+      "renderMode": "fallback",
+      "impact": "enhancement",
+      "selectors": [
+        {
+          "partGlob": "ppt/slides/slide*.xml",
+          "namespace": "http://schemas.openxmlformats.org/presentationml/2006/main",
+          "localName": "cTn",
+          "parent": {
+            "namespace": "http://schemas.openxmlformats.org/presentationml/2006/main",
+            "localNames": ["par"]
+          },
+          "attributes": {
+            "presetClass": ["entr"],
+            "presetID": ["10"],
+            "presetSubtype": ["0"]
+          }
+        }
+      ],
+      "scope": {
+        "behavior": ["opacity-fade-in"],
+        "durationMs": [500],
+        "fill": ["hold"],
+        "triggerNodeTypes": ["clickEffect", "withEffect"],
+        "targetKinds": ["shape"],
+        "targetScope": ["whole-shape"],
+        "visibilitySet": ["style.visibility=visible"],
+        "exclusions": ["afterEffect", "group-target", "picture-target", "paragraph-range", "non-fade-effect", "unsupported-timing-tree"]
+      },
+      "fallback": "Render the shape in its static final visible state when the timing tree, target, trigger, effect, or duration falls outside the verified fade-in matrix.",
+      "affectedPaths": ["src/core/Viewer.ts", "src/model/Slide.ts", "src/renderer/SlideRenderer.ts", "test/browser/rendering-coverage.spec.ts", "test/e2e/oracle/capability_ranking.py", "test/e2e/scripts/run_capability_loop.py", "test/e2e/test_capability_contract.py", "test/e2e/test_capability_inventory.py", "test/e2e/test_capability_ranking.py"],
+      "requiredGates": ["source", "structural", "unit", "browser", "performance", "native-powerpoint", "manual-visual", "regression", "docs"],
+      "issueUrls": ["https://github.com/aiden0z/pptx-renderer/issues/18", "https://github.com/aiden0z/pptx-renderer/issues/23"]
+    },
+    {
+      "id": "presentation.animation.timing",
+      "component": "presentation",
+      "renderMode": "fallback",
+      "planningMode": "observation-only",
+      "impact": "enhancement",
+      "selectors": [
+        {
+          "partGlob": "ppt/slides/slide*.xml",
+          "namespace": "http://schemas.openxmlformats.org/presentationml/2006/main",
+          "localName": "timing"
+        }
+      ],
+      "scope": {
+        "behavior": ["static-final-state"],
+        "role": ["residual-unsupported-animation-observation"],
+        "unsupported": ["timeline", "triggers", "seek", "pause", "media-sync"]
+      },
+      "fallback": "Render the slide's static object state without animation playback.",
+      "affectedPaths": ["src/model/Slide.ts", "src/renderer/SlideRenderer.ts"],
+      "requiredGates": ["source", "structural", "unit", "browser", "performance", "native-powerpoint", "manual-visual", "docs"],
+      "issueUrls": ["https://github.com/aiden0z/pptx-renderer/issues/18"]
+    }
+  ]
+}

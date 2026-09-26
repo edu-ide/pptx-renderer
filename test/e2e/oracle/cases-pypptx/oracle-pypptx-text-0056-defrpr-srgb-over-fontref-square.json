@@ -1,0 +1,26 @@
+{
+  "name": "oracle-pypptx-text-0056-defrpr-srgb-over-fontref-square",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "requiredFonts": [
+      "Microsoft YaHei"
+    ],
+    "features": [
+      "text.color.precedence",
+      "shape.style.fontRef=accent1",
+      "paragraph.defRPr.solidFill.srgbClr=C00000",
+      "layout.aspectRatio=square",
+      "precedence.paragraph-defRPr-over-shape-fontRef"
+    ]
+  }
+}

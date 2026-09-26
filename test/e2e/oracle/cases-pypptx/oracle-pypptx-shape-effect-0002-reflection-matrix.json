@@ -1,0 +1,84 @@
+{
+  "name": "oracle-pypptx-shape-effect-0002-reflection-matrix",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "p:sp/p:spPr/a:effectLst/a:reflection",
+      "semantics=inverse|alphaFade|blur|verticalFlip|distance",
+      "geometry=rect|roundRect|ellipse|upArrow",
+      "geometry.aspect=square|wide|tall",
+      "container=standalone|singleLevelUniformUnrotatedGroup",
+      "paint=explicitSolid|simpleGradient",
+      "reflection.direction=90deg",
+      "reflection.scale=sxImplicit100pct|syNegative100pct",
+      "reflection.alignment=bottomLeft",
+      "shape.transform=rotation0|flipHFalse|flipVFalse",
+      "shape3d=absent"
+    ]
+  },
+  "assertions": {
+    "inverseSlideIndices": [
+      0
+    ],
+    "positiveReflectionSlideIndices": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ]
+  }
+}

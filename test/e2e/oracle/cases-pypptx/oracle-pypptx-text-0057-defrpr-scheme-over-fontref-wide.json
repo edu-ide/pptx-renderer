@@ -1,0 +1,26 @@
+{
+  "name": "oracle-pypptx-text-0057-defrpr-scheme-over-fontref-wide",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "requiredFonts": [
+      "Microsoft YaHei"
+    ],
+    "features": [
+      "text.color.precedence",
+      "shape.style.fontRef=accent1",
+      "paragraph.defRPr.solidFill.schemeClr=accent2",
+      "layout.aspectRatio=wide",
+      "precedence.paragraph-defRPr-over-shape-fontRef"
+    ]
+  }
+}

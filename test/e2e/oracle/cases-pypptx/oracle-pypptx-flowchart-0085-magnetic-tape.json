@@ -1,0 +1,37 @@
+{
+  "name": "oracle-pypptx-flowchart-0085-magnetic-tape",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "p:sp.prstGeom=flowChartMagneticTape",
+      "a:avLst.adjustmentGuideCount=0",
+      "geometry.aspect=square|wide|tall",
+      "container=standalone|nonIdentityGroup",
+      "paint=explicitSolid|themeStyleReference"
+    ]
+  }
+}

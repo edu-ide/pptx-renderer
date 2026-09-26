@@ -1,0 +1,21 @@
+{
+  "name": "oracle-pypptx-table-0005-variable-grid-sizes",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "a:gridCol.variableWidth",
+      "a:tr.variableHeight",
+      "a:tc.textWrap"
+    ]
+  }
+}

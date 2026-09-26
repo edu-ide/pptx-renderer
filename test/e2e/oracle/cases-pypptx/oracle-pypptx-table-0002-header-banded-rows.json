@@ -1,0 +1,21 @@
+{
+  "name": "oracle-pypptx-table-0002-header-banded-rows",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "a:tblPr.firstRow=1",
+      "a:tblPr.bandRow=1",
+      "a:tableStyleId"
+    ]
+  }
+}

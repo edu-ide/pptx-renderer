@@ -1,0 +1,94 @@
+{
+  "name": "oracle-pypptx-shape3d-0020-perspective-left-picture-group-matrix",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "p:grpSp/p:grpSpPr/a:scene3d",
+      "children=twoDirectStretchPngPictures",
+      "pictureSourceCrop=absent|realCorpusAsymmetric",
+      "geometry.aspect=square|wide|tall",
+      "semantics=positive|sceneAbsentInverse",
+      "container=standalone|coordinateOnlyAncestor",
+      "a:scene3d.camera=perspectiveLeft",
+      "a:scene3d.camera.rot=0,1500000,0",
+      "a:scene3d.camera.fov=5700000",
+      "a:scene3d.lightRig=threePt:t",
+      "a:sp3d=absent",
+      "targetGroup.effects=absent"
+    ],
+    "claim": "native-verified-bounded-picture-group-camera-plane"
+  },
+  "assertions": {
+    "inverseSlideIndices": [
+      1,
+      3,
+      5,
+      7
+    ],
+    "positiveGroupCameraSlideIndices": [
+      0,
+      2,
+      4,
+      6
+    ]
+  }
+}

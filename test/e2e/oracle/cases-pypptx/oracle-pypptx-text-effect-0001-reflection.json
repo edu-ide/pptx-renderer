@@ -1,0 +1,32 @@
+{
+  "name": "oracle-pypptx-text-effect-0001-reflection",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "p:sp/p:spPr/a:effectLst/a:reflection",
+      "shape.kind=textBox",
+      "paint=noFillLiveText",
+      "bodyPr.wrap=none",
+      "bodyPr.autofit=spAutoFit",
+      "reflection.direction=90deg",
+      "reflection.scale=sxImplicit100pct|syNegative100pct",
+      "reflection.alignment=bottomLeft",
+      "shape.transform=rotation0|flipHFalse|flipVFalse"
+    ]
+  },
+  "assertions": {
+    "positiveReflectionSlideIndices": [
+      0
+    ]
+  }
+}

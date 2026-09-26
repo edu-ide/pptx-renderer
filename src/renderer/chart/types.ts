@@ -8,11 +8,14 @@ export interface SeriesData {
   categories: string[];
   values: number[];
   xValues?: number[];
+  xBlankIndices?: Set<number>;
   bubbleSizes?: number[];
+  bubbleBlankIndices?: Set<number>;
   colorHex?: string | object;
   dataPointColors?: (string | undefined)[];
   dataPointStyles?: (DataPointStyle | undefined)[];
   formatCode?: string;
+  blankIndices?: Set<number>;
   invertIfNegative?: boolean;
   markerSymbol?: string;
   markerSize?: number;
@@ -30,8 +33,10 @@ export interface ChartLineStyle {
 }
 
 export const DEFAULT_CHART_FOREGROUND_COLOR = '#000000';
+export const DEFAULT_CHART_AXIS_LABEL_FONT_SIZE = 10;
+export const DEFAULT_CHART_AXIS_LINE_COLOR = '#898989';
 export const DEFAULT_MAJOR_GRIDLINE_STYLE: Required<ChartLineStyle> = {
-  color: DEFAULT_CHART_FOREGROUND_COLOR,
+  color: DEFAULT_CHART_AXIS_LINE_COLOR,
   width: 1,
   type: 'solid',
 };
@@ -57,6 +62,7 @@ export interface AxisInfo {
   min?: number;
   max?: number;
   hasMajorGridlines: boolean;
+  majorTickMark?: string;
   orientation: string;
   title?: string;
   titleStyle?: ChartTextStyle;
@@ -68,6 +74,7 @@ export interface AxisInfo {
 }
 
 export interface DataLabelConfig {
+  deleted?: boolean;
   showVal: boolean;
   showCatName: boolean;
   showSerName: boolean;
@@ -91,6 +98,10 @@ export type ChartTextStyle = {
   fontSize?: number;
   bold?: boolean;
   fontFamily?: string;
+  textShadowColor?: string;
+  textShadowBlur?: number;
+  textShadowOffsetX?: number;
+  textShadowOffsetY?: number;
   [EXPLICIT_FONT_SIZE]?: true;
 };
 

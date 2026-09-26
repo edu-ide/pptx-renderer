@@ -2,14 +2,22 @@
  * Chart renderer — converts OOXML chart XML into ECharts visualizations.
  */
 
-import * as echarts from 'echarts';
+import type * as EChartsTypes from 'echarts';
+import type { EChartsType } from 'echarts/core';
 import { ChartNodeData } from '../model/nodes/ChartNode';
 import { RenderContext } from './RenderContext';
 import { SafeXmlNode } from '../parser/XmlParser';
+import { hexToRgb, hslToRgb, rgbToHex, rgbToHsl } from '../utils/color';
 import { applyAxisInfo, getChartAxisIds, parseAxes, parseScatterAxes } from './chart/axes';
 import { formatValue } from './chart/format';
 import { markerSizeToPx } from './chart/style';
-import { extractTitleText, extractTitleTextStyle, getChartThemeFontFamily } from './chart/text';
+import {
+  chartTextStyleToEChartsTextStyle,
+  extractTitleRichText,
+  extractTitleText,
+  extractTitleTextStyle,
+  getChartThemeFontFamily,
+} from './chart/text';
 import { parseOoxmlBoolElement } from './chart/ooxml';
 import { parseDataLabels, parsePointDataLabelOverrides } from './chart/dataLabels';
 import { parseExplosion, parseSeries } from './chart/series';
@@ -20,6 +28,7 @@ import {
   getVaryColorPointPalette,
 } from './chart/palette';
 import { numToPct } from './chart/layout';
+import { echarts } from './chart/echartsRuntime';
 import {
   buildLegendOption,
   extractLegendInfo,
@@ -39,6 +48,7 @@ import {
   applyDefaultTextColors,
   applyLegendGridMargins,
   applyNiceAxisRange,
+  type ChartPixelSize,
   extractChartDefaultFontSize,
   niceAxisInterval,
   niceAxisMax,
@@ -96,6 +106,33 @@ function extractChartTitle(chartNode: SafeXmlNode, seriesArr?: SeriesData[]): st
   return extractTitleText(title);
 }
 
+function buildChartTitleOption(
+  chartNode: SafeXmlNode,
+  seriesArr: SeriesData[],
+  ctx: RenderContext,
+  fontSize: number,
+): EChartsTypes.EChartsOption['title'] | undefined {
+  const title = extractChartTitle(chartNode, seriesArr);
+  if (!title) return undefined;
+
+  const titleNode = chartNode.child('title');
+  const richTitle = extractTitleRichText(titleNode, ctx);
+  const titleStyle = extractTitleTextStyle(titleNode, ctx);
+  const echartsTitleStyle = chartTextStyleToEChartsTextStyle(titleStyle);
+  const titleLayout = extractTitleManualLayout(chartNode);
+
+  return {
+    text: richTitle?.text ?? title,
+    left: 'center',
+    ...titleLayout,
+    textStyle: {
+      fontSize,
+      ...(echartsTitleStyle ?? {}),
+      ...(richTitle ? { rich: richTitle.rich } : {}),
+    },
+  };
+}
+
 /**
  * Extract chart title manual layout (title > layout > manualLayout) to ECharts title position.
  */
@@ -115,14 +152,23 @@ function computePieLayout(
   isDoughnut: boolean,
   showLabel: boolean,
   holeSizePct = 50,
+  hasExplosion = false,
 ): { center: [string, string]; radius: [string, string] | string } {
   const placement = getLegendPlacement(legendInfo);
   let center: [string, string] = ['50%', '55%'];
   let outerRadius = showLabel ? 78 : 82;
 
   if (placement === 'right') {
-    center = ['38%', '55%'];
-    outerRadius = 82;
+    if (isDoughnut && hasExplosion) {
+      center = ['45%', '55%'];
+      outerRadius = 76;
+    } else if (isDoughnut) {
+      center = ['39%', '54%'];
+      outerRadius = 87;
+    } else {
+      center = ['38%', '55%'];
+      outerRadius = 82;
+    }
   } else if (placement === 'left') {
     center = ['62%', '55%'];
     outerRadius = 82;
@@ -141,8 +187,13 @@ function computePieLayout(
   return { center, radius: [`${innerRadius}%`, `${outerRadius}%`] };
 }
 
-function pieExplosionToOffset(explosion: number): number {
-  return explosion;
+function pieExplosionToOffset(explosion: number, isDoughnut = false): number {
+  return isDoughnut ? explosion : Math.round(explosion * 0.5);
+}
+
+function mapFirstSliceAngle(firstSliceAng: number | undefined): number | undefined {
+  if (firstSliceAng === undefined || !Number.isFinite(firstSliceAng)) return undefined;
+  return (((90 - firstSliceAng) % 360) + 360) % 360;
 }
 
 /** Map OOXML c:marker > c:symbol values to ECharts symbol names. */
@@ -166,6 +217,10 @@ function mapOoxmlSymbol(symbol: string | undefined): string | undefined {
 }
 
 const DEFAULT_LINE_MARKER_SCATTER_SYMBOLS = ['diamond', 'rect', 'triangle', 'circle'];
+const DEFAULT_LINE_MARKER_SYMBOLS = ['diamond', 'square', 'triangle', 'circle'];
+const DEFAULT_LINE_MARKER_SIZE = markerSizeToPx(9);
+const DEFAULT_SCATTER_MARKER_SIZE = DEFAULT_LINE_MARKER_SIZE;
+const DEFAULT_BUBBLE_MAX_DIAMETER = 120;
 
 function defaultScatterSymbol(scatterStyle: string, seriesIndex: number): string {
   if (scatterStyle === 'lineMarker' || scatterStyle === 'smoothMarker') {
@@ -174,6 +229,52 @@ function defaultScatterSymbol(scatterStyle: string, seriesIndex: number): string
     ];
   }
   return 'circle';
+}
+
+function defaultLineMarkerSymbol(seriesIndex: number): string {
+  return DEFAULT_LINE_MARKER_SYMBOLS[seriesIndex % DEFAULT_LINE_MARKER_SYMBOLS.length];
+}
+
+/** Keep source indices and missing coordinates through the ECharts boundary. */
+function buildXYData(s: SeriesData, mode: DispBlanksAs, bubble = false): (number | null)[][] {
+  const count = Math.max(
+    s.values.length,
+    s.xValues?.length ?? 0,
+    bubble ? (s.bubbleSizes?.length ?? 0) : 0,
+  );
+  const blank = mode === 'zero' ? 0 : null;
+  return Array.from({ length: count }, (_, i) => {
+    const x = s.xValues ? (s.xBlankIndices?.has(i) ? blank : (s.xValues[i] ?? blank)) : i;
+    const y = s.blankIndices?.has(i) ? blank : (s.values[i] ?? blank);
+    return bubble
+      ? [
+          x,
+          y,
+          s.bubbleSizes ? (s.bubbleBlankIndices?.has(i) ? blank : (s.bubbleSizes[i] ?? blank)) : 0,
+        ]
+      : [x, y];
+  });
+}
+
+function smoothXYData(data: (number | null)[][], span: boolean): (number | null)[][] {
+  const result: (number | null)[][] = [];
+  let segment: number[][] = [];
+  const flush = () => {
+    result.push(...buildSmoothScatterLineData(segment));
+    segment = [];
+  };
+  for (const point of data) {
+    if (point.some((v) => v === null)) {
+      if (!span) {
+        flush();
+        result.push(point);
+      }
+    } else {
+      segment.push(point as number[]);
+    }
+  }
+  flush();
+  return result;
 }
 
 function buildSmoothScatterLineData(data: number[][], stepsPerSegment = 24): number[][] {
@@ -225,6 +326,20 @@ function hasManualGrid(
     manualGrid.width !== undefined ||
     manualGrid.height !== undefined
   );
+}
+
+function hasNegativeSeriesValue(seriesArr: SeriesData[]): boolean {
+  return seriesArr.some((series) => series.values.some((value) => value < 0));
+}
+
+function scaledChartMargin(
+  size: number | undefined,
+  ratio: number,
+  fallback: number,
+  minimum = 0,
+): number {
+  if (size === undefined || !Number.isFinite(size) || size <= 0) return fallback;
+  return Math.max(minimum, Math.round(size * ratio));
 }
 
 // ---------------------------------------------------------------------------
@@ -324,16 +439,54 @@ function forcePercentAxis(axisDef: Record<string, unknown>): void {
   };
 }
 
+function adjustFilledRadarStopColor(
+  hex: string,
+  options: { hueOffset?: number; saturationScale: number; lightnessOffset: number },
+): string {
+  const { r, g, b } = hexToRgb(hex);
+  const { h, s, l } = rgbToHsl(r, g, b);
+  const adjusted = hslToRgb(
+    h + (options.hueOffset ?? 0),
+    Math.min(1, s * options.saturationScale),
+    Math.max(0, Math.min(1, l + options.lightnessOffset)),
+  );
+  return rgbToHex(adjusted.r, adjusted.g, adjusted.b);
+}
+
+function buildFilledRadarAreaColor(hex: string): echarts.graphic.LinearGradient {
+  return new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+    {
+      offset: 0,
+      color: adjustFilledRadarStopColor(hex, { saturationScale: 1.95, lightnessOffset: 0.217 }),
+    },
+    {
+      offset: 1,
+      color: adjustFilledRadarStopColor(hex, {
+        hueOffset: -5,
+        saturationScale: 1.7,
+        lightnessOffset: -0.128,
+      }),
+    },
+  ]);
+}
+
 function collectSeriesValues(seriesArr: SeriesData[], stacked: boolean): number[] {
-  if (!stacked) return seriesArr.flatMap((series) => series.values);
+  if (!stacked) {
+    return seriesArr.flatMap((series) =>
+      series.values.filter((_, idx) => !series.blankIndices?.has(idx)),
+    );
+  }
   const pointCount = Math.max(0, ...seriesArr.map((series) => series.values.length));
   const sums: number[] = [];
   for (let i = 0; i < pointCount; i++) {
     let sum = 0;
+    let hasValue = false;
     for (const series of seriesArr) {
+      if (series.blankIndices?.has(i)) continue;
       sum += series.values[i] ?? 0;
+      hasValue = true;
     }
-    sums.push(sum);
+    if (hasValue) sums.push(sum);
   }
   return sums;
 }
@@ -400,8 +553,41 @@ function mergeDataLabelConfig(
   };
 }
 
+function getDataLabelsNode(
+  serNode: SafeXmlNode | undefined,
+  chartTypeNode: SafeXmlNode,
+): SafeXmlNode {
+  const seriesDlbls = serNode?.child('dLbls');
+  return seriesDlbls?.exists() ? seriesDlbls : chartTypeNode.child('dLbls');
+}
+
 function dataLabelShowsContent(cfg: DataLabelConfig | undefined): boolean {
-  return Boolean(cfg && (cfg.showVal || cfg.showCatName || cfg.showSerName || cfg.showPercent));
+  return Boolean(
+    cfg && !cfg.deleted && (cfg.showVal || cfg.showCatName || cfg.showSerName || cfg.showPercent),
+  );
+}
+
+type DispBlanksAs = 'gap' | 'zero' | 'span';
+
+function getDispBlanksAs(chartNode: SafeXmlNode): DispBlanksAs {
+  const val = chartNode.child('dispBlanksAs').attr('val');
+  return val === 'zero' || val === 'span' ? val : 'gap';
+}
+
+function resolveBlankDisplayValue(
+  series: SeriesData,
+  pointIdx: number,
+  value: number,
+  dispBlanksAs: DispBlanksAs,
+): number | null {
+  if (!series.blankIndices?.has(pointIdx)) return value;
+  return dispBlanksAs === 'zero' ? 0 : null;
+}
+
+function getSharedSeriesFormatCode(seriesArr: SeriesData[]): string | undefined {
+  const first = seriesArr[0]?.formatCode;
+  if (!first) return undefined;
+  return seriesArr.every((series) => series.formatCode === first) ? first : undefined;
 }
 
 function buildPieLabelOption(
@@ -433,7 +619,7 @@ function buildPieLabelOption(
 
 function buildPieLabelLayout(
   layouts: Map<number, DataLabelManualLayout>,
-): echarts.PieSeriesOption['labelLayout'] {
+): EChartsTypes.PieSeriesOption['labelLayout'] {
   if (layouts.size === 0) return undefined;
   const labelLayout = (params: {
     dataIndex?: number;
@@ -454,7 +640,7 @@ function buildPieLabelLayout(
     }
     return out;
   };
-  return labelLayout as echarts.PieSeriesOption['labelLayout'];
+  return labelLayout as EChartsTypes.PieSeriesOption['labelLayout'];
 }
 
 function uniquePieLegendCategories(seriesArr: SeriesData[]): string[] {
@@ -491,7 +677,7 @@ function buildBarChartOption(
   chartNode: SafeXmlNode,
   seriesArr: SeriesData[],
   ctx: RenderContext,
-): echarts.EChartsOption {
+): EChartsTypes.EChartsOption {
   const barDir = chartTypeNode.child('barDir').attr('val') || chartTypeNode.attr('barDir') || 'col';
   const grouping = chartGrouping(chartTypeNode);
   const isHorizontal = barDir === 'bar';
@@ -503,9 +689,7 @@ function buildBarChartOption(
   // Use categories from the first series that has them
   const categories = seriesArr.find((s) => s.categories.length > 0)?.categories || [];
 
-  const title = extractChartTitle(chartNode, seriesArr);
-  const titleStyle = extractTitleTextStyle(chartNode.child('title'), ctx);
-  const titleLayout = extractTitleManualLayout(chartNode);
+  const titleOption = buildChartTitleOption(chartNode, seriesArr, ctx, 12);
   const legendInfo = extractLegendInfo(chartNode, ctx);
   const legendOpt = legendInfo?.option;
   const legendTextStyle = { fontSize: 10, ...(legendInfo?.textStyle ?? {}) };
@@ -515,6 +699,7 @@ function buildBarChartOption(
   const percentStackedValues = isPercentStacked
     ? normalizePercentStackedValues(seriesArr)
     : undefined;
+  const dispBlanksAs = getDispBlanksAs(chartNode);
   const varyColorsNode = chartTypeNode.child('varyColors');
   const defaultVaryColors =
     seriesArr.length === 1 &&
@@ -525,7 +710,7 @@ function buildBarChartOption(
   const varyColors = varyColorsNode.exists()
     ? parseOoxmlBoolElement(varyColorsNode)
     : defaultVaryColors;
-  const pointPalette = getVaryColorPointPalette(ctx);
+  const pointPalette = getVaryColorPointPalette(ctx, { darken: !isHorizontal });
 
   // Parse data labels: in OOXML they can be on chart type (barChart) or on series (ser); try both
   let sharedLabels = parseDataLabels(chartTypeNode, ctx);
@@ -539,7 +724,7 @@ function buildBarChartOption(
     .sort((a, b) => a.order - b.order)
     .map((x) => x.ser);
 
-  const series: echarts.BarSeriesOption[] = seriesArr.map((s, idx) => {
+  const series: EChartsTypes.BarSeriesOption[] = seriesArr.map((s, idx) => {
     // Capture formatCode for use in label formatter closure
     const fc = s.formatCode;
     const perSeriesLabels =
@@ -547,7 +732,7 @@ function buildBarChartOption(
 
     const buildLabel = (
       cfg: DataLabelConfig | Partial<DataLabelConfig> | undefined,
-    ): echarts.BarSeriesOption['label'] => {
+    ): EChartsTypes.BarSeriesOption['label'] => {
       if (!cfg?.showVal) return undefined;
       const label = {
         show: true,
@@ -570,13 +755,14 @@ function buildBarChartOption(
     };
 
     // Per-series label config (override shared)
-    const label: echarts.BarSeriesOption['label'] = buildLabel(perSeriesLabels);
-    const dLblsNode = (serNodesByOrder[idx] ?? chartTypeNode).child('dLbls');
+    const label: EChartsTypes.BarSeriesOption['label'] = buildLabel(perSeriesLabels);
+    const dLblsNode = getDataLabelsNode(serNodesByOrder[idx], chartTypeNode);
     const pointOverrides = parsePointDataLabelOverrides(dLblsNode, ctx);
     const seriesValues = percentStackedValues?.[idx] ?? s.values;
-    const data: echarts.BarSeriesOption['data'] = seriesValues.map((v, pointIdx) => {
+    const data: EChartsTypes.BarSeriesOption['data'] = seriesValues.map((v, pointIdx) => {
       const ov = pointOverrides.get(pointIdx);
       const rawValue = s.values[pointIdx] ?? v;
+      const displayValue = resolveBlankDisplayValue(s, pointIdx, v, dispBlanksAs);
       const pointStyle = s.dataPointStyles?.[pointIdx];
       let itemStyle: Record<string, unknown> | undefined;
       if (pointStyle) {
@@ -592,8 +778,10 @@ function buildBarChartOption(
         itemStyle = { color: pointPalette[pointIdx % pointPalette.length] };
       }
 
-      let pointLabel: echarts.BarSeriesOption['label'];
-      if (ov) {
+      let pointLabel: EChartsTypes.BarSeriesOption['label'];
+      if (ov?.deleted) {
+        pointLabel = { show: false };
+      } else if (ov) {
         const merged: DataLabelConfig = {
           showVal: perSeriesLabels?.showVal ?? false,
           showCatName: perSeriesLabels?.showCatName ?? false,
@@ -614,9 +802,9 @@ function buildBarChartOption(
         pointLabel = buildLabel(merged);
       }
 
-      if (!itemStyle && !pointLabel) return v;
+      if (!itemStyle && !pointLabel) return displayValue;
       return {
-        value: v,
+        value: displayValue,
         ...(itemStyle ? { itemStyle } : {}),
         ...(pointLabel ? { label: pointLabel } : {}),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -660,11 +848,12 @@ function buildBarChartOption(
   };
   applyAxisInfo(categoryAxisDef, categoryAxis, 'category');
 
-  // Check if any series uses percentage format; axis numFmt takes priority
+  // Use a series-derived axis/tooltip format only when all series share it.
+  const sharedSeriesFormat = getSharedSeriesFormatCode(seriesArr);
   const pctFormat =
     (isPercentStacked ? '0%' : undefined) ||
     valueAxis.numFmt ||
-    seriesArr.find((s) => s.formatCode?.includes('%'))?.formatCode;
+    (sharedSeriesFormat?.includes('%') ? sharedSeriesFormat : undefined);
   const valueAxisDef: Record<string, unknown> = {
     type: 'value',
     ...(pctFormat
@@ -678,26 +867,43 @@ function buildBarChartOption(
   if (isPercentStacked) forcePercentAxis(valueAxisDef);
   applyAxisInfo(valueAxisDef, valueAxis, 'value');
 
-  const gridTop = getGridTopPx(!!title, legendInfo);
-  const legendTopPx = getLegendTopPx(!!title, legendInfo);
-  // When value axis is hidden, reduce left/right padding so bars use full width
-  const gridLeft = isHorizontal ? 10 : valueAxis.deleted ? 4 : 24;
-  const gridRight = isHorizontal ? 28 : 10;
-  // Determine a shared format code for tooltips: prefer axis numFmt, then first series formatCode
-  const tooltipFmt = pctFormat || seriesArr.find((s) => s.formatCode)?.formatCode;
-  const gridBottom = getGridBottomPx(legendInfo);
   const manualGrid = extractManualLayoutGrid(chartNode);
+  const useCompactDefaults =
+    !isHorizontal &&
+    !legendInfo?.overlay &&
+    !hasManualGrid(manualGrid) &&
+    !hasNegativeSeriesValue(seriesArr);
+  const hasTitle = !!titleOption;
+  const useNativeHorizontalTop =
+    isHorizontal && !(legendIsAtTop(legendInfo) && !legendInfo?.overlay);
+  const gridTop = useNativeHorizontalTop
+    ? hasTitle
+      ? 61
+      : 14
+    : getGridTopPx(hasTitle, legendInfo, useCompactDefaults);
+  const legendTopPx = getLegendTopPx(hasTitle, legendInfo);
+  const compactVerticalLeft = isPercentStacked ? 13 : isStacked ? 12 : 14;
+  const compactHorizontalLeft = isStacked ? 14 : 12;
+  // When value axis is hidden, reduce left/right padding so bars use full width
+  const gridLeft = isHorizontal
+    ? compactHorizontalLeft
+    : valueAxis.deleted
+      ? 4
+      : useCompactDefaults
+        ? compactVerticalLeft
+        : 18;
+  // ECharts containLabel already reserves the final value label. Keeping an
+  // additional 28 px inset shortens horizontal bars compared with Office's
+  // automatic plot area, so use the regular Cartesian edge inset here.
+  const gridRight = isHorizontal ? 10 : useCompactDefaults ? 15 : 10;
+  const tooltipFmt = pctFormat || sharedSeriesFormat;
+  const baseGridBottom = getGridBottomPx(legendInfo);
+  const gridBottom =
+    isHorizontal && baseGridBottom === 20 ? 23 : baseGridBottom + (useCompactDefaults ? 3 : 0);
   const containLabel = !hasManualGrid(manualGrid);
 
   return {
-    title: title
-      ? {
-          text: title,
-          left: 'center',
-          ...titleLayout,
-          textStyle: { fontSize: 12, ...(titleStyle ?? {}) },
-        }
-      : undefined,
+    title: titleOption,
     tooltip: {
       trigger: 'axis' as const,
       textStyle: legendTextStyle,
@@ -730,7 +936,7 @@ function buildBarChartOption(
     xAxis: isHorizontal ? valueAxisDef : categoryAxisDef,
     yAxis: isHorizontal ? categoryAxisDef : valueAxisDef,
     series,
-  } as echarts.EChartsOption;
+  } as EChartsTypes.EChartsOption;
 }
 
 function buildLineChartOption(
@@ -739,11 +945,10 @@ function buildLineChartOption(
   seriesArr: SeriesData[],
   ctx: RenderContext,
   isArea: boolean,
-): echarts.EChartsOption {
+  chartPalette?: string[],
+): EChartsTypes.EChartsOption {
   const categories = seriesArr.find((s) => s.categories.length > 0)?.categories || [];
-  const title = extractChartTitle(chartNode, seriesArr);
-  const titleStyle = extractTitleTextStyle(chartNode.child('title'), ctx);
-  const titleLayout = extractTitleManualLayout(chartNode);
+  const titleOption = buildChartTitleOption(chartNode, seriesArr, ctx, 14);
   const legendInfo = extractLegendInfo(chartNode, ctx);
   const legendOpt = legendInfo?.option;
   const legendTextStyle = { fontSize: 10, ...(legendInfo?.textStyle ?? {}) };
@@ -753,6 +958,7 @@ function buildLineChartOption(
   const percentStackedValues = isPercentStacked
     ? normalizePercentStackedValues(seriesArr)
     : undefined;
+  const dispBlanksAs = getDispBlanksAs(chartNode);
   let sharedLabels = parseDataLabels(chartTypeNode, ctx);
   if (!sharedLabels) {
     const firstSer = chartTypeNode.children('ser')[0];
@@ -765,16 +971,27 @@ function buildLineChartOption(
     .map((x) => x.ser);
   const chartMarkerNode = chartTypeNode.child('marker');
   const chartMarker = chartMarkerNode.exists() ? parseOoxmlBoolElement(chartMarkerNode) : undefined;
-  const chartMarkerSymbol =
-    chartMarker === true ? 'diamond' : chartMarker === false ? 'none' : undefined;
+  const seriesColor = (s: SeriesData, idx: number): string | object | undefined =>
+    s.colorHex ?? chartPalette?.[idx % chartPalette.length];
+  const legendColor = (s: SeriesData, idx: number): string | undefined => {
+    const color = seriesColor(s, idx);
+    return typeof color === 'string' ? color : undefined;
+  };
 
-  const series: echarts.LineSeriesOption[] = seriesArr.map((s, idx) => {
-    const markerSymbol = s.markerSymbol ?? chartMarkerSymbol;
+  const series: EChartsTypes.LineSeriesOption[] = seriesArr.map((s, idx) => {
+    const color = seriesColor(s, idx);
+    const markerSymbol =
+      s.markerSymbol ??
+      (chartMarker === true
+        ? defaultLineMarkerSymbol(idx)
+        : chartMarker === false
+          ? 'none'
+          : undefined);
     const echartsSymbol = mapOoxmlSymbol(markerSymbol);
     const showSymbol = echartsSymbol !== undefined ? echartsSymbol !== 'none' : undefined;
     const lineWidth = s.lineWidth ?? 3;
     const lineStyle = {
-      ...(s.colorHex ? { color: s.colorHex } : {}),
+      ...(color ? { color } : {}),
       width: lineWidth,
       cap: 'round' as const,
       join: 'round' as const,
@@ -783,26 +1000,55 @@ function buildLineChartOption(
     const fc = s.formatCode;
     const perSeriesLabels =
       parseDataLabels(serNodesByOrder[idx] ?? chartTypeNode, ctx) ?? sharedLabels;
-    let label: echarts.LineSeriesOption['label'];
-    if (perSeriesLabels?.showVal) {
-      label = {
+    const buildLineLabel = (
+      cfg: DataLabelConfig | Partial<DataLabelConfig> | undefined,
+    ): EChartsTypes.LineSeriesOption['label'] => {
+      if (!cfg || !dataLabelShowsContent(cfg as DataLabelConfig)) return undefined;
+      const labelCfg = cfg as DataLabelConfig;
+      const lineLabel = {
         show: true,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        position: mapLineLabelPosition(perSeriesLabels.position) as any,
-        fontSize: perSeriesLabels.fontSize ?? 9,
-        ...(perSeriesLabels.color ? { color: perSeriesLabels.color } : {}),
-        ...(perSeriesLabels.bold === true ? { fontWeight: 'bold' as const } : {}),
-        ...dataLabelBoxProps(perSeriesLabels),
+        position: mapLineLabelPosition(labelCfg.position) as any,
+        fontSize: labelCfg.fontSize ?? 9,
+        ...(labelCfg.color ? { color: labelCfg.color } : {}),
+        ...(labelCfg.bold === true ? { fontWeight: 'bold' as const } : {}),
+        ...dataLabelBoxProps(labelCfg),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         formatter: (params: any) => {
           const rawVal = params?.value;
           const val =
             rawVal && typeof rawVal === 'object' && 'value' in rawVal ? rawVal.value : rawVal;
-          return formatValue(val, isPercentStacked ? '0%' : fc);
+          const parts: string[] = [];
+          if (labelCfg.showSerName && params?.seriesName) parts.push(params.seriesName);
+          if (labelCfg.showCatName && params?.name) parts.push(params.name);
+          if (labelCfg.showVal && typeof val === 'number') {
+            parts.push(formatValue(val, isPercentStacked ? '0%' : fc));
+          }
+          if (labelCfg.showPercent && typeof params?.percent === 'number') {
+            parts.push(`${params.percent}%`);
+          }
+          return parts.join(' ');
         },
       };
-      if (perSeriesLabels.fontSize !== undefined) markExplicitFontSize(label);
-    }
+      return labelCfg.fontSize !== undefined ? markExplicitFontSize(lineLabel) : lineLabel;
+    };
+    const label = buildLineLabel(perSeriesLabels);
+    const dLblsNode = getDataLabelsNode(serNodesByOrder[idx], chartTypeNode);
+    const pointOverrides = parsePointDataLabelOverrides(dLblsNode, ctx);
+    const manualLayouts = new Map<number, DataLabelManualLayout>();
+    const seriesValues = percentStackedValues?.[idx] ?? s.values;
+    const data: EChartsTypes.LineSeriesOption['data'] = seriesValues.map((v, pointIdx) => {
+      const displayValue = resolveBlankDisplayValue(s, pointIdx, v, dispBlanksAs);
+      const ov = pointOverrides.get(pointIdx);
+      if (!ov) return displayValue;
+      if (ov.manualLayout) manualLayouts.set(pointIdx, ov.manualLayout);
+      const pointLabel = ov.deleted
+        ? ({ show: false } as EChartsTypes.LineSeriesOption['label'])
+        : buildLineLabel(mergeDataLabelConfig(perSeriesLabels, ov));
+      if (!pointLabel) return displayValue;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return { value: displayValue, label: pointLabel } as any;
+    });
     const forceSymbolForLabel = Boolean(label?.show && echartsSymbol === 'none');
     const symbol = forceSymbolForLabel
       ? 'circle'
@@ -812,21 +1058,29 @@ function buildLineChartOption(
     const symbolSize = forceSymbolForLabel
       ? 0
       : (s.markerSize ??
-        (s.markerSymbol === undefined && chartMarker === true ? markerSizeToPx(5) : undefined));
+        (s.markerSymbol === undefined && chartMarker === true
+          ? DEFAULT_LINE_MARKER_SIZE
+          : undefined));
     const resolvedShowSymbol = forceSymbolForLabel
       ? true
       : isArea && echartsSymbol === undefined
         ? false
         : showSymbol;
+    const showAllSymbol =
+      resolvedShowSymbol === true && symbol !== undefined && symbol !== 'none' && symbolSize !== 0;
     return {
       type: 'line' as const,
       name: s.name,
-      data: percentStackedValues?.[idx] ?? s.values,
+      data,
       stack: isStacked ? 'total' : undefined,
-      areaStyle: isArea ? { ...(s.colorHex ? { color: s.colorHex } : {}), opacity: 1 } : undefined,
-      itemStyle: s.colorHex ? { color: s.colorHex } : undefined,
+      areaStyle: isArea ? { ...(color ? { color } : {}), opacity: 1 } : undefined,
+      itemStyle: color ? { color } : undefined,
       lineStyle,
       label,
+      labelLayout: buildPieLabelLayout(
+        manualLayouts,
+      ) as EChartsTypes.LineSeriesOption['labelLayout'],
+      connectNulls: dispBlanksAs === 'span',
       ...(s.smooth ? { smooth: true } : {}),
       ...(s.formatCode
         ? {
@@ -840,6 +1094,7 @@ function buildLineChartOption(
       ...(symbol ? { symbol } : {}),
       ...(symbolSize !== undefined ? { symbolSize } : {}),
       ...(resolvedShowSymbol !== undefined ? { showSymbol: resolvedShowSymbol } : {}),
+      ...(showAllSymbol ? { showAllSymbol: true } : {}),
       z: 3,
     };
   });
@@ -847,10 +1102,11 @@ function buildLineChartOption(
   const plotArea = chartNode.child('plotArea');
   const { valueAxis, categoryAxis } = parseAxes(plotArea, ctx, chartTypeNode);
 
+  const sharedSeriesFormat = getSharedSeriesFormatCode(seriesArr);
   const pctFormat =
     (isPercentStacked ? '0%' : undefined) ||
     valueAxis.numFmt ||
-    seriesArr.find((s) => s.formatCode?.includes('%'))?.formatCode;
+    (sharedSeriesFormat?.includes('%') ? sharedSeriesFormat : undefined);
   const yAxisDef: Record<string, unknown> = {
     type: 'value',
     ...(pctFormat
@@ -875,22 +1131,20 @@ function buildLineChartOption(
   };
   applyAxisInfo(xAxisDef, categoryAxis, 'category');
 
-  const gridTop = getGridTopPx(!!title, legendInfo);
-  const legendTopPx = getLegendTopPx(!!title, legendInfo);
-  const gridLeft = valueAxis.deleted ? 4 : 24;
-  const tooltipFmt = pctFormat || seriesArr.find((s) => s.formatCode)?.formatCode;
-  const gridBottom = getGridBottomPx(legendInfo);
   const manualGrid = extractManualLayoutGrid(chartNode);
+  const useCompactDefaults =
+    !legendInfo?.overlay && !hasManualGrid(manualGrid) && !hasNegativeSeriesValue(seriesArr);
+  const gridTop = getGridTopPx(!!titleOption, legendInfo, useCompactDefaults);
+  const legendTopPx = getLegendTopPx(!!titleOption, legendInfo);
+  const compactGridLeft = isStacked && !isArea ? 12 : 14;
+  const gridLeft = valueAxis.deleted ? 4 : useCompactDefaults ? compactGridLeft : 18;
+  const tooltipFmt = pctFormat || sharedSeriesFormat;
+  const gridBottom = getGridBottomPx(legendInfo) + (useCompactDefaults ? 3 : 0);
   const containLabel = !hasManualGrid(manualGrid);
+  const legendEntries = seriesArr.map((s, idx) => ({ series: s, idx }));
+  const legendOrder = isStacked || isPercentStacked ? [...legendEntries].reverse() : legendEntries;
   return {
-    title: title
-      ? {
-          text: title,
-          left: 'center',
-          ...titleLayout,
-          textStyle: { fontSize: 14, ...(titleStyle ?? {}) },
-        }
-      : undefined,
+    title: titleOption,
     tooltip: {
       trigger: 'axis' as const,
       textStyle: legendTextStyle,
@@ -910,19 +1164,31 @@ function buildLineChartOption(
       legendInfo,
       legendTopPx,
       isArea
-        ? seriesArr.map((s) => s.name)
-        : seriesArr.map((s) => {
-            const marker = mapOoxmlSymbol(s.markerSymbol ?? chartMarkerSymbol);
+        ? legendOrder.map(({ series, idx }) => {
+            const color = legendColor(series, idx);
+            return color ? { name: series.name, itemStyle: { color } } : series.name;
+          })
+        : legendOrder.map(({ series, idx }) => {
+            const markerSymbol =
+              series.markerSymbol ??
+              (chartMarker === true
+                ? defaultLineMarkerSymbol(idx)
+                : chartMarker === false
+                  ? 'none'
+                  : undefined);
+            const marker = mapOoxmlSymbol(markerSymbol);
+            const color = legendColor(series, idx);
+            const style = color ? { lineStyle: { color }, itemStyle: { color } } : {};
             return marker && marker !== 'none'
-              ? { name: s.name, icon: lineLegendIconPath(), marker }
-              : { name: s.name, icon: lineLegendIconPath() };
+              ? { name: series.name, icon: lineLegendIconPath(), marker, ...style }
+              : { name: series.name, icon: lineLegendIconPath(), ...style };
           }),
       legendTextStyle,
     ),
     grid: {
       containLabel,
       left: gridLeft,
-      right: 10,
+      right: useCompactDefaults ? 15 : 10,
       top: gridTop,
       bottom: gridBottom,
       ...manualGrid,
@@ -939,17 +1205,15 @@ function buildPieChartOption(
   seriesArr: SeriesData[],
   isDoughnut: boolean,
   ctx: RenderContext,
-): echarts.EChartsOption {
-  const title = extractChartTitle(chartNode, seriesArr);
-  const titleStyle = extractTitleTextStyle(chartNode.child('title'), ctx);
-  const titleLayout = extractTitleManualLayout(chartNode);
+): EChartsTypes.EChartsOption {
+  const titleOption = buildChartTitleOption(chartNode, seriesArr, ctx, 12);
   const legendInfo = extractLegendInfo(chartNode, ctx);
   const legendOpt = legendInfo?.option;
   const legendTextStyle = { fontSize: 10, ...(legendInfo?.textStyle ?? {}) };
 
   const renderSeriesArr = isDoughnut ? seriesArr : seriesArr.slice(0, 1);
   if (renderSeriesArr.length === 0) {
-    return { title: title ? { text: title } : undefined };
+    return { title: titleOption };
   }
 
   const serNodesByOrder = chartTypeNode
@@ -963,7 +1227,7 @@ function buildPieChartOption(
     const sharedLabels =
       (serNode?.exists() ? parseDataLabels(serNode, ctx) : undefined) ??
       parseDataLabels(chartTypeNode, ctx);
-    const dLblsNode = serNode?.exists() ? serNode.child('dLbls') : chartTypeNode.child('dLbls');
+    const dLblsNode = getDataLabelsNode(serNode, chartTypeNode);
     const hasDLblsNode =
       (serNode?.exists() && serNode.child('dLbls').exists()) ||
       chartTypeNode.child('dLbls').exists();
@@ -990,9 +1254,13 @@ function buildPieChartOption(
         )),
   );
   const holeSizePct = isDoughnut ? (chartTypeNode.child('holeSize').numAttr('val') ?? 50) : 50;
-  const pieLayout = computePieLayout(legendInfo, isDoughnut, showLabel, holeSizePct);
+  const hasExplosion = seriesLabelMeta.some((meta) =>
+    meta.explosions?.some((explosion) => explosion > 0),
+  );
+  const pieLayout = computePieLayout(legendInfo, isDoughnut, showLabel, holeSizePct, hasExplosion);
+  const startAngle = mapFirstSliceAngle(chartTypeNode.child('firstSliceAng').numAttr('val'));
 
-  const series: echarts.PieSeriesOption[] = seriesLabelMeta.map((meta, idx) => {
+  const series: EChartsTypes.PieSeriesOption[] = seriesLabelMeta.map((meta, idx) => {
     const manualLayouts = new Map<number, DataLabelManualLayout>();
     const pieData = meta.series.categories.map((cat, i) => {
       const override = meta.pointOverrides.get(i);
@@ -1017,9 +1285,11 @@ function buildPieChartOption(
       }
       if (meta.explosions?.[i] && meta.explosions[i] > 0) {
         item.selected = true;
-        item.selectedOffset = pieExplosionToOffset(meta.explosions[i]);
+        item.selectedOffset = pieExplosionToOffset(meta.explosions[i], isDoughnut);
       }
-      if (override && dataLabelShowsContent(pointLabel)) {
+      if (override?.deleted) {
+        item.label = { show: false };
+      } else if (override && dataLabelShowsContent(pointLabel)) {
         item.label = buildPieLabelOption(pointLabel, meta.series.formatCode, meta.series.name);
       }
       return item;
@@ -1030,7 +1300,8 @@ function buildPieChartOption(
       Boolean(meta.sharedLabels?.showLeaderLines) ||
       [...meta.pointOverrides.values()].some((cfg) => cfg.showLeaderLines === true);
     const selectedOffset =
-      meta.explosions && Math.max(...meta.explosions.map((exp) => pieExplosionToOffset(exp)));
+      meta.explosions &&
+      Math.max(...meta.explosions.map((exp) => pieExplosionToOffset(exp, isDoughnut)));
 
     return {
       type: 'pie' as const,
@@ -1042,26 +1313,20 @@ function buildPieChartOption(
       data: pieData,
       selectedMode: meta.explosions ? 'multiple' : false,
       ...(selectedOffset ? { selectedOffset } : {}),
+      ...(startAngle !== undefined ? { startAngle, clockwise: true } : {}),
       label: label ?? { show: false },
       labelLine: { show: hasLeaderLines },
       labelLayout: buildPieLabelLayout(manualLayouts),
     };
   });
 
-  const legendTopPx = getLegendTopPx(!!title, legendInfo);
-  const tooltipFmt = renderSeriesArr.find((s) => s.formatCode)?.formatCode;
+  const legendTopPx = getLegendTopPx(!!titleOption, legendInfo);
+  const tooltipFmt = getSharedSeriesFormatCode(renderSeriesArr);
   const legendData = isDoughnut
     ? uniquePieLegendCategories(renderSeriesArr)
     : renderSeriesArr[0].categories;
   return {
-    title: title
-      ? {
-          text: title,
-          left: 'center',
-          ...titleLayout,
-          textStyle: { fontSize: 12, ...(titleStyle ?? {}) },
-        }
-      : undefined,
+    title: titleOption,
     tooltip: {
       trigger: 'item' as const,
       ...(tooltipFmt
@@ -1084,10 +1349,10 @@ function buildRadarChartOption(
   chartNode: SafeXmlNode,
   seriesArr: SeriesData[],
   ctx: RenderContext,
-): echarts.EChartsOption {
-  const title = extractChartTitle(chartNode, seriesArr);
-  const titleStyle = extractTitleTextStyle(chartNode.child('title'), ctx);
-  const titleLayout = extractTitleManualLayout(chartNode);
+  chartPalette?: string[],
+  chartSize?: ChartPixelSize,
+): EChartsTypes.EChartsOption {
+  const titleOption = buildChartTitleOption(chartNode, seriesArr, ctx, 12);
   const legendInfo = extractLegendInfo(chartNode, ctx);
   const legendOpt = legendInfo?.option;
   const legendTextStyle = { fontSize: 10, ...(legendInfo?.textStyle ?? {}) };
@@ -1117,20 +1382,35 @@ function buildRadarChartOption(
   }
 
   const showValueAxisLabels = !valueAxis.deleted && valueAxis.tickLblPos !== 'none';
+  const radarStyle = chartTypeNode.child('radarStyle').attr('val'); // 'marker' | 'filled' | undefined
   const valueAxisLabel = showValueAxisLabels
     ? {
         show: true,
         formatter: (val: number) => formatValue(val, valueAxis.numFmt),
-        ...(valueAxis.labelColor ? { color: valueAxis.labelColor } : {}),
+        color: valueAxis.labelColor ?? '#000000',
         ...(valueAxis.labelFontSize !== undefined ? { fontSize: valueAxis.labelFontSize } : {}),
       }
     : undefined;
-  const radarSplitLine = valueAxis.hasMajorGridlines
+  // Read radar style to determine default marker/grid behavior
+  const filledRadarLayering =
+    radarStyle === 'filled' ? { radarZ: 4, seriesZ: 2 } : { radarZ: undefined, seriesZ: undefined };
+  const valueAxisId = chartTypeNode.children('axId')[1]?.attr('val');
+  const radarValueAxisNode =
+    plotArea.children('valAx').find((axis) => axis.child('axId').attr('val') === valueAxisId) ??
+    plotArea.child('valAx');
+  const hasExplicitRadarSplitLineStyle = radarValueAxisNode
+    .child('majorGridlines')
+    .child('spPr')
+    .exists();
+  const hasExplicitRadarAxisLineStyle = radarValueAxisNode.child('spPr').child('ln').exists();
+  const showRadarSplitLine =
+    valueAxis.hasMajorGridlines && (radarStyle !== 'filled' || hasExplicitRadarSplitLineStyle);
+  const radarSplitLine = showRadarSplitLine
     ? {
         show: true,
         lineStyle: {
           ...DEFAULT_RADAR_GRIDLINE_STYLE,
-          ...(valueAxis.majorGridlineStyle ?? {}),
+          ...(hasExplicitRadarSplitLineStyle ? (valueAxis.majorGridlineStyle ?? {}) : {}),
         },
       }
     : { show: false };
@@ -1138,7 +1418,11 @@ function buildRadarChartOption(
     ? { show: false }
     : {
         show: true,
-        lineStyle: { color: valueAxis.lineColor ?? DEFAULT_RADAR_GRIDLINE_STYLE.color },
+        lineStyle: {
+          color: hasExplicitRadarAxisLineStyle
+            ? (valueAxis.lineColor ?? DEFAULT_RADAR_GRIDLINE_STYLE.color)
+            : DEFAULT_RADAR_GRIDLINE_STYLE.color,
+        },
       };
 
   // PowerPoint radar charts place categories clockwise from top,
@@ -1154,17 +1438,20 @@ function buildRadarChartOption(
     ...(index === 0 && valueAxisLabel ? { axisLabel: valueAxisLabel } : {}),
   }));
 
-  // Read radar style to determine default marker behavior
-  const radarStyle = chartTypeNode.child('radarStyle').attr('val'); // 'marker' | 'filled' | undefined
   const radarHasTopLegend = legendIsAtTop(legendInfo) && !legendInfo?.overlay;
-  const radarCenter: [string, string] = radarHasTopLegend
-    ? ['50%', '66%']
-    : radarStyle === 'filled'
-      ? ['50%', '55%']
-      : ['50%', '50%'];
-  const radarRadius = radarHasTopLegend ? '58%' : radarStyle === 'filled' ? '76%' : '86%';
+  const manualRadarLayout = extractManualLayoutRadar(chartNode, chartSize);
+  const radarCenter: [number | string, number | string] =
+    manualRadarLayout?.center ??
+    (radarHasTopLegend
+      ? ['50%', '66%']
+      : radarStyle === 'filled'
+        ? ['50%', '55%']
+        : ['50%', '50%']);
+  const radarRadius =
+    manualRadarLayout?.radius ??
+    (radarHasTopLegend ? '58%' : radarStyle === 'filled' ? '76%' : '86%');
 
-  const radarData = seriesArr.map((s) => {
+  const radarData = seriesArr.map((s, idx) => {
     // Reorder values to match the reversed category order
     const cwValues = s.values.length > 1 ? [s.values[0], ...s.values.slice(1).reverse()] : s.values;
     const echartsSymbol = mapOoxmlSymbol(s.markerSymbol);
@@ -1173,22 +1460,24 @@ function buildRadarChartOption(
       radarStyle === 'marker' || (echartsSymbol !== undefined && echartsSymbol !== 'none');
     // PowerPoint radar charts fill the area with a semi-transparent version of the line color
     const isFilled = radarStyle === 'filled';
+    const color = s.colorHex ?? chartPalette?.[idx % chartPalette.length];
+    const areaColor = typeof color === 'string' ? buildFilledRadarAreaColor(color) : color;
     const areaStyle = isFilled
-      ? { ...(s.colorHex ? { color: s.colorHex } : {}), opacity: 0.75 }
+      ? { ...(areaColor ? { color: areaColor } : {}), opacity: 0.75 }
       : undefined;
     return {
       name: s.name,
       value: cwValues,
-      ...(s.colorHex
+      ...(color
         ? {
             lineStyle: {
-              color: s.colorHex,
+              color,
               width: s.lineWidth ?? 3,
               cap: 'round' as const,
               join: 'round' as const,
               ...(s.lineNoFill ? { opacity: 0 } : {}),
             },
-            itemStyle: { color: s.colorHex },
+            itemStyle: { color },
           }
         : {
             lineStyle: {
@@ -1206,16 +1495,9 @@ function buildRadarChartOption(
     };
   });
 
-  const legendTopPx = getLegendTopPx(!!title, legendInfo);
+  const legendTopPx = getLegendTopPx(!!titleOption, legendInfo);
   return {
-    title: title
-      ? {
-          text: title,
-          left: 'center',
-          ...titleLayout,
-          textStyle: { fontSize: 12, ...(titleStyle ?? {}) },
-        }
-      : undefined,
+    title: titleOption,
     tooltip: {},
     legend: buildLegendOption(
       legendOpt,
@@ -1235,6 +1517,7 @@ function buildRadarChartOption(
       legendTextStyle,
     ),
     radar: {
+      ...(filledRadarLayering.radarZ !== undefined ? { z: filledRadarLayering.radarZ } : {}),
       indicator,
       radius: radarRadius,
       center: radarCenter,
@@ -1246,6 +1529,7 @@ function buildRadarChartOption(
     series: [
       {
         type: 'radar' as const,
+        ...(filledRadarLayering.seriesZ !== undefined ? { z: filledRadarLayering.seriesZ } : {}),
         data: radarData,
       },
     ],
@@ -1257,10 +1541,9 @@ function buildScatterChartOption(
   chartNode: SafeXmlNode,
   seriesArr: SeriesData[],
   ctx: RenderContext,
-): echarts.EChartsOption {
-  const title = extractChartTitle(chartNode, seriesArr);
-  const titleStyle = extractTitleTextStyle(chartNode.child('title'), ctx);
-  const titleLayout = extractTitleManualLayout(chartNode);
+  chartSize?: ChartPixelSize,
+): EChartsTypes.EChartsOption {
+  const titleOption = buildChartTitleOption(chartNode, seriesArr, ctx, 14);
   const legendInfo = extractLegendInfo(chartNode, ctx);
   const legendOpt = legendInfo?.option;
   const legendTextStyle = { fontSize: 10, ...(legendInfo?.textStyle ?? {}) };
@@ -1276,25 +1559,25 @@ function buildScatterChartOption(
   const scatterStyleHidesMarkers = scatterStyle === 'line' || scatterStyle === 'smooth';
 
   const series = seriesArr.map((s, idx) => {
-    // Use xValues if available (parsed from c:xVal), otherwise fall back to index
-    const data = s.values.map((v, i) => {
-      const x = s.xValues && i < s.xValues.length ? s.xValues[i] : i;
-      return [x, v];
-    });
+    const data = buildXYData(s, getDispBlanksAs(chartNode));
     const echartsSymbol = mapOoxmlSymbol(s.markerSymbol) ?? defaultScatterSymbol(scatterStyle, idx);
     const showSymbol = !scatterStyleHidesMarkers && echartsSymbol !== 'none';
     const renderAsLine = (scatterStyleDrawsLine || s.smooth) && !s.lineNoFill;
     if (renderAsLine) {
       const shouldInterpolate = s.smooth ?? scatterStyleIsSmooth;
-      const lineData = shouldInterpolate ? buildSmoothScatterLineData(data) : data;
+      const span = getDispBlanksAs(chartNode) === 'span';
+      const lineData = shouldInterpolate ? smoothXYData(data, span) : data;
       const lineWidth = s.lineWidth ?? 3;
       return {
         type: 'line' as const,
         name: s.name,
         data: lineData,
+        connectNulls: span,
         smooth: false,
         showSymbol,
-        ...(showSymbol ? { symbol: echartsSymbol, symbolSize: s.markerSize ?? 8 } : {}),
+        ...(showSymbol
+          ? { symbol: echartsSymbol, symbolSize: s.markerSize ?? DEFAULT_SCATTER_MARKER_SIZE }
+          : {}),
         ...(s.colorHex
           ? {
               lineStyle: {
@@ -1313,7 +1596,7 @@ function buildScatterChartOption(
       name: s.name,
       data,
       symbol: showSymbol ? echartsSymbol : 'none',
-      symbolSize: showSymbol ? (s.markerSize ?? 8) : 0,
+      symbolSize: showSymbol ? (s.markerSize ?? DEFAULT_SCATTER_MARKER_SIZE) : 0,
       itemStyle: s.colorHex ? { color: s.colorHex } : undefined,
     };
   });
@@ -1334,13 +1617,24 @@ function buildScatterChartOption(
   const plotArea = chartNode.child('plotArea');
   const { xAxis: xAxisInfo, yAxis: yAxisInfo } = parseScatterAxes(plotArea, ctx);
 
-  const gridTop = getGridTopPx(!!title, legendInfo);
-  const legendTopPx = getLegendTopPx(!!title, legendInfo);
   const manualGrid = extractManualLayoutGrid(chartNode);
+  const useCompactDefaults =
+    chartSize !== undefined && !legendInfo?.overlay && !hasManualGrid(manualGrid);
+  const gridTop = getGridTopPx(!!titleOption, legendInfo, useCompactDefaults);
+  const legendTopPx = getLegendTopPx(!!titleOption, legendInfo);
   const containLabel = !hasManualGrid(manualGrid);
-  const scatterGridLeft = yAxisInfo.deleted ? 4 : 24;
+  const scatterGridLeft = yAxisInfo.deleted
+    ? 4
+    : useCompactDefaults
+      ? scaledChartMargin(chartSize?.w, 0.018, 18, 4)
+      : 18;
+  const scatterGridRight = useCompactDefaults ? scaledChartMargin(chartSize?.w, 0.01, 10, 4) : 10;
   const scatterGridTop = gridTop;
-  const scatterGridBottom = Math.max(getGridBottomPx(legendInfo), 20);
+  const scatterGridBottom = useCompactDefaults
+    ? getLegendPlacement(legendInfo) === 'bottom'
+      ? getGridBottomPx(legendInfo)
+      : scaledChartMargin(chartSize?.h, 0.04, 20, 8)
+    : getGridBottomPx(legendInfo);
 
   const xAxisDef: Record<string, unknown> = { type: 'value' };
   const yAxisDef: Record<string, unknown> = { type: 'value' };
@@ -1348,20 +1642,13 @@ function buildScatterChartOption(
   applyAxisInfo(yAxisDef, yAxisInfo, 'value');
 
   return {
-    title: title
-      ? {
-          text: title,
-          left: 'center',
-          ...titleLayout,
-          textStyle: { fontSize: 14, ...(titleStyle ?? {}) },
-        }
-      : undefined,
+    title: titleOption,
     tooltip: { trigger: 'item' },
     legend: buildLegendOption(legendOpt, legendInfo, legendTopPx, legendData, legendTextStyle),
     grid: {
       containLabel,
       left: scatterGridLeft,
-      right: 10,
+      right: scatterGridRight,
       top: scatterGridTop,
       bottom: scatterGridBottom,
       ...manualGrid,
@@ -1423,34 +1710,27 @@ function buildBubbleChartOption(
   chartNode: SafeXmlNode,
   seriesArr: SeriesData[],
   ctx: RenderContext,
-): echarts.EChartsOption {
-  const title = extractChartTitle(chartNode, seriesArr);
-  const titleStyle = extractTitleTextStyle(chartNode.child('title'), ctx);
-  const titleLayout = extractTitleManualLayout(chartNode);
+  chartSize?: ChartPixelSize,
+): EChartsTypes.EChartsOption {
+  const titleOption = buildChartTitleOption(chartNode, seriesArr, ctx, 14);
   const legendInfo = extractLegendInfo(chartNode, ctx);
   const legendOpt = legendInfo?.option;
   const legendTextStyle = { fontSize: 10, ...(legendInfo?.textStyle ?? {}) };
   const bubbleScale = Math.max(chartTypeNode.child('bubbleScale').numAttr('val') ?? 100, 0);
-  const maxBubbleDiameter = 100 * (bubbleScale / 100);
+  const maxBubbleDiameter = DEFAULT_BUBBLE_MAX_DIAMETER * (bubbleScale / 100);
 
   // Bubble charts scale bubble area by value. In screen space that means diameter
   // should follow sqrt(value / maxValue), not a linear min-max interpolation.
   let maxSize = -Infinity;
   for (const s of seriesArr) {
-    if (s.bubbleSizes) {
-      for (const sz of s.bubbleSizes) {
-        if (sz > maxSize) maxSize = sz;
-      }
+    for (const point of buildXYData(s, getDispBlanksAs(chartNode), true)) {
+      if (point.every((value) => value !== null) && point[2]! > maxSize) maxSize = point[2]!;
     }
   }
   const safeMaxBubbleSize = maxSize > 0 ? maxSize : 1;
 
-  const series: echarts.ScatterSeriesOption[] = seriesArr.map((s) => {
-    const data = s.values.map((v, i) => {
-      const x = s.xValues && i < s.xValues.length ? s.xValues[i] : i;
-      const bub = s.bubbleSizes && i < s.bubbleSizes.length ? s.bubbleSizes[i] : 0;
-      return [x, v, bub];
-    });
+  const series: EChartsTypes.ScatterSeriesOption[] = seriesArr.map((s) => {
+    const data = buildXYData(s, getDispBlanksAs(chartNode), true);
     return {
       type: 'scatter' as const,
       name: s.name,
@@ -1466,25 +1746,33 @@ function buildBubbleChartOption(
   const plotArea = chartNode.child('plotArea');
   const { xAxis: xAxisInfo, yAxis: yAxisInfo } = parseScatterAxes(plotArea, ctx);
 
-  const gridTop = getGridTopPx(!!title, legendInfo);
-  const legendTopPx = getLegendTopPx(!!title, legendInfo);
   const manualGrid = extractManualLayoutGrid(chartNode);
+  const useCompactDefaults =
+    chartSize !== undefined && !legendInfo?.overlay && !hasManualGrid(manualGrid);
+  const gridTop = getGridTopPx(!!titleOption, legendInfo, useCompactDefaults);
+  const legendTopPx = getLegendTopPx(!!titleOption, legendInfo);
   const containLabel = !hasManualGrid(manualGrid);
-  const scatterGridLeft = yAxisInfo.deleted ? 4 : 24;
+  const scatterGridLeft = yAxisInfo.deleted
+    ? 4
+    : useCompactDefaults
+      ? scaledChartMargin(chartSize?.w, 0.016, 15, 4)
+      : 18;
+  const scatterGridRight = useCompactDefaults ? scaledChartMargin(chartSize?.w, 0.01, 10, 4) : 10;
   const scatterGridTop = gridTop;
-  const scatterGridBottom = Math.max(getGridBottomPx(legendInfo), 20);
+  const scatterGridBottom = useCompactDefaults
+    ? getLegendPlacement(legendInfo) === 'bottom'
+      ? getGridBottomPx(legendInfo)
+      : scaledChartMargin(chartSize?.h, 0.04, 20, 8)
+    : getGridBottomPx(legendInfo);
 
   const xAxisDef: Record<string, unknown> = { type: 'value' };
   const yAxisDef: Record<string, unknown> = { type: 'value' };
   applyAxisInfo(xAxisDef, xAxisInfo, 'value');
   applyAxisInfo(yAxisDef, yAxisInfo, 'value');
-  const bubblePoints = seriesArr.flatMap((s) =>
-    s.values.map((y, i) => ({
-      x: s.xValues && i < s.xValues.length ? s.xValues[i] : i,
-      y,
-      bubbleSize: s.bubbleSizes && i < s.bubbleSizes.length ? s.bubbleSizes[i] : 0,
-    })),
-  );
+  const bubblePoints = seriesArr
+    .flatMap((s) => buildXYData(s, getDispBlanksAs(chartNode), true))
+    .filter((point): point is number[] => point.every((value) => value !== null))
+    .map(([x, y, bubbleSize]) => ({ x, y, bubbleSize }));
   applyBubbleAxisHeadroom(
     xAxisDef,
     bubblePoints.map((point) => point.x),
@@ -1497,14 +1785,7 @@ function buildBubbleChartOption(
   );
 
   return {
-    title: title
-      ? {
-          text: title,
-          left: 'center',
-          ...titleLayout,
-          textStyle: { fontSize: 14, ...(titleStyle ?? {}) },
-        }
-      : undefined,
+    title: titleOption,
     tooltip: {
       trigger: 'item',
       formatter: (params: unknown) => {
@@ -1522,7 +1803,7 @@ function buildBubbleChartOption(
     grid: {
       containLabel,
       left: scatterGridLeft,
-      right: 10,
+      right: scatterGridRight,
       top: scatterGridTop,
       bottom: scatterGridBottom,
       ...manualGrid,
@@ -1537,15 +1818,35 @@ function buildBubbleChartOption(
 // Stock Chart (Candlestick)
 // ---------------------------------------------------------------------------
 
+function looksLikeDateCategory(label: string): boolean {
+  return /^\d{4}[/-]\d{1,2}[/-]\d{1,2}$/.test(label.trim());
+}
+
+function stockMarkerSymbolToLegendIcon(symbol: string | undefined): string {
+  switch (symbol) {
+    case 'dot':
+    case 'circle':
+      return 'circle';
+    case 'square':
+      return 'rect';
+    case 'diamond':
+    case 'triangle':
+      return symbol;
+    case 'none':
+    case undefined:
+      return 'none';
+    default:
+      return 'circle';
+  }
+}
+
 function buildStockChartOption(
   chartTypeNode: SafeXmlNode,
   chartNode: SafeXmlNode,
   seriesArr: SeriesData[],
   ctx: RenderContext,
-): echarts.EChartsOption {
-  const title = extractChartTitle(chartNode, seriesArr);
-  const titleStyle = extractTitleTextStyle(chartNode.child('title'), ctx);
-  const titleLayout = extractTitleManualLayout(chartNode);
+): EChartsTypes.EChartsOption {
+  const titleOption = buildChartTitleOption(chartNode, seriesArr, ctx, 14);
   const legendInfo = extractLegendInfo(chartNode, ctx);
 
   // Stock charts have 3 (HLC) or 4 (OHLC) series:
@@ -1589,7 +1890,7 @@ function buildStockChartOption(
   const plotArea = chartNode.child('plotArea');
   const { valueAxis, categoryAxis } = parseAxes(plotArea, ctx, chartTypeNode);
 
-  const gridTop = getGridTopPx(!!title, legendInfo);
+  const gridTop = getGridTopPx(!!titleOption, legendInfo);
   const manualGrid = extractManualLayoutGrid(chartNode);
   const containLabel = !hasManualGrid(manualGrid);
 
@@ -1600,6 +1901,19 @@ function buildStockChartOption(
     splitLine: { show: false },
   };
   applyAxisInfo(xAxisDef, categoryAxis, 'category');
+  const autoRotateDateLabels =
+    categories.length >= 3 &&
+    categories.every((category) => looksLikeDateCategory(category)) &&
+    !categoryAxis.deleted &&
+    categoryAxis.tickLblPos !== 'none';
+  if (autoRotateDateLabels) {
+    const axisLabel = (xAxisDef.axisLabel as Record<string, unknown>) || {};
+    xAxisDef.axisLabel = {
+      ...axisLabel,
+      rotate: 45,
+      margin: Math.max(Number(axisLabel.margin) || 0, 10),
+    };
+  }
 
   const yAxisDef: Record<string, unknown> = { type: 'value' };
   applyAxisInfo(yAxisDef, valueAxis, 'value');
@@ -1622,14 +1936,18 @@ function buildStockChartOption(
 
   const legendOpt = legendInfo?.option;
   const legendTextStyle = { fontSize: 10, ...(legendInfo?.textStyle ?? {}) };
-  const legendTopPx = getLegendTopPx(!!title, legendInfo);
+  const legendTopPx = getLegendTopPx(!!titleOption, legendInfo);
+  const gridBottom = Math.max(getGridBottomPx(legendInfo), autoRotateDateLabels ? 56 : 0);
   const isHlc = seriesArr.length >= 3 && seriesArr.length < 4;
 
   const legendData = isHlc
-    ? seriesArr.slice(0, 3).map((s) => ({ name: s.name, icon: 'none' }))
+    ? seriesArr.slice(0, 3).map((s, idx) => ({
+        name: s.name,
+        icon: idx === 2 ? stockMarkerSymbolToLegendIcon(s.markerSymbol) : 'none',
+      }))
     : seriesArr.map((s) => s.name);
 
-  const series: echarts.SeriesOption[] = isHlc
+  const series: EChartsTypes.SeriesOption[] = isHlc
     ? [
         {
           type: 'custom',
@@ -1690,7 +2008,7 @@ function buildStockChartOption(
             };
           },
           silent: true,
-        } as echarts.SeriesOption,
+        } as EChartsTypes.SeriesOption,
       ]
     : [
         {
@@ -1714,14 +2032,7 @@ function buildStockChartOption(
       ];
 
   return {
-    title: title
-      ? {
-          text: title,
-          left: 'center',
-          ...titleLayout,
-          textStyle: { fontSize: 14, ...(titleStyle ?? {}) },
-        }
-      : undefined,
+    title: titleOption,
     tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
     legend: buildLegendOption(legendOpt, legendInfo, legendTopPx, legendData, legendTextStyle),
     grid: {
@@ -1731,7 +2042,7 @@ function buildStockChartOption(
       left: 24,
       right: 10,
       top: gridTop,
-      bottom: getGridBottomPx(legendInfo),
+      bottom: gridBottom,
       ...manualGrid,
     },
     xAxis: xAxisDef,
@@ -1747,26 +2058,99 @@ function buildStockChartOption(
 /**
  * Parse plotArea/layout/manualLayout to ECharts grid override.
  */
+interface ManualLayoutBox {
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
+}
+
+function extractManualLayoutBox(chartNode: SafeXmlNode): ManualLayoutBox {
+  const manual = chartNode.child('plotArea').child('layout').child('manualLayout');
+  if (!manual.exists()) return {};
+  return {
+    x: manual.child('x').numAttr('val'),
+    y: manual.child('y').numAttr('val'),
+    w: manual.child('w').numAttr('val'),
+    h: manual.child('h').numAttr('val'),
+  };
+}
+
 function extractManualLayoutGrid(
   chartNode: SafeXmlNode,
 ): Partial<Record<'left' | 'top' | 'width' | 'height', string>> {
-  const manual = chartNode.child('plotArea').child('layout').child('manualLayout');
-  if (!manual.exists()) return {};
+  const box = extractManualLayoutBox(chartNode);
   const out: Partial<Record<'left' | 'top' | 'width' | 'height', string>> = {};
-  const x = manual.child('x').numAttr('val');
-  const y = manual.child('y').numAttr('val');
-  const w = manual.child('w').numAttr('val');
-  const h = manual.child('h').numAttr('val');
-  if (x !== undefined) out.left = numToPct(x);
-  if (y !== undefined) out.top = numToPct(y);
-  if (w !== undefined) out.width = numToPct(w);
-  if (h !== undefined) out.height = numToPct(h);
+  if (box.x !== undefined) out.left = numToPct(box.x);
+  if (box.y !== undefined) out.top = numToPct(box.y);
+  if (box.w !== undefined) out.width = numToPct(box.w);
+  if (box.h !== undefined) out.height = numToPct(box.h);
   return out;
+}
+
+function extractManualLayoutRadar(
+  chartNode: SafeXmlNode,
+  chartSize?: ChartPixelSize,
+): { center: [number | string, number | string]; radius: number | string } | undefined {
+  const { x, y, w, h } = extractManualLayoutBox(chartNode);
+  if (x === undefined || y === undefined || w === undefined || h === undefined) return undefined;
+
+  const centerX = x + w / 2;
+  const centerY = y + h / 2;
+  if (!chartSize) {
+    return {
+      center: [numToPct(centerX), numToPct(centerY)],
+      radius: numToPct(Math.min(w, h) / 2),
+    };
+  }
+
+  return {
+    center: [centerX * chartSize.w, centerY * chartSize.h],
+    radius: Math.min(w * chartSize.w, h * chartSize.h) / 2,
+  };
+}
+
+function buildPlotAreaBackgroundGraphic(
+  chartNode: SafeXmlNode,
+  fill: string,
+  chartSize?: ChartPixelSize,
+): Record<string, unknown> | undefined {
+  if (!chartSize) return undefined;
+
+  const { x = 0, y = 0, w = 1, h = 1 } = extractManualLayoutBox(chartNode);
+  return {
+    type: 'rect',
+    silent: true,
+    z: -10,
+    left: x * chartSize.w,
+    top: y * chartSize.h,
+    shape: {
+      width: w * chartSize.w,
+      height: h * chartSize.h,
+    },
+    style: {
+      fill,
+      stroke: 'none',
+    },
+  };
+}
+
+function prependGraphicOption(
+  option: EChartsTypes.EChartsOption,
+  graphic: Record<string, unknown>,
+): void {
+  const current = option.graphic;
+  if (!current) {
+    option.graphic = graphic;
+    return;
+  }
+
+  option.graphic = Array.isArray(current) ? [graphic, ...current] : [graphic, current];
 }
 
 /** Result of parsing chart XML: option for ECharts, optional data table info. */
 export interface ParseChartResult {
-  option: echarts.EChartsOption;
+  option: EChartsTypes.EChartsOption;
   dataTable?: DataTableInfo;
   chartFrameStyle?: ChartFrameStyle;
 }
@@ -1777,29 +2161,38 @@ function buildOptionForChartType(
   chartNode: SafeXmlNode,
   seriesArr: SeriesData[],
   ctx: RenderContext,
-): echarts.EChartsOption | undefined {
+  chartPalette?: string[],
+  chartSize?: ChartPixelSize,
+): EChartsTypes.EChartsOption | undefined {
   switch (typeName) {
     case 'barChart':
     case 'bar3DChart':
       return buildBarChartOption(chartTypeNode, chartNode, seriesArr, ctx);
     case 'lineChart':
     case 'line3DChart':
-      return buildLineChartOption(chartTypeNode, chartNode, seriesArr, ctx, false);
+      return buildLineChartOption(chartTypeNode, chartNode, seriesArr, ctx, false, chartPalette);
     case 'areaChart':
     case 'area3DChart':
     case 'surface3DChart':
-      return buildLineChartOption(chartTypeNode, chartNode, seriesArr, ctx, true);
+      return buildLineChartOption(chartTypeNode, chartNode, seriesArr, ctx, true, chartPalette);
     case 'pieChart':
     case 'pie3DChart':
       return buildPieChartOption(chartTypeNode, chartNode, seriesArr, false, ctx);
     case 'doughnutChart':
       return buildPieChartOption(chartTypeNode, chartNode, seriesArr, true, ctx);
     case 'radarChart':
-      return buildRadarChartOption(chartTypeNode, chartNode, seriesArr, ctx);
+      return buildRadarChartOption(
+        chartTypeNode,
+        chartNode,
+        seriesArr,
+        ctx,
+        chartPalette,
+        chartSize,
+      );
     case 'scatterChart':
-      return buildScatterChartOption(chartTypeNode, chartNode, seriesArr, ctx);
+      return buildScatterChartOption(chartTypeNode, chartNode, seriesArr, ctx, chartSize);
     case 'bubbleChart':
-      return buildBubbleChartOption(chartTypeNode, chartNode, seriesArr, ctx);
+      return buildBubbleChartOption(chartTypeNode, chartNode, seriesArr, ctx, chartSize);
     case 'stockChart':
       return buildStockChartOption(chartTypeNode, chartNode, seriesArr, ctx);
     default:
@@ -1821,9 +2214,9 @@ function isCartesianComboCapable(typeName: OoxmlChartType): boolean {
 }
 
 function mergeLegendData(
-  primaryLegend: echarts.EChartsOption['legend'],
-  secondaryLegend: echarts.EChartsOption['legend'],
-): echarts.EChartsOption['legend'] {
+  primaryLegend: EChartsTypes.EChartsOption['legend'],
+  secondaryLegend: EChartsTypes.EChartsOption['legend'],
+): EChartsTypes.EChartsOption['legend'] {
   const primary = getLegendOptionObject(primaryLegend);
   const secondary = getLegendOptionObject(secondaryLegend);
   if (!primary) return secondaryLegend;
@@ -1896,6 +2289,7 @@ function applyCategoryLabelZeroOffset(
   categoryAxis: MutableAxisOption,
   valueAxis: MutableAxisOption | undefined,
   plotSpan: number,
+  labelGapScale = 1,
 ): boolean {
   if (!valueAxis || categoryAxis.type !== 'category' || valueAxis.type !== 'value') return false;
   if (categoryAxis.axisLine?.onZero !== true || !axisCrossesZero(valueAxis)) return false;
@@ -1903,14 +2297,14 @@ function applyCategoryLabelZeroOffset(
 
   const zeroOffsetFromMin = plotSpan * ((0 - valueAxis.min!) / (valueAxis.max! - valueAxis.min!));
   const axisLabel = categoryAxis.axisLabel ?? (categoryAxis.axisLabel = {});
-  const labelGap = (axisLabel.fontSize ?? 10) + 6;
+  const labelGap = Math.max(6, Math.round((axisLabel.fontSize ?? 10) * labelGapScale));
   axisLabel.margin = -Math.round(Math.max(0, zeroOffsetFromMin - labelGap));
   categoryAxis.z = Math.max(categoryAxis.z ?? 0, 20);
   return true;
 }
 
 export function applyZeroCrossingAxisLabelLayout(
-  option: echarts.EChartsOption,
+  option: EChartsTypes.EChartsOption,
   chartSize: { w: number; h: number },
 ): void {
   const grid = normalizeOptionArray<Record<string, unknown>>(
@@ -1924,18 +2318,26 @@ export function applyZeroCrossingAxisLabelLayout(
   );
   const gridHeight = plotSpanPx(grid, chartSize.h, 'top', 'bottom');
   const gridWidth = plotSpanPx(grid, chartSize.w, 'left', 'right');
-  let applied = false;
-
+  let horizontalCategoryApplied = false;
   xAxes.forEach((xAxis, index) => {
-    applied = applyCategoryLabelZeroOffset(xAxis, yAxes[index] ?? yAxes[0], gridHeight) || applied;
+    horizontalCategoryApplied =
+      applyCategoryLabelZeroOffset(xAxis, yAxes[index] ?? yAxes[0], gridHeight) ||
+      horizontalCategoryApplied;
   });
   yAxes.forEach((yAxis, index) => {
-    applied = applyCategoryLabelZeroOffset(yAxis, xAxes[index] ?? xAxes[0], gridWidth) || applied;
+    // PowerPoint leaves roughly two label-font units between horizontal-bar
+    // category text and the zero axis. ECharts otherwise lets the text cross
+    // the axis after applying the plot-relative negative margin.
+    applyCategoryLabelZeroOffset(yAxis, xAxes[index] ?? xAxes[0], gridWidth, 2);
   });
 
-  if (applied && grid) {
+  if (horizontalCategoryApplied && grid) {
     grid.containLabel = false;
-    grid.left = Math.max(gridEdgePx(grid.left, chartSize.w, 0), 48);
+    grid.left = Math.max(
+      gridEdgePx(grid.left, chartSize.w, 0),
+      48,
+      Math.round(chartSize.w * 0.065),
+    );
   }
 }
 
@@ -1944,11 +2346,11 @@ function getValueAxisId(chartTypeNode: SafeXmlNode): string | undefined {
 }
 
 function mergeCartesianComboOptions(
-  primary: echarts.EChartsOption,
-  secondary: echarts.EChartsOption,
+  primary: EChartsTypes.EChartsOption,
+  secondary: EChartsTypes.EChartsOption,
   primaryChartTypeNode: SafeXmlNode,
   secondaryChartTypeNode: SafeXmlNode,
-): echarts.EChartsOption {
+): EChartsTypes.EChartsOption {
   const primarySeries = Array.isArray(primary.series) ? primary.series : [];
   const secondarySeries = Array.isArray(secondary.series) ? secondary.series : [];
   const primaryValueAxisId = getValueAxisId(primaryChartTypeNode);
@@ -1994,6 +2396,7 @@ export function parseChartXml(
   chartXml: SafeXmlNode,
   ctx: RenderContext,
   chartPath?: string,
+  chartSize?: ChartPixelSize,
 ): ParseChartResult {
   const chartCtx = createChartRenderContext(chartXml, ctx);
   const chartPalette = buildChartPalette(chartXml, chartCtx, chartPath);
@@ -2032,6 +2435,8 @@ export function parseChartXml(
       chart,
       entry.seriesArr,
       chartCtx,
+      chartPalette,
+      chartSize,
     );
     if (!option) continue;
 
@@ -2044,6 +2449,8 @@ export function parseChartXml(
           chart,
           comboEntry.seriesArr,
           chartCtx,
+          chartPalette,
+          chartSize,
         );
         if (!comboOption) continue;
         option = mergeCartesianComboOptions(
@@ -2070,7 +2477,7 @@ export function parseChartXml(
     applyLegendGridMargins(option, chart, defaultFs);
 
     // Apply PowerPoint-like nice axis range (adds headroom beyond data max)
-    applyNiceAxisRange(option);
+    applyNiceAxisRange(option, chartSize);
 
     // Apply background colors
     if (chartBg) {
@@ -2079,12 +2486,17 @@ export function parseChartXml(
     if (chartPalette && chartPalette.length > 0) {
       option.color = chartPalette;
     }
-    if (plotAreaBg && option.grid) {
-      // Apply plot area background via grid (for cartesian charts)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (option.grid as any).backgroundColor = plotAreaBg;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (option.grid as any).show = true;
+    if (plotAreaBg) {
+      if (option.grid) {
+        // Apply plot area background via grid (for cartesian charts)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (option.grid as any).backgroundColor = plotAreaBg;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (option.grid as any).show = true;
+      } else {
+        const graphic = buildPlotAreaBackgroundGraphic(chart, plotAreaBg, chartSize);
+        if (graphic) prependGraphicOption(option, graphic);
+      }
     }
 
     const dataTableSeries =
@@ -2101,7 +2513,6 @@ export function parseChartXml(
       ? {
           seriesArr: dataTableSeries,
           showKeys: dTableMeta.showKeys,
-          formatCode: dataTableSeries.find((s) => s.formatCode)?.formatCode,
         }
       : undefined;
 
@@ -2158,7 +2569,12 @@ export function renderChart(node: ChartNodeData, ctx: RenderContext): HTMLElemen
   // Parse chart data and create ECharts option
   const chartTheme = ctx.presentation.chartThemes?.get(node.chartPath);
   const chartCtx = chartTheme ? { ...ctx, theme: chartTheme, colorCache: new Map() } : ctx;
-  const { option, dataTable, chartFrameStyle } = parseChartXml(chartXml, chartCtx, node.chartPath);
+  const { option, dataTable, chartFrameStyle } = parseChartXml(
+    chartXml,
+    chartCtx,
+    node.chartPath,
+    node.size,
+  );
   applyZeroCrossingAxisLabelLayout(option, node.size);
   if (chartFrameStyle) {
     wrapper.style.boxSizing = 'border-box';
@@ -2188,40 +2604,51 @@ export function renderChart(node: ChartNodeData, ctx: RenderContext): HTMLElemen
   // Initialize ECharts after the element is attached to the DOM.
   // Use requestAnimationFrame to ensure the container has dimensions.
   const chartReady = new Promise<void>((resolve) => {
-    const finishInit = (): void => {
-      initChart(chartDiv, option, chartSet);
+    let sizeObserver: ResizeObserver | undefined;
+    let frame: number | undefined;
+    const cancel = () => {
+      if (frame !== undefined) cancelAnimationFrame(frame);
+      sizeObserver?.disconnect();
+      ctx.signal?.removeEventListener('abort', cancel);
       resolve();
     };
-
-    requestAnimationFrame(() => {
-      if (!chartDiv.isConnected) {
-        resolve();
+    const finishInit = (): void => {
+      sizeObserver?.disconnect();
+      ctx.signal?.removeEventListener('abort', cancel);
+      if (!ctx.signal?.aborted && chartDiv.isConnected) {
+        initChart(chartDiv, option, chartSet, ctx.signal);
+      }
+      resolve();
+    };
+    if (ctx.signal?.aborted) {
+      resolve();
+      return;
+    }
+    ctx.signal?.addEventListener('abort', cancel, { once: true });
+    frame = requestAnimationFrame(() => {
+      frame = undefined;
+      if (ctx.signal?.aborted || !chartDiv.isConnected) {
+        cancel();
         return;
       }
-
-      // Guard against 0-size containers (e.g. hidden tabs); defer until non-zero.
       if (chartDiv.offsetWidth === 0 || chartDiv.offsetHeight === 0) {
         if (typeof ResizeObserver === 'undefined') {
           finishInit();
           return;
         }
-
-        const sizeObserver = new ResizeObserver((entries) => {
-          if (!chartDiv.isConnected) {
-            sizeObserver.disconnect();
+        sizeObserver = new ResizeObserver((entries) => {
+          if (ctx.signal?.aborted || !chartDiv.isConnected) {
+            cancel();
             return;
           }
           const { width, height } = entries[0]?.contentRect ?? { width: 0, height: 0 };
-          if (width > 0 && height > 0) {
-            sizeObserver.disconnect();
-            finishInit();
-          }
+          if (width > 0 && height > 0) finishInit();
         });
         sizeObserver.observe(chartDiv);
+        // Hidden charts retain the existing non-blocking ready contract.
         resolve();
         return;
       }
-
       finishInit();
     });
   });
@@ -2233,32 +2660,40 @@ export function renderChart(node: ChartNodeData, ctx: RenderContext): HTMLElemen
 /** Actually create ECharts instance, set option, and wire up resize + dispose. */
 function initChart(
   container: HTMLElement,
-  option: echarts.EChartsOption,
-  chartInstances?: Set<echarts.ECharts>,
+  option: EChartsTypes.EChartsOption,
+  chartInstances?: Set<EChartsType>,
+  signal?: AbortSignal,
 ): void {
   try {
     const chart = echarts.init(container);
     chart.setOption(option);
     chartInstances?.add(chart);
 
-    if (typeof ResizeObserver === 'undefined') {
-      return;
-    }
+    const dispose = () => {
+      ro?.disconnect();
+      if (!chart.isDisposed()) chart.dispose();
+      chartInstances?.delete(chart);
+      signal?.removeEventListener('abort', dispose);
+    };
+    signal?.addEventListener('abort', dispose, { once: true });
 
     // Handle container resize
-    const ro = new ResizeObserver(() => {
-      if (container.isConnected) {
-        chart.resize();
-      } else {
-        // Container removed from DOM — dispose to prevent leaks
-        ro.disconnect();
-        if (!chart.isDisposed()) {
-          chart.dispose();
-        }
-        chartInstances?.delete(chart);
-      }
-    });
-    ro.observe(container);
+    const ro =
+      typeof ResizeObserver === 'undefined'
+        ? undefined
+        : new ResizeObserver(() => {
+            if (signal?.aborted || chart.isDisposed()) {
+              dispose();
+              return;
+            }
+            if (container.isConnected) {
+              chart.resize();
+            } else {
+              // Container removed from DOM — dispose to prevent leaks
+              dispose();
+            }
+          });
+    ro?.observe(container);
   } catch (e) {
     console.warn('Failed to initialize ECharts:', e);
     container.style.display = 'flex';

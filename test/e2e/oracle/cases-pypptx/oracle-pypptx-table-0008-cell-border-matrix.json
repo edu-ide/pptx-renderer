@@ -1,0 +1,22 @@
+{
+  "name": "oracle-pypptx-table-0008-cell-border-matrix",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "a:tcPr.lnL|lnR|lnT|lnB",
+      "a:ln.solidFill",
+      "a:ln.noFill",
+      "a:ln.prstDash"
+    ]
+  }
+}

@@ -65,4 +65,16 @@ describe('chart format helpers', () => {
     expect(excelSerialToDateString(59)).toBe('1900/2/28');
     expect(excelSerialToDateString(61)).toBe('1900/3/1');
   });
+
+  it('preserves Office thousands separators in whole-number chart formats', () => {
+    expect(formatValue(1234567, '#,##0')).toBe('1,234,567');
+    expect(formatValue(-1234567, '#,##0')).toBe('-1,234,567');
+  });
+
+  it('uses the negative format section for parenthesized Office number formats', () => {
+    const officeFormat = '#,##0_);[Red]\\(#,##0\\)';
+
+    expect(formatValue(1234567, officeFormat)).toBe('1,234,567');
+    expect(formatValue(-1234567, officeFormat)).toBe('(1,234,567)');
+  });
 });

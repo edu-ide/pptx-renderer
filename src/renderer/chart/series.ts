@@ -1,6 +1,6 @@
 import { SafeXmlNode } from '../../parser/XmlParser';
 import { RenderContext } from '../RenderContext';
-import { extractFormatCode, extractNumericValues, extractStringValues } from './format';
+import { extractFormatCode, extractNumericValuesWithBlanks, extractStringValues } from './format';
 import { parseOoxmlBoolElement } from './ooxml';
 import {
   extractDataPointStyles,
@@ -61,21 +61,27 @@ export function parseSeries(chartTypeNode: SafeXmlNode, ctx: RenderContext): Ser
     const categories = extractStringValues(cat);
 
     const val = ser.child('val');
-    const values = extractNumericValues(val);
+    const numericValues = extractNumericValuesWithBlanks(val);
+    const values = numericValues.values;
+    let blankIndices = numericValues.blankIndices;
     const formatCode = extractFormatCode(val);
 
     const xValNode = ser.child('xVal');
     const yValNode = ser.child('yVal');
     let xValues: number[] | undefined;
+    let xBlankIndices: Set<number> | undefined;
     if (yValNode.exists()) {
-      const yVals = extractNumericValues(yValNode);
-      if (yVals.length > 0) {
+      const yVals = extractNumericValuesWithBlanks(yValNode);
+      if (yVals.values.length > 0) {
         values.length = 0;
-        values.push(...yVals);
+        values.push(...yVals.values);
+        blankIndices = yVals.blankIndices;
       }
     }
     if (xValNode.exists()) {
-      xValues = extractNumericValues(xValNode);
+      const xData = extractNumericValuesWithBlanks(xValNode);
+      xValues = xData.values;
+      xBlankIndices = xData.blankIndices;
       if (categories.length === 0) {
         const xCats = extractStringValues(xValNode);
         if (xCats.length > 0) categories.push(...xCats);
@@ -83,7 +89,10 @@ export function parseSeries(chartTypeNode: SafeXmlNode, ctx: RenderContext): Ser
     }
 
     const bubbleSizeNode = ser.child('bubbleSize');
-    const bubbleSizes = bubbleSizeNode.exists() ? extractNumericValues(bubbleSizeNode) : undefined;
+    const bubbleData = bubbleSizeNode.exists()
+      ? extractNumericValuesWithBlanks(bubbleSizeNode)
+      : undefined;
+    const bubbleSizes = bubbleData?.values;
 
     const colorHex = extractSeriesColor(ser, ctx);
     const lineWidth = extractSeriesLineWidth(ser);
@@ -108,11 +117,14 @@ export function parseSeries(chartTypeNode: SafeXmlNode, ctx: RenderContext): Ser
       categories,
       values,
       xValues,
+      xBlankIndices,
       bubbleSizes,
+      bubbleBlankIndices: bubbleData?.blankIndices,
       colorHex,
       dataPointColors,
       dataPointStyles,
       formatCode,
+      blankIndices,
       invertIfNegative,
       markerSymbol,
       markerSize,

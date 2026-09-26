@@ -1,0 +1,23 @@
+{
+  "name": "oracle-pypptx-text-0060-styled-soft-break-matrix",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "text.soft-break.rPr",
+      "text.soft-break.font-size",
+      "text.soft-break.font-family",
+      "text.bullet.color-from-visible-run",
+      "paragraph.line-spacing.spcPct=100000"
+    ]
+  }
+}

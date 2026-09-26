@@ -1,12 +1,12 @@
 /**
  * Tests for standalone renderSlide() chart disposal.
  *
- * Separate file because vi.mock('echarts') must be hoisted before SlideRenderer
+ * Separate file because the ECharts runtime mock must be hoisted before SlideRenderer
  * imports ChartRenderer.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ECharts } from 'echarts';
+import type { EChartsType } from 'echarts/core';
 
 const mockChartInstance = {
   setOption: vi.fn(),
@@ -16,8 +16,8 @@ const mockChartInstance = {
   getDom: vi.fn(() => document.createElement('div')),
 };
 
-vi.mock('echarts', () => ({
-  init: vi.fn(() => mockChartInstance),
+vi.mock('../../../src/renderer/chart/echartsRuntime', () => ({
+  echarts: { init: vi.fn(() => mockChartInstance) },
 }));
 
 import { renderSlide } from '../../../src/renderer/SlideRenderer';
@@ -139,6 +139,26 @@ describe('renderSlide standalone chart lifecycle', () => {
     expect(mockChartInstance.dispose).toHaveBeenCalled();
   });
 
+  it('preserves the default chart animation behavior', () => {
+    const pres = makePresentation();
+    const slide = pres.slides[0];
+    slide.nodes = [makeChartNode()];
+    const handle = renderSlide(pres, slide);
+    const chartWrapper = handle.element.firstElementChild as HTMLElement;
+    const chartDiv = chartWrapper.firstElementChild as HTMLElement;
+    mockChartInstance.getDom.mockReturnValue(chartDiv);
+    Object.defineProperty(chartDiv, 'offsetWidth', { value: 400, configurable: true });
+    Object.defineProperty(chartDiv, 'offsetHeight', { value: 300, configurable: true });
+    document.body.appendChild(handle.element);
+    for (const callback of rafCallbacks.splice(0)) callback();
+
+    const option = mockChartInstance.setOption.mock.lastCall?.[0] as
+      | { animation?: boolean }
+      | undefined;
+    expect(option?.animation).toBeUndefined();
+    handle.dispose();
+  });
+
   it('keeps SlideHandle.ready pending until chart RAF initialization runs', async () => {
     const pres = makePresentation();
     const slide = pres.slides[0];
@@ -213,8 +233,8 @@ describe('renderSlide standalone chart lifecycle', () => {
       isDisposed: vi.fn(() => false),
       dispose: vi.fn(),
       getDom: vi.fn(() => document.createElement('div')),
-    } as unknown as ECharts;
-    const sharedCharts = new Set<ECharts>([externalChart]);
+    } as unknown as EChartsType;
+    const sharedCharts = new Set<EChartsType>([externalChart]);
 
     const handle = renderSlide(pres, slide, { chartInstances: sharedCharts });
     handle.dispose();
@@ -222,4 +242,26 @@ describe('renderSlide standalone chart lifecycle', () => {
     expect(externalChart.dispose).not.toHaveBeenCalled();
     expect(sharedCharts.has(externalChart)).toBe(true);
   });
+});
+
+it('disposed but connected chart never initializes in its pending frame', async () => {
+  const callbacks: FrameRequestCallback[] = [];
+  const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+    callbacks.push(cb);
+    return callbacks.length;
+  });
+  mockChartInstance.setOption.mockClear();
+  const p = makePresentation();
+  p.slides[0].nodes = [makeChartNode()];
+  const handle = renderSlide(p, p.slides[0]);
+  document.body.append(handle.element);
+  const div = handle.element.firstElementChild!.firstElementChild!;
+  Object.defineProperty(div, 'offsetWidth', { value: 400 });
+  Object.defineProperty(div, 'offsetHeight', { value: 300 });
+  handle.dispose();
+  callbacks.forEach((cb) => cb(0));
+  await handle.ready;
+  expect(mockChartInstance.setOption).not.toHaveBeenCalled();
+  raf.mockRestore();
+  handle.element.remove();
 });

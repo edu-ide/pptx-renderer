@@ -19,15 +19,26 @@ import { ChartNodeData } from '../model/nodes/ChartNode';
 import { BaseNodeData } from '../model/nodes/BaseNode';
 import { SafeXmlNode } from '../parser/XmlParser';
 import type { RelEntry } from '../parser/RelParser';
-import { isPlaceholderNode, parseRenderableChild } from '../model/RenderableChild';
-import type { ECharts } from 'echarts';
+import { parseTemplateShapes } from '../model/TemplateShapes';
+import type { EChartsType } from 'echarts/core';
+import { useEmbeddedFonts } from './EmbeddedFontLoader';
+import type { EmbeddedFontLimits } from './EmbeddedFontLoader';
 import type { PdfjsConfig } from '../utils/pdfRenderer';
+import { useConfiguredFonts } from './ConfiguredFontLoader';
+import type { FontFaceConfig } from './ConfiguredFontLoader';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export interface SlideRendererOptions {
+  /**
+   * Called after a top-level slide node is attached to the slide DOM.
+   * Excludes template nodes, group descendants, and render-error placeholders.
+   * Async resources may still be loading; await SlideHandle.ready when needed.
+   * Callback errors are warned without interrupting rendering or calling onNodeError.
+   */
+  onNodeRendered?: (nodeId: string, element: HTMLElement) => void;
   /** Called when a single node fails to render. */
   onNodeError?: (nodeId: string, error: unknown) => void;
   /**
@@ -41,7 +52,11 @@ export interface SlideRendererOptions {
   /** Optional pdfjs URLs for EMF-embedded PDF fallback rendering. */
   pdfjs?: PdfjsConfig;
   /** Shared set of live ECharts instances for explicit disposal. */
-  chartInstances?: Set<ECharts>;
+  chartInstances?: Set<EChartsType>;
+  /** Optional embedded-font resource limit overrides. Defaults remain enforced for omitted fields. */
+  embeddedFontLimits?: EmbeddedFontLimits;
+  /** Host-provided faces for fonts referenced by the PPTX but not embedded in it. */
+  fontFaces?: readonly FontFaceConfig[];
 }
 
 /**
@@ -136,43 +151,6 @@ interface TemplateShapeCacheEntry {
 
 const templateShapeCache = new WeakMap<SafeXmlNode, TemplateShapeCacheEntry>();
 
-/**
- * Parse and collect renderable shapes from a master or layout spTree.
- * Only includes NON-placeholder shapes (decorative elements, logos, footers).
- * Placeholder shapes are never rendered from master/layout — they only serve
- * as position/size inheritance templates.
- */
-function parseTemplateShapes(
-  spTree: SafeXmlNode,
-  rels?: Map<string, RelEntry>,
-  partPath?: string,
-  diagramDrawings?: Map<string, string>,
-): BaseNodeData[] {
-  const nodes: BaseNodeData[] = [];
-  if (!spTree || !spTree.exists || !spTree.exists()) return nodes;
-  const parseContext = {
-    rels: rels ?? new Map<string, RelEntry>(),
-    partPath,
-    diagramDrawings,
-  };
-
-  for (const child of spTree.allChildren()) {
-    // Skip ALL placeholder shapes — they're templates, not renderable content
-    if (isPlaceholderNode(child)) continue;
-
-    try {
-      const node = parseRenderableChild(child, parseContext);
-      // Skip empty/invisible nodes (0x0 size and no text)
-      if (node && (node.size.w > 0 || node.size.h > 0)) {
-        nodes.push(node);
-      }
-    } catch {
-      // Skip unparseable template shapes silently
-    }
-  }
-  return nodes;
-}
-
 function getTemplateShapes(
   spTree: SafeXmlNode,
   rels?: Map<string, RelEntry>,
@@ -189,7 +167,7 @@ function getTemplateShapes(
     return cached.nodes;
   }
 
-  const nodes = parseTemplateShapes(spTree, rels, partPath, diagramDrawings);
+  const nodes = parseTemplateShapes(spTree, { rels, partPath, diagramDrawings });
   templateShapeCache.set(spTree, {
     nodes,
     rels,
@@ -253,8 +231,11 @@ export function renderSlide(
   materializeSlideNodes(presentation, slide);
 
   const isSharedCache = !!options?.mediaUrlCache;
-  const chartInstances = options?.chartInstances ?? new Set<ECharts>();
+  const chartInstances = options?.chartInstances ?? new Set<EChartsType>();
   const asyncTasks: Promise<void>[] = [];
+  const abortController = new AbortController();
+  const configuredFontUse = useConfiguredFonts(options?.fontFaces);
+  asyncTasks.push(configuredFontUse.ready);
 
   // Create render context (resolves slide -> layout -> master -> theme chain)
   const ctx = createRenderContext(
@@ -263,6 +244,7 @@ export function renderSlide(
     options?.mediaUrlCache,
     chartInstances,
     options?.pdfjs,
+    abortController.signal,
   );
   ctx.asyncTasks = asyncTasks;
   if (options?.onNavigate) {
@@ -295,6 +277,7 @@ export function renderSlide(
     if (slide.showMasterSp && ctx.layout.showMasterSp) {
       const masterCtx: RenderContext = {
         ...ctx,
+        nodeOrigin: 'master',
         slide: { ...ctx.slide, rels: ctx.master.rels },
         partPath: ctx.masterPath,
         skipPlaceholderChildren: true,
@@ -319,6 +302,7 @@ export function renderSlide(
     if (slide.showMasterSp) {
       const layoutCtx: RenderContext = {
         ...ctx,
+        nodeOrigin: 'layout',
         slide: { ...ctx.slide, rels: ctx.layout.rels },
         partPath: ctx.layoutPath,
         skipPlaceholderChildren: true,
@@ -341,17 +325,31 @@ export function renderSlide(
 
     // --- Render slide shapes (on top) ---
     for (const node of slide.nodes) {
+      let el: HTMLElement;
       try {
-        const el = renderNode(node, ctx);
+        el = renderNode(node, ctx);
         container.appendChild(el);
       } catch (e) {
         options?.onNodeError?.(node.id, e);
         container.appendChild(createErrorPlaceholder(node));
+        continue;
+      }
+      try {
+        options?.onNodeRendered?.(node.id, el);
+      } catch (e) {
+        console.warn(`onNodeRendered callback failed for node ${node.id}`, e);
       }
     }
   } finally {
     restoreMeasurementMount();
   }
+
+  const embeddedFontUse = useEmbeddedFonts(
+    presentation,
+    ctx.usedEmbeddedFontFamilies ?? new Set(),
+    options?.embeddedFontLimits,
+  );
+  asyncTasks.push(embeddedFontUse.ready);
 
   // Build SlideHandle
   let disposed = false;
@@ -361,6 +359,9 @@ export function renderSlide(
   const dispose = (): void => {
     if (disposed) return;
     disposed = true;
+    abortController.abort();
+    embeddedFontUse.dispose();
+    configuredFontUse.dispose();
 
     // Dispose chart instances whose DOM is inside this slide container
     if (chartInstances) {

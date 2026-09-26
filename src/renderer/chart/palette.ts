@@ -31,7 +31,10 @@ export function createChartRenderContext(chartXml: SafeXmlNode, ctx: RenderConte
   if (!colorMapOverride) return ctx;
   return {
     ...ctx,
-    layout: { ...ctx.layout, colorMapOverride },
+    // Chart clrMapOvr is the innermost scope. Clear slide mapping only on this derived context
+    // so StyleResolver reaches the chart map stored on the synthetic layout scope below.
+    slide: { ...ctx.slide, colorMapOverride: undefined, colorMapOverrideMode: undefined },
+    layout: { ...ctx.layout, colorMapOverride, colorMapOverrideMode: 'override' },
     colorCache: new Map(),
   };
 }
@@ -100,8 +103,12 @@ function darkenHexColor(hex: string, factor: number): string {
     .join('')}`;
 }
 
-export function getVaryColorPointPalette(ctx: RenderContext): string[] {
-  return getThemeAccentPalette(ctx).map((color) => darkenHexColor(color, 0.88));
+export function getVaryColorPointPalette(
+  ctx: RenderContext,
+  options: { darken?: boolean } = {},
+): string[] {
+  const accents = getThemeAccentPalette(ctx);
+  return options.darken === false ? accents : accents.map((color) => darkenHexColor(color, 0.88));
 }
 
 export function buildChartPalette(

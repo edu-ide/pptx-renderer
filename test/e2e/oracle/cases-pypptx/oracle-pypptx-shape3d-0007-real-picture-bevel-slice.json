@@ -1,0 +1,28 @@
+{
+  "name": "oracle-pypptx-shape3d-0007-real-picture-bevel-slice",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "p:pic",
+      "realCorpus=model-platform",
+      "a:scene3d.camera=orthographicFront",
+      "a:scene3d.lightRig=twoPt:t",
+      "a:scene3d.lightRig.rot=0,0,7200000",
+      "a:sp3d.extrusionH=implicit-zero",
+      "a:sp3d.bevelT=default-circle",
+      "a:sp3d.bevelT.size=25400x19050",
+      "a:sp3d.contourClr=FFFFFF",
+      "a:effectLst.outerShdw=55000,18000,5400000"
+    ]
+  }
+}

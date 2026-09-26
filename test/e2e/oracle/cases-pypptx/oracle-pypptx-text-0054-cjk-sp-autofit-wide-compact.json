@@ -1,0 +1,26 @@
+{
+  "name": "oracle-pypptx-text-0054-cjk-sp-autofit-wide-compact",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "requiredFonts": [
+      "Microsoft YaHei"
+    ],
+    "features": [
+      "text.cjk",
+      "bodyPr.wrap=square",
+      "bodyPr.spAutoFit",
+      "layout.aspectRatio=wide",
+      "layout.compact"
+    ]
+  }
+}

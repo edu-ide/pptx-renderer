@@ -1,0 +1,49 @@
+{
+  "name": "oracle-pypptx-shape3d-0016-perspective-right-picture-plane-matrix",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "p:pic.prstGeom=rect",
+      "geometry.aspect=square|wide|tall",
+      "surface=stretchPngPicture",
+      "a:srcRect=absent|horizontal|vertical|real-asymmetric",
+      "a:scene3d.camera=perspectiveRight",
+      "a:scene3d.camera.rot=absent",
+      "a:scene3d.camera.fov=5700000",
+      "a:scene3d.lightRig=threePt:t",
+      "a:sp3d=absent",
+      "effects=absent"
+    ]
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "oracle-pypptx-table-0003-first-last-columns",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "a:tblPr.firstRow=1",
+      "a:tblPr.firstCol=1",
+      "a:tblPr.lastCol=1"
+    ]
+  }
+}

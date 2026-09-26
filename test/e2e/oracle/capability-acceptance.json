@@ -1,0 +1,910 @@
+{
+  "receipts": [
+    {
+      "acceptedAt": "2026-09-11T17:22:28.693682Z",
+      "acceptedRevision": "2b37ac02076c6d87931bda9e86a3deeb2649e432",
+      "capabilityId": "drawingml.shape.3d.bottom-bevel-front-material",
+      "caseIds": [
+        "oracle-local-shape3d-0008-bottom-relaxed-inset-matrix"
+      ],
+      "caseInputSha256": [
+        "9df342d638c23b3940e36e134d7c8a9985fb4dd505e88871dc2f04ba08b5a354"
+      ],
+      "environment": {
+        "browser": {
+          "name": "chrome",
+          "version": "152.0.7977.83"
+        },
+        "fontProfile": {
+          "faces": [
+            {
+              "descriptors": {
+                "style": "normal",
+                "weight": "400"
+              },
+              "family": "\u5fae\u8f6f\u96c5\u9ed1",
+              "file": {
+                "sha256": "3084f1f88369af6bf9989c909024164d953d1e38d08734f05f28ef24b2f9d577",
+                "sizeBytes": 19701556
+              }
+            },
+            {
+              "descriptors": {
+                "style": "normal",
+                "weight": "700"
+              },
+              "family": "\u5fae\u8f6f\u96c5\u9ed1",
+              "file": {
+                "sha256": "519309b7ab0479c4dc3ace5e291de5a8702175be5586e165bc810267bd4619a5",
+                "sizeBytes": 16880832
+              }
+            }
+          ],
+          "id": "local-powerpoint-microsoft-yahei",
+          "manifest": {
+            "sha256": "2c061837588d1a28aed0f106dfc135766618f4b2092b298cc16c993e3c320e61",
+            "sizeBytes": 432
+          }
+        },
+        "oracle": "powerpoint-macos",
+        "platform": "macOS-26.5.1-arm64-arm-64bit",
+        "python": "3.11.11"
+      },
+      "gates": [
+        "source",
+        "structural",
+        "unit",
+        "browser",
+        "camera-local",
+        "native-powerpoint",
+        "manual-visual",
+        "regression",
+        "performance",
+        "package-size",
+        "docs"
+      ],
+      "groundTruthSha256": [
+        "e93da7f47b75cb24bef82e1c025f5db9db53a37eb1c3bfdb03bb0fe4c427012e"
+      ]
+    },
+    {
+      "acceptedAt": "2026-09-11T17:31:50.975273Z",
+      "acceptedRevision": "85296d43f810b2531890a6b877fd786d14ef2a25",
+      "capabilityId": "drawingml.shape.3d.camera-projected-plane",
+      "caseIds": [
+        "oracle-pypptx-shape3d-0013-camera-projection-matrix",
+        "oracle-pypptx-shape3d-0014-scene-only-plane-matrix",
+        "oracle-pypptx-shape3d-0015-perspective-left-text-plane-matrix",
+        "oracle-pypptx-shape3d-0016-perspective-right-picture-plane-matrix",
+        "oracle-pypptx-shape3d-0019-perspective-custom-geometry-plane-matrix",
+        "oracle-pypptx-shape3d-0020-perspective-left-picture-group-matrix"
+      ],
+      "caseInputSha256": [
+        "23a154711dd9beb2d78c9033a5a6c77e31b826770cf32d851a232d7aa426778c",
+        "6def7ec046ed633f1b32d94fabcc78286e9edef036d2150088a6431cca637ce2",
+        "424bf37e7342738d61342e7dc10fe9c1298cdc4e46b7d0201b482b047a4f34cb",
+        "40877ea9906e324f0a44201356ce46dbf1f245da8f1617555d2ca07ce5bdb447",
+        "4445bd83dee18ef4658376e9174c1ac79cf68fd40add59056d3f1a97b2506d7d",
+        "7d1bed1c247bbf31a67b24576263a4e1b7f83dc2c2f26cb881424da8a7793813"
+      ],
+      "environment": {
+        "browser": {
+          "name": "chrome",
+          "version": "152.0.7977.83"
+        },
+        "fontProfile": {
+          "faces": [
+            {
+              "descriptors": {
+                "style": "normal",
+                "weight": "400"
+              },
+              "family": "\u5fae\u8f6f\u96c5\u9ed1",
+              "file": {
+                "sha256": "3084f1f88369af6bf9989c909024164d953d1e38d08734f05f28ef24b2f9d577",
+                "sizeBytes": 19701556
+              }
+            },
+            {
+              "descriptors": {
+                "style": "normal",
+                "weight": "700"
+              },
+              "family": "\u5fae\u8f6f\u96c5\u9ed1",
+              "file": {
+                "sha256": "519309b7ab0479c4dc3ace5e291de5a8702175be5586e165bc810267bd4619a5",
+                "sizeBytes": 16880832
+              }
+            }
+          ],
+          "id": "local-powerpoint-microsoft-yahei",
+          "manifest": {
+            "sha256": "2c061837588d1a28aed0f106dfc135766618f4b2092b298cc16c993e3c320e61",
+            "sizeBytes": 432
+          }
+        },
+        "oracle": "powerpoint-macos",
+        "platform": "macOS-26.5.1-arm64-arm-64bit",
+        "python": "3.11.11"
+      },
+      "gates": [
+        "source",
+        "structural",
+        "unit",
+        "browser",
+        "camera-local",
+        "native-powerpoint",
+        "manual-visual",
+        "regression",
+        "performance",
+        "package-size",
+        "docs"
+      ],
+      "groundTruthSha256": [
+        "1bc3df21cabf2bf9c8bd044c055f47a552c4c6a2cd91875b60d17e53893d64fa",
+        "31fb431f119affa9cb57d2471a37c3df90bbeca493aabfde81f508746ba30c32",
+        "6ca1fa9e2e6ba102891e25790c03a00d7326ee787f498591adf814e91af72588",
+        "fd9088ccb27742916eef21c12ea7b5a8634b186e8d3a7c62fa7c395a942ff378",
+        "2e4674078d58e3d9575d49ac8b496a3a793d14812731bb8d0d14f8cf64a01d84",
+        "80141194cb425fb1d5388e0f88bd46a96f7a2c8e20225d0a7396d114c012c711"
+      ]
+    },
+    {
+      "acceptedAt": "2026-09-11T17:31:50.975273Z",
+      "acceptedRevision": "85296d43f810b2531890a6b877fd786d14ef2a25",
+      "capabilityId": "drawingml.shape.3d.top-bevel-contour",
+      "caseIds": [
+        "oracle-pypptx-shape3d-0001-flat-optout",
+        "oracle-pypptx-shape3d-0002-picture-rect-circle-bevel",
+        "oracle-pypptx-shape3d-0003-roundrect-bevel-contour",
+        "oracle-pypptx-shape3d-0004-wide-bevel",
+        "oracle-pypptx-shape3d-0005-tall-bevel",
+        "oracle-pypptx-shape3d-0006-grouped-bevel",
+        "oracle-pypptx-shape3d-0007-real-picture-bevel-slice",
+        "oracle-pypptx-shape3d-0008-picture-horizontal-crop-bevel",
+        "oracle-pypptx-shape3d-0009-picture-vertical-crop-bevel",
+        "oracle-pypptx-shape3d-0010-picture-asymmetric-crop-bevel",
+        "oracle-pypptx-shape3d-0011-ellipse-circle-bevel-matrix",
+        "oracle-pypptx-shape3d-0012-donut-circle-bevel-adjustment-matrix",
+        "oracle-pypptx-shape3d-0017-default-top-bevel-dimensions-matrix",
+        "oracle-pypptx-shape3d-0018-donut-shadow-interpolation-matrix"
+      ],
+      "caseInputSha256": [
+        "74c293774148224d54e34c80472c7280e09c686636453b360f2714240825ee30",
+        "29bec7b160ce0bbf9c34db115a8eadb8e966a86d314f33e0af51684437f2519d",
+        "8c5f0ede21ee648bd5fb55596184d74e0835d9aaada4d60a2d6f97bfd21473de",
+        "7da11976af2dea3d49c23da51fd4f8fb50ffd904519a62712dd6dc951972afdf",
+        "7815571167b8b6d20f7eb4dcfd88c4bdb9c7906da5de2326a5fb06183b547c50",
+        "2166baf4afae4a734db5fbad8ae09f003fd97cda92fec910414add8ab34d400d",
+        "20c39f252ad36ebf82ee66f8c74898ef233bbaf1390b88465d7ee2356eb02a5e",
+        "577f3feba902095e694ef2bb5062949ac3ef9c718fc1bb5bee2ea9092d399359",
+        "45e95b27135f1c5b2e878b36e93ff58da5e2a653212a76384004941f16c03f20",
+        "48905f610e40eaf2169e86e582065b59272a6e5fcdc9907498ef1f00b4cc2dd3",
+        "a586235b34c4282950200c66838b2b57356a98156cacb9b2b28587c2850ee372",
+        "39f3c97ad409f9bcbcb06a1a9eb46fb5b5289e3a6684579b41b8f36188fd185b",
+        "025909ceecdfb8a618a3df8a7e31aa98a3e2fa7d5417f994ef49dd83ee989ccd",
+        "b402194906a5b20ffc49a79744b1e7c5028e42e7937bb2904d1362a7c3f41754"
+      ],
+      "environment": {
+        "browser": {
+          "name": "chrome",
+          "version": "152.0.7977.83"
+        },
+        "fontProfile": {
+          "faces": [
+            {
+              "descriptors": {
+                "style": "normal",
+                "weight": "400"
+              },
+              "family": "\u5fae\u8f6f\u96c5\u9ed1",
+              "file": {
+                "sha256": "3084f1f88369af6bf9989c909024164d953d1e38d08734f05f28ef24b2f9d577",
+                "sizeBytes": 19701556
+              }
+            },
+            {
+              "descriptors": {
+                "style": "normal",
+                "weight": "700"
+              },
+              "family": "\u5fae\u8f6f\u96c5\u9ed1",
+              "file": {
+                "sha256": "519309b7ab0479c4dc3ace5e291de5a8702175be5586e165bc810267bd4619a5",
+                "sizeBytes": 16880832
+              }
+            }
+          ],
+          "id": "local-powerpoint-microsoft-yahei",
+          "manifest": {
+            "sha256": "2c061837588d1a28aed0f106dfc135766618f4b2092b298cc16c993e3c320e61",
+            "sizeBytes": 432
+          }
+        },
+        "oracle": "powerpoint-macos",
+        "platform": "macOS-26.5.1-arm64-arm-64bit",
+        "python": "3.11.11"
+      },
+      "gates": [
+        "source",
+        "structural",
+        "unit",
+        "browser",
+        "bevel-local",
+        "native-powerpoint",
+        "manual-visual",
+        "regression",
+        "performance",
+        "package-size",
+        "docs"
+      ],
+      "groundTruthSha256": [
+        "80539ecfd1d62ec467e58f99a97014d0c03c35c49cb89a4c44409caebae20ddc",
+        "d07478481195114c6e63234721acb67f86f1420a7afc9586420e62c7d8d794df",
+        "46188dcd382fb59092ecbb553817f51e7bee4af3512b663fe194d7d1f76a9be3",
+        "32a747512f24c52ffeb6046e78d0480232e1305abe533ca6d1c15c426aff6b55",
+        "6322d925c54679d16e75bfcefc57fa233f2570be8ca084702f1d9f40468a378e",
+        "e915fa15ff5dec8af0f8ed9f6573e0928f6606d38476dee5a31fdc0fd39907ba",
+        "3a4860cd5aa591c9ba078a1ebdaa0e643acf9c8781b3373a5c333a26e2a06eca",
+        "7199bf6212076f360a152222fd00465bd5a3cbcc8e0298bea03a1162afa7efb3",
+        "e927eebd28b181d48d3119a28f7651e556c1926ca83abe8993329c6ba30b12cb",
+        "563ffdc4cd1c646cbf9bd523beb85c325f87590a67c99189fabf6d2191daaa94",
+        "fb709dcda1bf45e9e0448360987c782145cb8809b26e2486705e2ab6736e800b",
+        "487a6955c2627cf1d7497f6d6065fda665fa9eb1a3f633c670c4e9131f13db6e",
+        "db363635fa1efad0083c8748afa04fc7731f2aed0c30a476e24d3b3beaaef8a9",
+        "3a89794e3cf2bb35cd8afbd9180d46c45981766291cf819abe807518217e1449"
+      ]
+    },
+    {
+      "acceptedAt": "2026-09-11T17:31:50.975273Z",
+      "acceptedRevision": "85296d43f810b2531890a6b877fd786d14ef2a25",
+      "capabilityId": "drawingml.shape.effect.outer-shadow",
+      "caseIds": [
+        "oracle-pypptx-shape-effect-0001-outer-shadow-matrix"
+      ],
+      "caseInputSha256": [
+        "9947c52fb223adb426ed6f1df539ce10eece84fe423aabb8211db648aa2c72de"
+      ],
+      "environment": {
+        "browser": {
+          "name": "chrome",
+          "version": "152.0.7977.83"
+        },
+        "fontProfile": {
+          "faces": [
+            {
+              "descriptors": {
+                "style": "normal",
+                "weight": "400"
+              },
+              "family": "\u5fae\u8f6f\u96c5\u9ed1",
+              "file": {
+                "sha256": "3084f1f88369af6bf9989c909024164d953d1e38d08734f05f28ef24b2f9d577",
+                "sizeBytes": 19701556
+              }
+            },
+            {
+              "descriptors": {
+                "style": "normal",
+                "weight": "700"
+              },
+              "family": "\u5fae\u8f6f\u96c5\u9ed1",
+              "file": {
+                "sha256": "519309b7ab0479c4dc3ace5e291de5a8702175be5586e165bc810267bd4619a5",
+                "sizeBytes": 16880832
+              }
+            }
+          ],
+          "id": "local-powerpoint-microsoft-yahei",
+          "manifest": {
+            "sha256": "2c061837588d1a28aed0f106dfc135766618f4b2092b298cc16c993e3c320e61",
+            "sizeBytes": 432
+          }
+        },
+        "oracle": "powerpoint-macos",
+        "platform": "macOS-26.5.1-arm64-arm-64bit",
+        "python": "3.11.11"
+      },
+      "gates": [
+        "source",
+        "structural",
+        "unit",
+        "browser",
+        "native-powerpoint",
+        "manual-visual",
+        "regression",
+        "shadow-local",
+        "performance",
+        "package",
+        "package-size",
+        "typecheck",
+        "lint",
+        "build",
+        "docs"
+      ],
+      "groundTruthSha256": [
+        "f78169460d82509b9b8c6d0cff5dd39cb6ca7bd16ad335b9a433163759b7a157"
+      ]
+    },
+    {
+      "acceptedAt": "2026-09-11T17:31:50.975273Z",
+      "acceptedRevision": "85296d43f810b2531890a6b877fd786d14ef2a25",
+      "capabilityId": "drawingml.shape.effect.reflection",
+      "caseIds": [
+        "oracle-pypptx-shape-effect-0002-reflection-matrix"
+      ],
+      "caseInputSha256": [
+        "df26e3dc506f51991195da703480c424714d54e659b8b0b1cdc1d466730e916a"
+      ],
+      "environment": {
+        "browser": {
+          "name": "chrome",
+          "version": "152.0.7977.83"
+        },
+        "fontProfile": {
+          "faces": [
+            {
+              "descriptors": {
+                "style": "normal",
+                "weight": "400"
+              },
+              "family": "\u5fae\u8f6f\u96c5\u9ed1",
+              "file": {
+                "sha256": "3084f1f88369af6bf9989c909024164d953d1e38d08734f05f28ef24b2f9d577",
+                "sizeBytes": 19701556
+              }
+            },
+            {
+              "descriptors": {
+                "style": "normal",
+                "weight": "700"
+              },
+              "family": "\u5fae\u8f6f\u96c5\u9ed1",
+              "file": {
+                "sha256": "519309b7ab0479c4dc3ace5e291de5a8702175be5586e165bc810267bd4619a5",
+                "sizeBytes": 16880832
+              }
+            }
+          ],
+          "id": "local-powerpoint-microsoft-yahei",
+          "manifest": {
+            "sha256": "2c061837588d1a28aed0f106dfc135766618f4b2092b298cc16c993e3c320e61",
+            "sizeBytes": 432
+          }
+        },
+        "oracle": "powerpoint-macos",
+        "platform": "macOS-26.5.1-arm64-arm-64bit",
+        "python": "3.11.11"
+      },
+      "gates": [
+        "source",
+        "structural",
+        "unit",
+        "browser",
+        "native-powerpoint",
+        "manual-visual",
+        "regression",
+        "reflection-local",
+        "performance",
+        "package",
+        "package-size",
+        "typecheck",
+        "lint",
+        "build",
+        "docs"
+      ],
+      "groundTruthSha256": [
+        "3189903be3a6be85ca63e1843fa98cd9094a604f871d72a116a4efa97ad6f247"
+      ]
+    },
+    {
+      "acceptedAt": "2026-09-11T17:31:50.975273Z",
+      "acceptedRevision": "85296d43f810b2531890a6b877fd786d14ef2a25",
+      "capabilityId": "drawingml.shape.geometry.adjustment.donut",
+      "caseIds": [
+        "oracle-pypptx-shape-adj-0009-donut-thin-ring",
+        "oracle-pypptx-shape-adj-0010-donut-thick-ring"
+      ],
+      "caseInputSha256": [
+        "e70abcb8e7c064ab416a852eeaa074c708aa4f70643e2adf112241404c8c913a",
+        "5d01fb2986f9e14d46c227a0777c247aeb181587fa52bc49b7630d148be64c94"
+      ],
+      "environment": {
+        "browser": {
+          "name": "chrome",
+          "version": "152.0.7977.83"
+        },
+        "fontProfile": {
+          "faces": [
+            {
+              "descriptors": {
+                "style": "normal",
+                "weight": "400"
+              },
+              "family": "\u5fae\u8f6f\u96c5\u9ed1",
+              "file": {
+                "sha256": "3084f1f88369af6bf9989c909024164d953d1e38d08734f05f28ef24b2f9d577",
+                "sizeBytes": 19701556
+              }
+            },
+            {
+              "descriptors": {
+                "style": "normal",
+                "weight": "700"
+              },
+              "family": "\u5fae\u8f6f\u96c5\u9ed1",
+              "file": {
+                "sha256": "519309b7ab0479c4dc3ace5e291de5a8702175be5586e165bc810267bd4619a5",
+                "sizeBytes": 16880832
+              }
+            }
+          ],
+          "id": "local-powerpoint-microsoft-yahei",
+          "manifest": {
+            "sha256": "2c061837588d1a28aed0f106dfc135766618f4b2092b298cc16c993e3c320e61",
+            "sizeBytes": 432
+          }
+        },
+        "oracle": "powerpoint-macos",
+        "platform": "macOS-26.5.1-arm64-arm-64bit",
+        "python": "3.11.11"
+      },
+      "gates": [
+        "source",
+        "structural",
+        "unit",
+        "browser",
+        "native-powerpoint",
+        "manual-visual",
+        "regression",
+        "docs"
+      ],
+      "groundTruthSha256": [
+        "a1165932ff8fb1e5a1c9cbd316ff137da3ec6e07e1f94564be7b641cf7a9d04b",
+        "8e591a3aa5f98391611b1ebe70c9f1354c7099c2ff44c4613c09303ca6e61cd3"
+      ]
+    },
+    {
+      "acceptedAt": "2026-09-11T17:31:50.975273Z",
+      "acceptedRevision": "85296d43f810b2531890a6b877fd786d14ef2a25",
+      "capabilityId": "drawingml.shape.geometry.flowchart-zero-adjustment",
+      "caseIds": [
+        "oracle-pypptx-flowchart-0061-process",
+        "oracle-pypptx-flowchart-0062-alternate-process",
+        "oracle-pypptx-flowchart-0063-decision",
+        "oracle-pypptx-flowchart-0064-input-output",
+        "oracle-pypptx-flowchart-0065-predefined-process",
+        "oracle-pypptx-flowchart-0066-internal-storage",
+        "oracle-pypptx-flowchart-0067-document",
+        "oracle-pypptx-flowchart-0068-multidocument",
+        "oracle-pypptx-flowchart-0069-terminator",
+        "oracle-pypptx-flowchart-0070-preparation",
+        "oracle-pypptx-flowchart-0071-manual-input",
+        "oracle-pypptx-flowchart-0072-manual-operation",
+        "oracle-pypptx-flowchart-0073-connector",
+        "oracle-pypptx-flowchart-0074-offpage-connector",
+        "oracle-pypptx-flowchart-0075-punched-card",
+        "oracle-pypptx-flowchart-0076-punched-tape",
+        "oracle-pypptx-flowchart-0077-summing-junction",
+        "oracle-pypptx-flowchart-0078-or",
+        "oracle-pypptx-flowchart-0079-collate",
+        "oracle-pypptx-flowchart-0080-sort",
+        "oracle-pypptx-flowchart-0081-extract",
+        "oracle-pypptx-flowchart-0082-merge",
+        "oracle-pypptx-flowchart-0083-online-storage",
+        "oracle-pypptx-flowchart-0084-delay",
+        "oracle-pypptx-flowchart-0085-magnetic-tape",
+        "oracle-pypptx-flowchart-0086-magnetic-disk",
+        "oracle-pypptx-flowchart-0087-magnetic-drum",
+        "oracle-pypptx-flowchart-0088-display"
+      ],
+      "caseInputSha256": [
+        "f08b31f73553c37aafeaa8661886ef5ba96e58d411d4f902cfbc200f36bfd4f4",
+        "b59846625545a51accce7aac9ca080593a9d115aedba328edbd66f84cc823f5e",
+        "2867107e25cba55ca562c399f3ab830c3c2ec506b39c7a7e9b3c92707191de62",
+        "2d408187f080acf921cb8d007d4dd46eaa79d02fff3ddaddde54869dd48011e2",
+        "7663ffdd37a3d7254de67377f6988269ddabace69c529f08a6d8e9b5a8ccfb24",
+        "fb168e50717d1b61d261727797f1c9794a20b52a445ffd5b2db0414d4a817836",
+        "ae8ce8e8a8ca92260a896c2c2d0071ad76d8c4e09736b77107fa30348fd37e94",
+        "67ce1362a0965fbf9446e5a30484280221df298c54f895786ac83436f0be1231",
+        "20a361709dd2801500c4dcf0e9a6a378f49f7914a5bd04940ef8d6964e93e95d",
+        "60ec1e795ae8c783cb37e8dc929581a3c3a6d378489bbf6f8242faa7eab65079",
+        "87d27cceee3c8268ea1661c6a953d55c45f9bd2db79246619c8e08b44b780a6e",
+        "32188edd14f8291f8aed8547a56caad15e32d15dee4bb1ee5f8625293afdcad4",
+        "59ee7a6ff0e2eedb6078c056ffd7e1b2910720b62ab0eb7c0a795cbd0d67ae4f",
+        "474397ccd84a36ab69e04868f3bc9ba5aca92c9d71d54510cb1a0c65543a19c7",
+        "858e5dba2245e771100d7b1f3c8459e2ff369e3df3bea0dd10861b9add167a23",
+        "eed44d080ccb755b0c87ffdba8e87621922abba0e9b6b04a8c9393fe27de6e4c",
+        "909e528e37411595aa95f567441b9178426fcfacd07f17abcde391093c2948ac",
+        "11809f11429f229ce305bd1b7082f85d01f262977d4f220db9888bc2f878189d",
+        "7239d0af2eb1176cc19c30e9a9a700f3ce8e86a1c7563b44a24414dab04cbb36",
+        "3f81ad36c137c1c856b13b5fe1367b2407f8088cf60b51f94072a85c2667d166",
+        "fbb98e20764a96e6d8ae7d2626ecef44e1263408cbb0c657d8703916ca30d712",
+        "efc4dd1c9e2d40a5d51d803b274ed88e17974af629a10b86e2505ae91d381cb5",
+        "80a413b8eb8fd5edb6245601fef4e4c4089d13f60fcdc977c3647b5a079f9439",
+        "3be892fc43ccea1c9c534484ac01a829275568b7892ceee02634f48125cdc385",
+        "4b5a7d58d7c77e7b49d4812c41c14f6235f6805c7eb45e4da432ba1e4bf2b77c",
+        "a3a4a89a31ac33ce7b9804418ea34f46c85bc4d66ff6569d83ef2b2cc7fa2492",
+        "cc8a24e91d12a15f76149fe3caf680e4c1f96feba9a2da626b6374068c52128b",
+        "a11864d901393675e743819bcb430361b6d01d3e4b985406c1e0b781cabb9233"
+      ],
+      "environment": {
+        "browser": {
+          "name": "chrome",
+          "version": "152.0.7977.83"
+        },
+        "fontProfile": {
+          "faces": [
+            {
+              "descriptors": {
+                "style": "normal",
+                "weight": "400"
+              },
+              "family": "\u5fae\u8f6f\u96c5\u9ed1",
+              "file": {
+                "sha256": "3084f1f88369af6bf9989c909024164d953d1e38d08734f05f28ef24b2f9d577",
+                "sizeBytes": 19701556
+              }
+            },
+            {
+              "descriptors": {
+                "style": "normal",
+                "weight": "700"
+              },
+              "family": "\u5fae\u8f6f\u96c5\u9ed1",
+              "file": {
+                "sha256": "519309b7ab0479c4dc3ace5e291de5a8702175be5586e165bc810267bd4619a5",
+                "sizeBytes": 16880832
+              }
+            }
+          ],
+          "id": "local-powerpoint-microsoft-yahei",
+          "manifest": {
+            "sha256": "2c061837588d1a28aed0f106dfc135766618f4b2092b298cc16c993e3c320e61",
+            "sizeBytes": 432
+          }
+        },
+        "oracle": "powerpoint-macos",
+        "platform": "macOS-26.5.1-arm64-arm-64bit",
+        "python": "3.11.11"
+      },
+      "gates": [
+        "source",
+        "structural",
+        "unit",
+        "browser",
+        "native-powerpoint",
+        "manual-visual",
+        "regression",
+        "docs"
+      ],
+      "groundTruthSha256": [
+        "c1f1103c60773d7c6d1a6408fff597d979a75ec25ab14a5b80561a8079c6bf27",
+        "8b47bcdfa0dfa305a163c5df247f0a91fdbf01fcb8cab7747cb5f6701aec530b",
+        "41b850593012210d46128bfcaa617fb2dde4cfbe03b2a593d3da27955fb9455c",
+        "cc80a660b39e3964df078c70a8312bcc3582a25af0ac4f99dee718153f87e3fb",
+        "a89c73caeef8b31a6f2dd498788b425db43658aa18c8ef650ada316618417b3f",
+        "e43d86370a1233b95861a5cc1d415cdfbc812dcae8e29c52ca5b19c8369495d2",
+        "9358872ce78f776db638e7e4fb725025cec0a8073e96a9e57f4cefb2dab7742c",
+        "4104a91d1fd9c0a64965d5f6474ec1240768942bca27e5669f978fa21af637c1",
+        "845691260d296ee6c1afefe63f245fbe9aab74a32dbcf2ea84112700d324c26d",
+        "6431b3a2d8719dd0a6a581e147ceb06f4bf3735e65bdb8681dd6268a8ca7947d",
+        "43b62f1b0428c3c0c4052ebee91204ad5b1eef6feb9f4e19c2176aac6fad21bf",
+        "8d1db9c863ceff4c8aefbeb0d23777a931a43883a160a41088f81bf1a5c52859",
+        "60cb96974aebccd4c30cbf65a3d77c406e70f52d00d5d0d7f901e6868e3eb73b",
+        "13a450ab2ce0cfb857d349d9d983b74ceffa7ebc828bc4f42cce6006498fb351",
+        "c399cf86bb1c5f1886a8ed62f7339228e66e530c6d26c0515300a2c3298242aa",
+        "364d7bcc48b54ebf64965781a35f7337a333907c16e1441295cda7ff9e1d9a40",
+        "52adecb909308203b1eddd49aa0dabd1aef3054bf29010720ce499926af4c303",
+        "91ac17ddc6559b418f30e79bb9121b01fb6e5687a032c095992e14813dd46d7d",
+        "9c9adbebab5a8e7af684dfc626b8a6baeceb34dc3975a4a9341cc63491c3bdd0",
+        "80cde4c15e873b9b7e92c5a5acb03372bfad13e7686cbe20c932ef57108f08d9",
+        "488ad3d6e480c5f9ff74a4568ee87d5e54dc6097de8c91d12019349cdd96c737",
+        "14ea435dcab240bf430077ccf3a32b9909c70b5a199ed63156e1c1249ca12cec",
+        "49ce6da11772e96a754c9b4d59a836a99a153570d07721b8b66a94a02243a213",
+        "5e9cfc9079e737cc9d509372859d6c4e21db849e4a833432541cb6b156714afa",
+        "796dcd0ef07c058ba3e0fa7d70d3dec7c4d72a7e16544982f1680fb3d24de210",
+        "187ed45e8d035c8d4bb78c52a89fc7aa99993607eab55a0ae111d05d3836de0e",
+        "d38b31514d69f340c598573a70d73e08fac9023424e850bf4a9b902f276c7675",
+        "997fe7af7fcc57c6c0d910af56a9dd8bc50d235b17b6cd3b3da53b02d71471e1"
+      ]
+    },
+    {
+      "acceptedAt": "2026-09-13T12:55:24.299675Z",
+      "acceptedRevision": "47574aa1d25dbe2dfc92dabcf0d2c1e693cce41b",
+      "capabilityId": "drawingml.table.common",
+      "caseIds": [
+        "oracle-pypptx-table-0001-default-grid",
+        "oracle-pypptx-table-0002-header-banded-rows",
+        "oracle-pypptx-table-0003-first-last-columns",
+        "oracle-pypptx-table-0004-horizontal-vertical-merges",
+        "oracle-pypptx-table-0005-variable-grid-sizes",
+        "oracle-pypptx-table-0006-cell-margins-vertical-anchors",
+        "oracle-pypptx-table-0007-cjk-mixed-text",
+        "oracle-pypptx-table-0008-cell-border-matrix"
+      ],
+      "caseInputSha256": [
+        "6b45b8be5e86537ca799fbe7e6e44b0503189be71e83fcdbe9847c1eecd94711",
+        "3c175f1f89335339c9fe38735e2ebe9327d2c4860b08fded74deef8074bdc958",
+        "bb02060bc21393c0f3809990d5069592642585d68e4a22f02ac73236d70ed671",
+        "1ab7f8d941227f97a68905848224480d7c2b9588a95fdd45cb942c939ffd07f3",
+        "985cfeb4834b46dd7c51684abd9d139aa2f61b67653e2f3494e4b7874a666d0d",
+        "ea8e48b7bc16f793bb39163c1665afc6cd3904b69da65356da258e87db3bfeaa",
+        "a88b6157961e2549ee85fefac2e0d4f73ecff7eda3c083c682b75bd8aa91caae",
+        "64b9e6d38aa937bc279c9144ae978e44f1b871b56014791a5a722666c0b9671f"
+      ],
+      "environment": {
+        "browser": {
+          "name": "chrome",
+          "version": "152.0.7977.83"
+        },
+        "capture": {
+          "browserCssDpi": 96,
+          "pdfDeviceScaleFactor": 1.5625,
+          "pdfRasterDpi": 150,
+          "pngDeviceScaleFactor": 1.0
+        },
+        "fontProfile": {
+          "faces": [
+            {
+              "descriptors": {
+                "style": "normal",
+                "weight": "400"
+              },
+              "family": "Calibri",
+              "file": {
+                "sha256": "ea801e1f869b55464339058b1d4263d07cc074a18e20aa3ee1d07901423dee53",
+                "sizeBytes": 1324384
+              }
+            },
+            {
+              "descriptors": {
+                "style": "normal",
+                "weight": "700"
+              },
+              "family": "Calibri",
+              "file": {
+                "sha256": "ac1cf97565de97cdc322228d875dc18c1131656c5138173e2c6d8ac7a37aa7f2",
+                "sizeBytes": 1290132
+              }
+            },
+            {
+              "descriptors": {
+                "style": "italic",
+                "weight": "400"
+              },
+              "family": "Calibri",
+              "file": {
+                "sha256": "38e28b619448710314a298dd66305a3b8f494a854f19d40aa18b9872e61911fe",
+                "sizeBytes": 1089300
+              }
+            },
+            {
+              "descriptors": {
+                "style": "italic",
+                "weight": "700"
+              },
+              "family": "Calibri",
+              "file": {
+                "sha256": "77117338878fefc82770d27303bcca90e900f2ef59a0a87d294b7744ec158b5b",
+                "sizeBytes": 1049272
+              }
+            },
+            {
+              "descriptors": {
+                "style": "normal",
+                "weight": "400"
+              },
+              "family": "\u5fae\u8f6f\u96c5\u9ed1",
+              "file": {
+                "sha256": "3084f1f88369af6bf9989c909024164d953d1e38d08734f05f28ef24b2f9d577",
+                "sizeBytes": 19701556
+              }
+            },
+            {
+              "descriptors": {
+                "style": "normal",
+                "weight": "700"
+              },
+              "family": "\u5fae\u8f6f\u96c5\u9ed1",
+              "file": {
+                "sha256": "519309b7ab0479c4dc3ace5e291de5a8702175be5586e165bc810267bd4619a5",
+                "sizeBytes": 16880832
+              }
+            }
+          ],
+          "id": "local-powerpoint-office-core",
+          "manifest": {
+            "sha256": "70fed532afd6cfcfc0143e375173d2011f4197940b999d1c77d4f0e380d3316e",
+            "sizeBytes": 1115
+          }
+        },
+        "oracle": "powerpoint-macos",
+        "platform": "macOS-26.5.1-arm64-arm-64bit",
+        "python": "3.11.11"
+      },
+      "gates": [
+        "source",
+        "structural",
+        "unit",
+        "browser",
+        "native-powerpoint",
+        "manual-visual",
+        "regression",
+        "docs"
+      ],
+      "groundTruthSha256": [
+        "0d177a531db76ab1411252ba9488c0e1ac7ecaf41c855db475dd1e6a71154946",
+        "cddba1913ba33408e02322aa0671d119e2f0461469455cd59d25b65fa00c4ea2",
+        "add87e561ca458c1084dbbcd1641b658d87161ae30e80699fa2ae66b0d04f708",
+        "5fde56193d223a703d32dfb6cec65a7450067b9d50fb116b3890faa8d9175a81",
+        "f81c0d1a73d83e5e4d8ab26e7ebcd4dff68ef236c137b6b0d12e8b75844647a7",
+        "9bc3d1faedb554b26b2e16762203e2074b937dad9c4ae38081bd41b98d32728f",
+        "9465893b944b6ca22525b30f778d85680cbae4316626f495845e9e1d33f9cfc8",
+        "e71c25816d42d1e045146b1f730cdc03f8f5ce13ceeb538247883abde48d4348"
+      ]
+    },
+    {
+      "acceptedAt": "2026-09-11T17:31:50.975273Z",
+      "acceptedRevision": "85296d43f810b2531890a6b877fd786d14ef2a25",
+      "capabilityId": "drawingml.text.body.wrap-overflow",
+      "caseIds": [
+        "oracle-pypptx-text-0040-cjk-wrap-square-no-autofit",
+        "oracle-pypptx-text-0041-cjk-wrap-square-implicit-autofit",
+        "oracle-pypptx-text-0042-cjk-wrap-none-no-autofit",
+        "oracle-pypptx-text-0043-cjk-sp-autofit-narrow",
+        "oracle-pypptx-text-0044-cjk-norm-autofit-scaled",
+        "oracle-pypptx-text-0052-cjk-sp-autofit-square-growth",
+        "oracle-pypptx-text-0053-cjk-sp-autofit-tall-growth",
+        "oracle-pypptx-text-0054-cjk-sp-autofit-wide-compact",
+        "oracle-pypptx-text-0055-cjk-sp-autofit-explicit-overflow"
+      ],
+      "caseInputSha256": [
+        "eadaa28bccc34400ef0b1e2b7f7516343d16c99285a69513a23d56aac8c2b9de",
+        "2b25a0ec6f3b8c62c9510d3916faa50f37971c5f6315662dcd8b2dccf8e1ab12",
+        "77872b05f106820f4584607fc3f6db7d508bdcdfc140955f176fe90aca1b0f3a",
+        "56ba9406487f69423cd39066052f550e0ae720a9df02e9fb2078444e416b2ae7",
+        "dfddf5c4da8b794d974fba719b25e87bcf45a1d0cf3c519e468e2174f9ee9893",
+        "3c487344da09dcee42519e11fd515de6635f661617279e901c71d16cc6da75fd",
+        "02c079b0391251a21a432d82c4e0189845674751a792e02e7465a9e5372b9b04",
+        "866e1b336610912af2df317f758b86970ee52d82242e4d11fc0681aab0dd7381",
+        "9589c1a44948cd558b3babfc51be26703341e1e7c9c0981d8b32e77bf0f69dfa"
+      ],
+      "environment": {
+        "browser": {
+          "name": "chrome",
+          "version": "152.0.7977.83"
+        },
+        "fontProfile": {
+          "faces": [
+            {
+              "descriptors": {
+                "style": "normal",
+                "weight": "400"
+              },
+              "family": "\u5fae\u8f6f\u96c5\u9ed1",
+              "file": {
+                "sha256": "3084f1f88369af6bf9989c909024164d953d1e38d08734f05f28ef24b2f9d577",
+                "sizeBytes": 19701556
+              }
+            },
+            {
+              "descriptors": {
+                "style": "normal",
+                "weight": "700"
+              },
+              "family": "\u5fae\u8f6f\u96c5\u9ed1",
+              "file": {
+                "sha256": "519309b7ab0479c4dc3ace5e291de5a8702175be5586e165bc810267bd4619a5",
+                "sizeBytes": 16880832
+              }
+            }
+          ],
+          "id": "local-powerpoint-microsoft-yahei",
+          "manifest": {
+            "sha256": "2c061837588d1a28aed0f106dfc135766618f4b2092b298cc16c993e3c320e61",
+            "sizeBytes": 432
+          }
+        },
+        "oracle": "powerpoint-macos",
+        "platform": "macOS-26.5.1-arm64-arm-64bit",
+        "python": "3.11.11"
+      },
+      "gates": [
+        "source",
+        "structural",
+        "unit",
+        "browser",
+        "native-powerpoint",
+        "manual-visual",
+        "regression",
+        "docs"
+      ],
+      "groundTruthSha256": [
+        "910d3b1ad2d1b3bd8833e44cedc465814895098d60594cca443cafe753a14b1f",
+        "7f01c5a008a1d067ac1ad77051bdc74d8cffee3cff3ab9d74b2cea84374680ad",
+        "dff23931c8d037e4d35ad76d1b6fc261a73ef0a03792ee50d0ac74eb52b49dad",
+        "0f856ee65abbd1ffecc4d7ca7137967dc6f9fc65e88445ac23dd300c3cc8f5f8",
+        "5e27156fe91e5dfbd519e410eacff1440439d29a5a7cbf47ebdd0d3a9f324675",
+        "07f5bf95bd428980ea308a7e771572af260647589ee518339f333f65c1a4ce86",
+        "fd712bddeafe26ab8cb6a2851c41af3462feeabbeefc67745840ad7b322f05f6",
+        "7c2b24e5737f3aa79c4ecaba2a192bca38b2c2ce9e6c042cc96dfa2bccd7829c",
+        "61b36ab48767092cb35fab493af037d6d31f3b5996f0d82f7a4e1c4c4f79886f"
+      ]
+    },
+    {
+      "acceptedAt": "2026-09-11T17:31:50.975273Z",
+      "acceptedRevision": "85296d43f810b2531890a6b877fd786d14ef2a25",
+      "capabilityId": "drawingml.text.run.defrpr-color-precedence",
+      "caseIds": [
+        "oracle-pypptx-text-0056-defrpr-srgb-over-fontref-square",
+        "oracle-pypptx-text-0057-defrpr-scheme-over-fontref-wide",
+        "oracle-pypptx-text-0058-run-color-over-defrpr-tall",
+        "oracle-pypptx-text-0059-fontref-fallback-no-defrpr"
+      ],
+      "caseInputSha256": [
+        "c2cea67566a4d65db4d52b5ee3f4e89fd2f35628ac83855dd6fa1672c5bb5d29",
+        "b6a8a0067c552bd5e94b7c9f351daeade7af2fcfbbee738b3d8c5bd1db82f054",
+        "20cd883efc019e054dea8b6810f533e0b99f6a019759de80e70cf96a769f187e",
+        "d1760a39298a56409f8f9ecf8062a67fc143b81d4bd4827606b112294b95a326"
+      ],
+      "environment": {
+        "browser": {
+          "name": "chrome",
+          "version": "152.0.7977.83"
+        },
+        "fontProfile": {
+          "faces": [
+            {
+              "descriptors": {
+                "style": "normal",
+                "weight": "400"
+              },
+              "family": "\u5fae\u8f6f\u96c5\u9ed1",
+              "file": {
+                "sha256": "3084f1f88369af6bf9989c909024164d953d1e38d08734f05f28ef24b2f9d577",
+                "sizeBytes": 19701556
+              }
+            },
+            {
+              "descriptors": {
+                "style": "normal",
+                "weight": "700"
+              },
+              "family": "\u5fae\u8f6f\u96c5\u9ed1",
+              "file": {
+                "sha256": "519309b7ab0479c4dc3ace5e291de5a8702175be5586e165bc810267bd4619a5",
+                "sizeBytes": 16880832
+              }
+            }
+          ],
+          "id": "local-powerpoint-microsoft-yahei",
+          "manifest": {
+            "sha256": "2c061837588d1a28aed0f106dfc135766618f4b2092b298cc16c993e3c320e61",
+            "sizeBytes": 432
+          }
+        },
+        "oracle": "powerpoint-macos",
+        "platform": "macOS-26.5.1-arm64-arm-64bit",
+        "python": "3.11.11"
+      },
+      "gates": [
+        "source",
+        "structural",
+        "unit",
+        "browser",
+        "native-powerpoint",
+        "manual-visual",
+        "regression",
+        "docs"
+      ],
+      "groundTruthSha256": [
+        "2fd13216f3e0e156887f685accc1ffd5b9f20b4709e7dd0b653d835c37bb7b78",
+        "ac61bea0351cf618514575607f97de01f9e2fb1729e59a251c8a04a3c53033ba",
+        "8dbd857e5b23e3796b5a5f12cda4074de0e6b729e5e6ee0091f504ef47b02550",
+        "19d220fde4155e42d8fb9cde939176baeff18ca79a00502f954348e6bf3d0557"
+      ]
+    }
+  ],
+  "schemaVersion": 2
+}

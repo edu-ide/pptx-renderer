@@ -22,7 +22,7 @@ export function buildDataTableElement(
 
   const { seriesArr, showKeys, formatCode } = info;
   const categories = seriesArr.find((s) => s.categories.length > 0)?.categories || [];
-  const fc = formatCode || seriesArr.find((s) => s.formatCode)?.formatCode;
+  const fc = formatCode;
 
   const thead = document.createElement('thead');
   const headerRow = document.createElement('tr');
@@ -71,7 +71,8 @@ export function buildDataTableElement(
       td.style.padding = '2px 6px';
       td.style.textAlign = 'right';
       const val = s.values[ci];
-      td.textContent = val !== undefined ? formatValue(val, fc ?? s.formatCode) : '';
+      td.textContent =
+        val !== undefined && !s.blankIndices?.has(ci) ? formatValue(val, fc ?? s.formatCode) : '';
       tr.appendChild(td);
     }
     tbody.appendChild(tr);

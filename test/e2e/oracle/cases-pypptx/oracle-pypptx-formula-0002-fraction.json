@@ -1,0 +1,25 @@
+{
+  "name": "oracle-pypptx-formula-0002-fraction",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "mc:AlternateContent",
+      "a14:m",
+      "m:oMathPara",
+      "m:f"
+    ],
+    "requiredFonts": [
+      "Cambria Math"
+    ]
+  }
+}

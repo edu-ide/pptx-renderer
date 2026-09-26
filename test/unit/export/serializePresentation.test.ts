@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { serializePresentation } from '../../../src/export/serializePresentation';
+import {
+  serializePresentation,
+  type SerializedNode,
+  type SerializedPresentation,
+} from '../../../src/export/serializePresentation';
+import { renderSlide } from '../../../src/renderer/SlideRenderer';
+import { parseShapeNode } from '../../../src/model/nodes/ShapeNode';
+import { parseGroupNode } from '../../../src/model/nodes/GroupNode';
 import { SafeXmlNode, parseXml } from '../../../src/parser/XmlParser';
 import type { PresentationData } from '../../../src/model/Presentation';
 import type { SlideData } from '../../../src/model/Slide';
@@ -226,6 +233,61 @@ describe('serializePresentation', () => {
     expect(node.blipEmbed).toBe('rId1');
   });
 
+  it('serializes 3D observations without raw XML nodes', () => {
+    const contourColorSource = parseXml('<contourClr><schemeClr val="lt1"/></contourClr>');
+    const shape: ShapeNodeData = {
+      ...makeBase(),
+      nodeType: 'shape',
+      adjustments: new Map(),
+      shape3d: {
+        scene: {
+          cameraPreset: 'orthographicFront',
+          lightRig: 'twoPt',
+          lightDirection: 't',
+          lightRotation: { latitude: 0, longitude: 0, revolution: 120 },
+        },
+        shape: {
+          extrusionHeight: 0,
+          contourWidth: 0,
+          bevelTop: {
+            preset: 'circle',
+            presetExplicit: false,
+            width: 8 / 3,
+            height: 2,
+          },
+          contourColor: { type: 'schemeClr', value: 'lt1' },
+          contourColorSource,
+        },
+        effectKinds: [],
+        parseIssues: [],
+      },
+    };
+
+    const serialized = serializePresentation(makePres([shape])).slides[0].nodes[0];
+    expect(serialized.shape3d).toEqual({
+      scene: {
+        cameraPreset: 'orthographicFront',
+        lightRig: 'twoPt',
+        lightDirection: 't',
+        lightRotation: { latitude: 0, longitude: 0, revolution: 120 },
+      },
+      shape: {
+        extrusionHeight: 0,
+        contourWidth: 0,
+        bevelTop: {
+          preset: 'circle',
+          presetExplicit: false,
+          width: 8 / 3,
+          height: 2,
+        },
+        contourColor: { type: 'schemeClr', value: 'lt1' },
+      },
+      effectKinds: [],
+      parseIssues: [],
+    });
+    expect(JSON.stringify(serialized)).not.toContain('contourColorSource');
+  });
+
   it('serializes table node', () => {
     const table: TableNodeData = {
       ...makeBase(),
@@ -325,6 +387,41 @@ describe('serializePresentation', () => {
     expect(node.children).toHaveLength(1);
     expect(node.children![0].nodeType).toBe('shape');
     expect(node.children![0].name).toBe('child-shape');
+  });
+
+  it('serializes retained group-level scene3d semantics without XML wrappers', () => {
+    const groupXml = parseXml(`
+      <grpSp xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <nvGrpSpPr><cNvPr id="10" name="camera group"/><nvPr/></nvGrpSpPr>
+        <grpSpPr>
+          <xfrm><off x="0" y="0"/><ext cx="914400" cy="457200"/></xfrm>
+          <scene3d>
+            <camera prst="perspectiveLeft" fov="5700000">
+              <rot lat="0" lon="1500000" rev="0"/>
+            </camera>
+            <lightRig rig="threePt" dir="t"/>
+          </scene3d>
+        </grpSpPr>
+      </grpSp>
+    `);
+    const group = parseGroupNode(groupXml);
+
+    const serialized = serializePresentation(makePres([group])).slides[0].nodes[0];
+
+    expect(serialized.shape3d).toEqual({
+      scene: {
+        cameraPreset: 'perspectiveLeft',
+        fieldOfView: 95,
+        cameraZoom: undefined,
+        cameraRotation: { latitude: 0, longitude: 25, revolution: 0 },
+        lightRig: 'threePt',
+        lightDirection: 't',
+        lightRotation: undefined,
+      },
+      shape: undefined,
+      effectKinds: [],
+      parseIssues: [],
+    });
   });
 
   it('serializes group chart children', () => {
@@ -438,8 +535,50 @@ describe('serializePresentation', () => {
   });
 
   it('serializes inherited placeholder geometry for lazy group children', () => {
+    const placeholder = makeGroupedPlaceholderXml();
+    placeholder.child('spPr').child('xfrm').element!.remove();
     const group: GroupNodeData = {
-      ...makeBase({ id: '10', name: 'group', position: { x: 50, y: 30 }, size: { w: 200, h: 100 } }),
+      ...makeBase({
+        id: '10',
+        name: 'group',
+        position: { x: 50, y: 30 },
+        size: { w: 200, h: 100 },
+      }),
+      nodeType: 'group',
+      childOffset: { x: 0, y: 0 },
+      childExtent: { w: 400, h: 200 },
+      children: [placeholder],
+    };
+    const pres = makePres([group]);
+    const layoutPath = 'ppt/slideLayouts/slideLayout1.xml';
+    pres.slideToLayout.set(0, layoutPath);
+    pres.layouts.set(layoutPath, {
+      placeholders: [
+        {
+          node: makeLayoutPlaceholderXml(),
+          absoluteXfrm: { position: { x: 100, y: 60 }, size: { w: 40, h: 20 } },
+        },
+      ],
+      spTree: emptyXml,
+      rels: new Map(),
+      showMasterSp: true,
+    });
+
+    const result = serializePresentation(pres);
+    const child = result.slides[0].nodes[0].children![0];
+
+    expect(child.textBody?.totalText).toBe('Serialized inherited placeholder');
+    expect(child.position).toEqual({ x: 100, y: 60 });
+    expect(child.size).toEqual({ w: 80, h: 40 });
+  });
+  it('serializes explicit zero geometry for lazy group placeholders', () => {
+    const group: GroupNodeData = {
+      ...makeBase({
+        id: '10',
+        name: 'group',
+        position: { x: 50, y: 30 },
+        size: { w: 200, h: 100 },
+      }),
       nodeType: 'group',
       childOffset: { x: 0, y: 0 },
       childExtent: { w: 400, h: 200 },
@@ -464,8 +603,8 @@ describe('serializePresentation', () => {
     const child = result.slides[0].nodes[0].children![0];
 
     expect(child.textBody?.totalText).toBe('Serialized inherited placeholder');
-    expect(child.position).toEqual({ x: 100, y: 60 });
-    expect(child.size).toEqual({ w: 80, h: 40 });
+    expect(child.position).toEqual({ x: 0, y: 0 });
+    expect(child.size).toEqual({ w: 0, h: 0 });
   });
 
   it('serializes group with unparseable children gracefully', () => {
@@ -513,7 +652,9 @@ describe('serializePresentation', () => {
     const pres = makePres([]);
     pres.slides.push({
       index: 1,
-      nodes: [{ ...makeBase({ id: '2' }), nodeType: 'shape', adjustments: new Map() } as ShapeNodeData],
+      nodes: [
+        { ...makeBase({ id: '2' }), nodeType: 'shape', adjustments: new Map() } as ShapeNodeData,
+      ],
       rels: new Map(),
       showMasterSp: true,
     });
@@ -522,4 +663,369 @@ describe('serializePresentation', () => {
     expect(result.slides[1].index).toBe(1);
     expect(result.slides[1].nodes).toHaveLength(1);
   });
+});
+
+describe('serializePresentation layout and master template shapes', () => {
+  function templateXml(name: string, ph?: string) {
+    const nvPr = ph ? `<p:nvPr>${ph}</p:nvPr>` : '<p:nvPr/>';
+    return `
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="1" name="${name}"/><p:cNvSpPr/>${nvPr}</p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="1828800" cy="914400"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+        </p:spPr>
+      </p:sp>
+    `;
+  }
+
+  function spTreeXml(shapes: string) {
+    return parseXml(`
+      <p:spTree xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        ${shapes}
+      </p:spTree>
+    `);
+  }
+
+  function presWithTemplates(opts: { layout?: string; master?: string; showMasterSp?: boolean }) {
+    const pres = makePres([]);
+    pres.slides[0].showMasterSp = opts.showMasterSp ?? true;
+
+    if (opts.layout !== undefined) {
+      pres.layouts.set('ppt/slideLayouts/slideLayout1.xml', {
+        placeholders: [],
+        spTree: spTreeXml(opts.layout),
+        rels: new Map(),
+        showMasterSp: true,
+      });
+      pres.slideToLayout.set(0, 'ppt/slideLayouts/slideLayout1.xml');
+    }
+    if (opts.master !== undefined) {
+      pres.masters.set('ppt/slideMasters/slideMaster1.xml', {
+        colorMap: new Map(),
+        textStyles: {},
+        placeholders: [],
+        spTree: spTreeXml(opts.master),
+        rels: new Map(),
+      });
+      pres.layoutToMaster.set(
+        'ppt/slideLayouts/slideLayout1.xml',
+        'ppt/slideMasters/slideMaster1.xml',
+      );
+    }
+    return pres;
+  }
+
+  it('emits empty collections for a presentation with no layouts or masters', () => {
+    const result = serializePresentation(makePres([]));
+    expect(result.layouts).toEqual([]);
+    expect(result.masters).toEqual([]);
+    expect(result.slides[0].layoutPath).toBeUndefined();
+    expect(result.slides[0].masterPath).toBeUndefined();
+  });
+
+  it('serializes layout decoration shapes as typed nodes', () => {
+    const result = serializePresentation(
+      presWithTemplates({ layout: templateXml('Freeform 28') + templateXml('Oval 29') }),
+    );
+    expect(result.layouts).toHaveLength(1);
+    expect(result.layouts[0].path).toBe('ppt/slideLayouts/slideLayout1.xml');
+    expect(result.layouts[0].nodes.map((n) => n.name)).toEqual(['Freeform 28', 'Oval 29']);
+    expect(result.layouts[0].nodes[0].nodeType).toBe('shape');
+    expect(result.layouts[0].nodes[0].size).toEqual({ w: 192, h: 96 });
+  });
+
+  it('serializes master decoration shapes as typed nodes', () => {
+    const result = serializePresentation(
+      presWithTemplates({ layout: '', master: templateXml('Master logo') }),
+    );
+    expect(result.masters).toHaveLength(1);
+    expect(result.masters[0].path).toBe('ppt/slideMasters/slideMaster1.xml');
+    expect(result.masters[0].nodes.map((n) => n.name)).toEqual(['Master logo']);
+  });
+
+  it('omits placeholder shapes from both collections', () => {
+    const result = serializePresentation(
+      presWithTemplates({
+        layout: templateXml('Title 1', '<p:ph type="title"/>') + templateXml('Rectangle 3'),
+        master: templateXml('Body 2', '<p:ph type="body" idx="1"/>'),
+      }),
+    );
+    expect(result.layouts[0].nodes.map((n) => n.name)).toEqual(['Rectangle 3']);
+    expect(result.masters[0].nodes).toEqual([]);
+  });
+
+  it('links each slide to its layout and master', () => {
+    const result = serializePresentation(
+      presWithTemplates({ layout: templateXml('deco'), master: templateXml('logo') }),
+    );
+    expect(result.slides[0].layoutPath).toBe('ppt/slideLayouts/slideLayout1.xml');
+    expect(result.slides[0].masterPath).toBe('ppt/slideMasters/slideMaster1.xml');
+  });
+
+  it('reports showMasterSp so a consumer can honor master suppression', () => {
+    const result = serializePresentation(
+      presWithTemplates({ layout: '', master: templateXml('logo'), showMasterSp: false }),
+    );
+    expect(result.slides[0].showMasterSp).toBe(false);
+    expect(result.layouts[0].showMasterSp).toBe(true);
+    // The master is still serialized; whether it draws is the consumer's decision.
+    expect(result.masters[0].nodes).toHaveLength(1);
+  });
+
+  it('serializes a shared layout once, not once per slide', () => {
+    const pres = presWithTemplates({ layout: templateXml('deco') });
+    pres.slides.push({ index: 1, nodes: [], rels: new Map(), showMasterSp: true });
+    pres.slideToLayout.set(1, 'ppt/slideLayouts/slideLayout1.xml');
+    const result = serializePresentation(pres);
+    expect(result.layouts).toHaveLength(1);
+    expect(result.slides.map((s) => s.layoutPath)).toEqual([
+      'ppt/slideLayouts/slideLayout1.xml',
+      'ppt/slideLayouts/slideLayout1.xml',
+    ]);
+  });
+
+  it('omits a layout no slide uses', () => {
+    const pres = presWithTemplates({ layout: templateXml('deco') });
+    pres.layouts.set('ppt/slideLayouts/slideLayout9.xml', {
+      placeholders: [],
+      spTree: spTreeXml(templateXml('unused')),
+      rels: new Map(),
+      showMasterSp: true,
+    });
+    const result = serializePresentation(pres);
+    expect(result.layouts.map((l) => l.path)).toEqual(['ppt/slideLayouts/slideLayout1.xml']);
+  });
+});
+
+/**
+ * Export parity: what serializePresentation() exposes for a slide, composed by
+ * the rule documented on SerializedPresentation, must be what renderSlide()
+ * draws. Each test renders the same fixture with the real renderer and compares
+ * text, so the expectation is never hardcoded on both sides.
+ */
+describe('serializePresentation template parity with the renderer', () => {
+  const LAYOUT_PATH = 'ppt/slideLayouts/slideLayout1.xml';
+  const MASTER_PATH = 'ppt/slideMasters/slideMaster1.xml';
+  const THEME_PATH = 'ppt/theme/theme1.xml';
+
+  function textShape(id: number, name: string, text: string, ph?: string) {
+    const nvPr = ph ? `<p:nvPr>${ph}</p:nvPr>` : '<p:nvPr/>';
+    return `
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvSpPr/>${nvPr}</p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="457200"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+        </p:spPr>
+        <p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>${text}</a:t></a:r></a:p></p:txBody>
+      </p:sp>
+    `;
+  }
+
+  function group(id: number, name: string, children: string) {
+    return `
+      <p:grpSp>
+        <p:nvGrpSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+        <p:grpSpPr>
+          <a:xfrm>
+            <a:off x="0" y="0"/><a:ext cx="914400" cy="914400"/>
+            <a:chOff x="0" y="0"/><a:chExt cx="914400" cy="914400"/>
+          </a:xfrm>
+        </p:grpSpPr>
+        ${children}
+      </p:grpSp>
+    `;
+  }
+
+  /**
+   * A template tree whose only visible text is `${prefix}_VISIBLE`, with a
+   * placeholder one level down and another two levels down. Both placeholders
+   * carry prompt text the renderer never draws.
+   */
+  function nestedTemplateTree(prefix: string, idBase: number) {
+    return group(
+      idBase,
+      `${prefix} outer group`,
+      textShape(idBase + 1, `${prefix} visible`, `${prefix}_VISIBLE`) +
+        textShape(
+          idBase + 2,
+          `${prefix} depth-1 placeholder`,
+          `${prefix}_DEPTH1_PROMPT`,
+          '<p:ph type="body" idx="1"/>',
+        ) +
+        group(
+          idBase + 3,
+          `${prefix} inner group`,
+          textShape(
+            idBase + 4,
+            `${prefix} depth-2 placeholder`,
+            `${prefix}_DEPTH2_PROMPT`,
+            '<p:ph type="body" idx="2"/>',
+          ),
+        ),
+    );
+  }
+
+  function spTree(shapes: string) {
+    return parseXml(`
+      <p:spTree xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        ${shapes}
+      </p:spTree>
+    `);
+  }
+
+  function renderablePres(opts: {
+    layout: string;
+    master: string;
+    slideNodes?: any[];
+    slideShowMasterSp?: boolean;
+    layoutShowMasterSp?: boolean;
+  }): PresentationData {
+    const slide: SlideData = {
+      index: 0,
+      nodes: opts.slideNodes ?? [],
+      rels: new Map(),
+      slidePath: 'ppt/slides/slide1.xml',
+      showMasterSp: opts.slideShowMasterSp ?? true,
+    };
+    return {
+      width: 960,
+      height: 540,
+      slides: [slide],
+      layouts: new Map([
+        [
+          LAYOUT_PATH,
+          {
+            placeholders: [],
+            spTree: spTree(opts.layout),
+            rels: new Map(),
+            showMasterSp: opts.layoutShowMasterSp ?? true,
+          },
+        ],
+      ]),
+      masters: new Map([
+        [
+          MASTER_PATH,
+          {
+            colorMap: new Map(),
+            textStyles: {},
+            placeholders: [],
+            spTree: spTree(opts.master),
+            rels: new Map(),
+          },
+        ],
+      ]),
+      themes: new Map([
+        [
+          THEME_PATH,
+          {
+            colorScheme: new Map(),
+            majorFont: { latin: 'Calibri', ea: '', cs: '' },
+            minorFont: { latin: 'Calibri', ea: '', cs: '' },
+            fillStyles: [],
+            lineStyles: [],
+            effectStyles: [],
+          },
+        ],
+      ]),
+      slideToLayout: new Map([[0, LAYOUT_PATH]]),
+      layoutToMaster: new Map([[LAYOUT_PATH, MASTER_PATH]]),
+      masterToTheme: new Map([[MASTER_PATH, THEME_PATH]]),
+      media: new Map(),
+      charts: new Map(),
+      isWps: false,
+    } as PresentationData;
+  }
+
+  function nodeText(node: SerializedNode): string {
+    return (node.textBody?.totalText ?? '') + (node.children ?? []).map(nodeText).join('');
+  }
+
+  /** The composition rule exactly as README and SerializedPresentation document it. */
+  function documentedComposition(json: SerializedPresentation, slideIndex: number) {
+    const slide = json.slides[slideIndex];
+    const layout = json.layouts.find((l) => l.path === slide.layoutPath);
+    const master = json.masters.find((m) => m.path === slide.masterPath);
+    const nodes: SerializedNode[] = [];
+    if (slide.showMasterSp !== false && layout?.showMasterSp !== false && master) {
+      nodes.push(...master.nodes);
+    }
+    if (slide.showMasterSp !== false && layout) nodes.push(...layout.nodes);
+    nodes.push(...slide.nodes);
+    return nodes;
+  }
+
+  function serializedText(pres: PresentationData) {
+    return documentedComposition(serializePresentation(pres), 0).map(nodeText).join('');
+  }
+
+  function renderedText(pres: PresentationData) {
+    return (renderSlide(pres, pres.slides[0]).element.textContent ?? '').replace(/\s+/g, '');
+  }
+
+  it('excludes placeholders nested two levels deep in a layout group, as the renderer does', () => {
+    const pres = renderablePres({ layout: nestedTemplateTree('LAYOUT', 100), master: '' });
+
+    const layoutText = serializePresentation(pres).layouts[0].nodes.map(nodeText).join('');
+    expect(layoutText).toBe('LAYOUT_VISIBLE');
+    expect(serializedText(pres)).toBe(renderedText(pres));
+    expect(renderedText(pres)).toBe('LAYOUT_VISIBLE');
+  });
+
+  it('excludes placeholders nested two levels deep in a master group, as the renderer does', () => {
+    const pres = renderablePres({ layout: '', master: nestedTemplateTree('MASTER', 200) });
+
+    const masterText = serializePresentation(pres).masters[0].nodes.map(nodeText).join('');
+    expect(masterText).toBe('MASTER_VISIBLE');
+    expect(serializedText(pres)).toBe(renderedText(pres));
+    expect(renderedText(pres)).toBe('MASTER_VISIBLE');
+  });
+
+  it('keeps slide-owned grouped placeholders that carry authored content', () => {
+    const slideTree = spTree(
+      group(
+        300,
+        'slide outer group',
+        textShape(301, 'slide body', 'SLIDE_DEPTH1_AUTHORED', '<p:ph type="body" idx="1"/>') +
+          group(
+            302,
+            'slide inner group',
+            textShape(303, 'slide title', 'SLIDE_DEPTH2_AUTHORED', '<p:ph type="title"/>'),
+          ),
+      ),
+    );
+    const slideGroup = parseGroupNode(slideTree.allChildren()[0]);
+    const pres = renderablePres({ layout: '', master: '', slideNodes: [slideGroup] });
+
+    expect(serializedText(pres)).toBe('SLIDE_DEPTH1_AUTHOREDSLIDE_DEPTH2_AUTHORED');
+    expect(serializedText(pres)).toBe(renderedText(pres));
+  });
+
+  const flagCases: Array<{ slide: boolean; layout: boolean; expected: string }> = [
+    { slide: true, layout: true, expected: 'MASTERLAYOUTSLIDE' },
+    { slide: true, layout: false, expected: 'LAYOUTSLIDE' },
+    { slide: false, layout: true, expected: 'SLIDE' },
+    { slide: false, layout: false, expected: 'SLIDE' },
+  ];
+
+  for (const { slide, layout, expected } of flagCases) {
+    it(`composes slide.showMasterSp=${slide}, layout.showMasterSp=${layout} as the renderer does`, () => {
+      const slideShape = parseShapeNode(
+        spTree(textShape(400, 'slide text', 'SLIDE')).allChildren()[0],
+      );
+      const pres = renderablePres({
+        layout: textShape(401, 'layout text', 'LAYOUT'),
+        master: textShape(402, 'master text', 'MASTER'),
+        slideNodes: [slideShape],
+        slideShowMasterSp: slide,
+        layoutShowMasterSp: layout,
+      });
+
+      expect(renderedText(pres)).toBe(expected);
+      expect(serializedText(pres)).toBe(renderedText(pres));
+    });
+  }
 });

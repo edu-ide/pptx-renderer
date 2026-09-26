@@ -10,6 +10,7 @@ import {
   parseZip,
   parseZipLazyMedia,
   RECOMMENDED_ZIP_LIMITS,
+  DEFAULT_EMBEDDED_FONT_LIMITS,
   buildPresentation,
   materializeAllSlideNodes,
   materializeSlideNodes,
@@ -32,6 +33,8 @@ import type {
   PreviewInput,
   FitMode,
   ZipParseLimits,
+  EmbeddedFontLimits,
+  FontFaceConfig,
   BuildPresentationOptions,
   PresentationData,
   SerializedPresentation,
@@ -88,6 +91,8 @@ type _TextSearchResultCompileCheck = TextSearchResult;
 type _MediaResolverCompileCheck = MediaResolver;
 type _ResolvedMediaCompileCheck = ResolvedMedia;
 type _BuildPresentationOptionsCompileCheck = BuildPresentationOptions;
+type _EmbeddedFontLimitsCompileCheck = EmbeddedFontLimits;
+type _FontFaceConfigCompileCheck = FontFaceConfig;
 
 describe('package exports', () => {
   it('exports PptxViewer class', () => {
@@ -112,6 +117,11 @@ describe('package exports', () => {
     expect(RECOMMENDED_ZIP_LIMITS.maxEntries).toBeGreaterThan(0);
     expect(RECOMMENDED_ZIP_LIMITS.maxTotalUncompressedBytes).toBeGreaterThan(0);
     expect(RECOMMENDED_ZIP_LIMITS.maxMediaBytes).toBeGreaterThan(0);
+  });
+
+  it('exports default embedded font limits', () => {
+    expect(DEFAULT_EMBEDDED_FONT_LIMITS.maxFaces).toBeGreaterThan(0);
+    expect(DEFAULT_EMBEDDED_FONT_LIMITS.maxTotalDecompressedBytes).toBeGreaterThan(0);
   });
 
   it('exports buildPresentation function', () => {

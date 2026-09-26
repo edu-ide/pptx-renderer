@@ -1,0 +1,84 @@
+{
+  "name": "oracle-pypptx-shape3d-0018-donut-shadow-interpolation-matrix",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "p:sp.prstGeom=donut",
+      "geometry.adjustment=10000|default25000|40000",
+      "geometry.aspect=0.75|1.25|2.0",
+      "matrix=crossProduct(3x3)",
+      "container=standalone",
+      "paint=explicitSolid",
+      "a:scene3d.camera=orthographicFront",
+      "a:scene3d.lightRig=threePt:t",
+      "a:sp3d.extrusionH=0",
+      "a:sp3d.bevelT=circle"
+    ]
+  }
+}

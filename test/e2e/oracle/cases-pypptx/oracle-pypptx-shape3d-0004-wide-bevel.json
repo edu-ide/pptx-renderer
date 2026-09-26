@@ -1,0 +1,22 @@
+{
+  "name": "oracle-pypptx-shape3d-0004-wide-bevel",
+  "generator": "python-pptx",
+  "slides": [
+    {
+      "nodes": [
+        {
+          "kind": "pypptx-generated"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "oracle": "native-powerpoint",
+    "features": [
+      "p:sp.prstGeom=rect",
+      "geometry.aspect=wide",
+      "a:scene3d.camera=orthographicFront",
+      "a:sp3d.bevelT=circle"
+    ]
+  }
+}

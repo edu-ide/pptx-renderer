@@ -7,6 +7,18 @@ import {
   getPresetOverlays,
   type PresetSubPath,
 } from '../../../src/shapes/presets';
+import { getOoxmlPresetShapePaths } from '../../../src/shapes/ooxmlGeometryRuntime';
+
+const generatedMultiPathFlowcharts = [
+  'flowChartPredefinedProcess',
+  'flowChartInternalStorage',
+  'flowChartMultidocument',
+  'flowChartSummingJunction',
+  'flowChartOr',
+  'flowChartSort',
+  'flowChartMagneticDisk',
+  'flowChartMagneticDrum',
+] as const;
 
 describe('getPresetShapePath', () => {
   it('returns a valid rect path', () => {
@@ -206,8 +218,8 @@ describe('getPresetShapePath', () => {
 
   it('renders flowChartCollate with dedicated hourglass geometry (oracle-full-shapeid-0079)', () => {
     const d = getPresetShapePath('flowChartCollate', 200, 100);
-    expect(d).not.toBe('M0,0 L200,0 L200,100 L0,100 Z');
-    expect(d).toContain('Z M');
+    // ECMA-376 defines one self-crossing contour that visits the center twice.
+    expect(d).toBe('M0,0 L200,0 L100,50 L200,100 L0,100 L100,50 Z');
   });
 
   it('renders curvedUpArrow using arc-derived start point for wide layouts', () => {
@@ -589,6 +601,38 @@ describe('getMultiPathPreset', () => {
   it('returns null for non-existent shapes', () => {
     const result = getMultiPathPreset('unknownMultiPath', 100, 50);
     expect(result).toBeNull();
+  });
+
+  it.each(generatedMultiPathFlowcharts)(
+    'routes generated %s paths with their declared order and paint metadata',
+    (shapeName) => {
+      const generated = getOoxmlPresetShapePaths(shapeName, 400, 280);
+      const routed = getMultiPathPreset(shapeName, 400, 280);
+
+      expect(routed, shapeName).not.toBeNull();
+      expect(routed).toEqual(
+        generated?.map(({ d, fill, stroke }) => ({
+          d,
+          fill,
+          stroke,
+        })),
+      );
+    },
+  );
+
+  it('keeps non-production and degenerate multi-path lookup on handwritten compatibility', () => {
+    expect(getOoxmlPresetShapePaths('flowChartOfflineStorage', 400, 280)).toBeNull();
+    expect(getMultiPathPreset('flowChartOfflineStorage', 400, 280)).not.toBeNull();
+    expect(getMultiPathPreset('flowChartPredefinedProcess', 0, 280)).toBeNull();
+    expect(getPresetShapePath('flowChartPredefinedProcess', 0, 280)).toContain('M0,0');
+  });
+
+  it('preserves the combined handwritten path API for generated multi-path presets', () => {
+    const legacy = presetShapes.get('flowChartPredefinedProcess');
+    expect(legacy).toBeDefined();
+    expect(getPresetShapePath('flowChartPredefinedProcess', 500, 300)).toBe(
+      legacy?.(500, 300),
+    );
   });
 
   describe('horizontalScroll', () => {
@@ -1083,13 +1127,38 @@ describe('getMultiPathPreset', () => {
     expect(d).toContain('200,140');
   });
 
+  it('routes flowChartTerminator through the deterministic OOXML runtime subset', () => {
+    expect(getPresetShapePath('flowChartTerminator', 400, 280)).toBe(
+      'M64.351852,0 L335.648148,0 A64.351852,140 0 0,1 335.648148,280 L64.351852,280 A64.351852,140 0 0,1 64.351852,0 Z',
+    );
+  });
+
+  it('keeps degenerate flowChartTerminator dimensions on the legacy compatibility path', () => {
+    expect(() => getPresetShapePath('flowChartTerminator', 0, 280)).not.toThrow();
+    expect(getPresetShapePath('flowChartTerminator', 0, 280)).toContain('A0,140');
+  });
+
   it('renders flowChartInputOutput with w/5 offset parallelogram (oracle-full-shapeid-0064)', () => {
     const d = getPresetShapePath('flowChartInputOutput', 500, 300);
-    // OOXML: path w=5 h=5, offset = w/5 = 100
-    expect(d).toContain('M100,0');
+    // ECMA-376 path order starts at the bottom-left, then uses the w/5 top inset.
+    expect(d).toContain('M0,300');
+    expect(d).toContain('L100,0');
     expect(d).toContain('L500,0');
     expect(d).toContain('L400,300');
-    expect(d).toContain('L0,300');
+  });
+
+  it('renders flowChartPredefinedProcess with OOXML w/8 side bands (oracle-full-shapeid-0065)', () => {
+    const d = getPresetShapePath('flowChartPredefinedProcess', 500, 300);
+
+    expect(d).toContain('M62.5,0 L62.5,300');
+    expect(d).toContain('M437.5,0 L437.5,300');
+  });
+
+  it('renders flowChartInternalStorage with OOXML w/8 and h/8 guide lines (oracle-full-shapeid-0066)', () => {
+    const d = getPresetShapePath('flowChartInternalStorage', 500, 300);
+
+    expect(d).toContain('M62.5,0 L62.5,300');
+    expect(d).toContain('M0,37.5 L500,37.5');
   });
 
   it('renders flowChartDisplay with left chevron and right semicircle (oracle-full-shapeid-0088)', () => {
